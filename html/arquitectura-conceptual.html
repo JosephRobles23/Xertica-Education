@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xertica Education — Arquitectura conceptual · Galo</title>
+<style>
+  :root{
+    --ivory:#FAF9F5; --paper:#FFFFFF; --slate:#141413;
+    --clay:#D97757; --clay-d:#B85C3E; --oat:#E3DACC; --olive:#788C5D;
+    --red:#C0392B; --red-bg:rgba(192,57,43,.07); --green-bg:rgba(120,140,93,.10);
+    --g100:#F0EEE6; --g200:#E6E3DA; --g300:#D1CFC5; --g500:#87867F; --g700:#3D3D3A;
+    --serif:ui-serif,Georgia,"Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ivory);color:var(--g700);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .page{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:210px minmax(0,1fr);gap:48px;padding:56px 24px 120px}
+
+  /* Sidebar */
+  .side{position:sticky;top:32px;align-self:start;font-size:13px}
+  .side .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--g500);margin:0 0 12px}
+  .side a{display:block;padding:6px 0 6px 12px;color:var(--g700);text-decoration:none;border-left:2px solid var(--g300);transition:border-color .15s,color .15s}
+  .side a:hover,.side a.on{border-left-color:var(--slate);color:var(--slate)}
+  .side .files{margin-top:26px}
+  .side .files code{font-family:var(--mono);font-size:11.5px;color:var(--g500);display:block;padding:3px 0}
+
+  /* Main */
+  main{max-width:720px}
+  header h1{font-family:var(--serif);font-size:clamp(26px,4vw,34px);font-weight:500;color:var(--slate);margin:8px 0 0;line-height:1.15;letter-spacing:-.01em}
+  header h1 em{font-style:italic;color:var(--clay)}
+  .eyebrow{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--g500);padding-left:14px;border-left:2px solid var(--clay)}
+  h2{font-family:var(--serif);font-size:22px;font-weight:500;color:var(--slate);margin:52px 0 14px;scroll-margin-top:32px}
+  h2 .idx{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--clay);margin-right:10px}
+  h3{font-family:var(--serif);font-size:17px;font-weight:500;color:var(--slate);margin:26px 0 10px}
+  p{margin:12px 0}
+  a.link{color:var(--clay);text-decoration:none;border-bottom:1px solid var(--oat)}
+  a.link:hover{color:var(--clay-d)}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--g100);padding:1px 5px;border-radius:4px}
+  strong{color:var(--slate)}
+  em{color:inherit}
+
+  /* TL;DR */
+  .tldr{background:var(--paper);border:1.5px solid var(--g300);border-left:3px solid var(--clay);border-radius:10px;padding:14px 16px;margin:22px 0;font-size:14.5px}
+  .tldr b{color:var(--slate)}
+
+  /* Callouts */
+  .callout{display:flex;gap:12px;background:rgba(227,218,204,.35);border:1.5px solid var(--oat);border-radius:10px;padding:14px 16px;margin:18px 0;font-size:14px}
+  .callout.danger{background:var(--red-bg);border-color:rgba(192,57,43,.4)}
+  .callout.success{background:var(--green-bg);border-color:rgba(120,140,93,.45)}
+  .callout .ico{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--g500);flex:none;padding-top:1px}
+  .callout.danger .ico{color:var(--red)}
+  .callout.success .ico{color:var(--olive)}
+
+  /* Cards grid */
+  .grid{display:grid;gap:14px;margin:18px 0}
+  .grid.two{grid-template-columns:1fr 1fr}
+  .grid.three{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--paper);border:1.5px solid var(--g300);border-radius:10px;padding:14px 16px}
+  .card h4{margin:0 0 6px;font-family:var(--sans);font-size:14px;color:var(--slate);display:flex;align-items:center;gap:8px}
+  .card p{margin:0;font-size:13.5px;color:var(--g700)}
+  .card .tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:999px;border:1px solid var(--g300);color:var(--g500)}
+  .card .tag.hi{color:var(--red);border-color:rgba(192,57,43,.4);background:var(--red-bg)}
+  .card .tag.lo{color:var(--olive);border-color:rgba(120,140,93,.45);background:var(--green-bg)}
+
+  /* Badges */
+  .badge{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;border:1px solid var(--g300);color:var(--g500);white-space:nowrap}
+  .badge.ok{color:var(--olive);border-color:rgba(120,140,93,.45);background:var(--green-bg)}
+  .badge.info{color:var(--clay);border-color:rgba(217,119,87,.4);background:rgba(217,119,87,.06)}
+  .badge.bug{color:var(--red);border-color:rgba(192,57,43,.4);background:var(--red-bg)}
+
+  /* Details */
+  details{background:var(--paper);border:1.5px solid var(--g300);border-radius:10px;margin:12px 0;overflow:hidden}
+  details summary{cursor:pointer;list-style:none;padding:13px 16px;font-size:14.5px;color:var(--slate);display:flex;align-items:center;gap:10px;user-select:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸";color:var(--clay);font-size:12px;transition:transform .18s}
+  details[open] summary::before{transform:rotate(90deg)}
+  details .body{padding:0 16px 16px 38px;font-size:14px}
+  details .body p:first-child{margin-top:0}
+
+  /* Tree (interactive, native) */
+  .tree{background:var(--paper);border:1.5px solid var(--g300);border-radius:10px;padding:10px 14px;margin:18px 0;font-size:14px}
+  .tree details{border:none;background:transparent;margin:2px 0}
+  .tree summary{padding:5px 4px;font-size:14px}
+  .tree .leaf{padding:4px 4px 4px 26px;display:flex;align-items:center;gap:8px;color:var(--g700)}
+  .tree .n-ruta summary{color:var(--slate);font-weight:500}
+  .tree .n-mod summary{color:var(--g700)}
+  .tree .body{padding:0 0 0 20px}
+
+  /* Tabs */
+  .tabs{margin:18px 0;border:1.5px solid var(--g300);border-radius:10px;overflow:hidden;background:var(--paper)}
+  .tabbar{display:flex;flex-wrap:wrap;gap:2px;background:var(--g100);padding:6px;border-bottom:1.5px solid var(--g300)}
+  .tabbar button{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;border:none;background:transparent;color:var(--g500);padding:7px 12px;border-radius:7px;cursor:pointer;transition:background .15s,color .15s}
+  .tabbar button:hover{color:var(--slate)}
+  .tabbar button.on{background:var(--clay);color:#fff}
+  .pane{display:none;padding:18px 18px}
+  .pane.on{display:block}
+  .pane h4{margin:0 0 6px;font-family:var(--serif);font-size:16px;color:var(--slate)}
+  .pane p{margin:8px 0;font-size:14px}
+  .pane .who{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--g500)}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:13.5px;background:var(--paper);border:1.5px solid var(--g300);border-radius:10px;overflow:hidden}
+  thead th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--g500);text-align:left;padding:10px 14px;background:var(--g100);border-bottom:1.5px solid var(--g300)}
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--g200);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+
+  /* Blockquote */
+  blockquote{margin:18px 0;padding:10px 16px;border-left:3px solid var(--oat);background:rgba(227,218,204,.25);border-radius:0 8px 8px 0;font-size:14px;color:var(--g700)}
+
+  /* Figure / SVG */
+  figure{margin:22px 0;background:var(--paper);border:1.5px solid var(--g300);border-radius:12px;padding:20px 18px}
+  figure svg{width:100%;height:auto;display:block}
+  figcaption{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--g500);text-align:center;margin-top:12px}
+
+  /* FAQ */
+  .faq{margin:18px 0}
+  .faq dt{font-family:var(--serif);font-size:15.5px;color:var(--slate);margin-top:16px}
+  .faq dd{margin:5px 0 0;font-size:14px;color:var(--g700)}
+
+  footer{margin-top:64px;padding-top:20px;border-top:1.5px solid var(--g200);display:flex;justify-content:space-between;font-size:12.5px;color:var(--g500);flex-wrap:wrap;gap:8px}
+  footer .k{font-family:var(--mono)}
+
+  @media(max-width:920px){
+    .page{grid-template-columns:1fr;gap:0;padding:32px 18px 80px}
+    .side{display:none}
+    .grid.two,.grid.three{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="side">
+    <div class="label">En esta página</div>
+    <a href="#que-es">Qué es (y qué no es)</a>
+    <a href="#metafora">La metáfora</a>
+    <a href="#spine">Las piezas</a>
+    <a href="#componentes">Los 5 componentes</a>
+    <a href="#gate0">Crear una ruta</a>
+    <a href="#viaje">El viaje completo</a>
+    <a href="#fuentes">Fuentes confiables</a>
+    <a href="#flujo">El mapa del flujo</a>
+    <a href="#sistema">Dónde vive</a>
+    <a href="#principios">Principios</a>
+    <a href="#faq">Preguntas</a>
+    <div class="files">
+      <div class="label">Referencia</div>
+      <code>arquitectura.md</code>
+      <code>Impulso 2026</code>
+    </div>
+  </nav>
+
+  <main>
+    <header>
+      <div class="eyebrow">Xertica Education · Arquitectura conceptual</div>
+      <h1>Una <em>fábrica de contenido</em> educativo con personas en el control</h1>
+      <div class="tldr" id="tldr">
+        <b>TL;DR</b> — Xertica Education toma la idea de una ruta de aprendizaje y produce sus materiales
+        (videos, infografías, lecciones, quizzes y laboratorios) de forma asistida por IA. Lo distintivo:
+        en cada punto donde se gasta dinero o se decide algo importante, <strong>una persona revisa y aprueba</strong>
+        antes de continuar. No reemplaza al aula — le entrega contenido listo a Google Classroom.
+      </div>
+    </header>
+
+    <!-- ============ 1 ============ -->
+    <h2 id="que-es"><span class="idx">01</span>Qué es (y qué no es)</h2>
+    <p>
+      La forma más simple de entenderlo: es un <strong>estudio de producción</strong> interno. Igual que un estudio
+      de cine convierte un guion en una película, Xertica Education convierte la especificación de una ruta de
+      aprendizaje en materiales educativos terminados.
+    </p>
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="badge ok">SÍ es</span></h4>
+        <p>Una fábrica que <strong>crea contenido</strong>: cápsulas de video, infografías, lecciones, quizzes y
+        laboratorios, con fuentes verificadas y control humano en cada paso caro.</p>
+      </div>
+      <div class="card">
+        <h4><span class="badge bug">NO es</span></h4>
+        <p>Un LMS. No gestiona inscripciones, ni calificaciones, ni seguimiento de alumnos. Eso sigue viviendo en
+        <strong>Google Classroom</strong>, a donde Xertica Education <em>entrega</em> el contenido.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <span class="ico">Por qué</span>
+      <div>Hoy crear el contenido es lo más lento del proceso: unas <strong>2 horas por cápsula de video</strong> y
+      <strong>3–4 horas por infografía</strong>, hechas a mano. Ahí está el cuello de botella que esta plataforma ataca.</div>
+    </div>
+
+    <!-- ============ 2 ============ -->
+    <h2 id="metafora"><span class="idx">02</span>La metáfora: una línea con puntos de control</h2>
+    <p>
+      Imagina una línea de ensamblaje. El material entra por un extremo y sale convertido en producto por el otro.
+      La diferencia con una fábrica normal es que aquí hay <strong>compuertas</strong> (los llamamos <em>gates</em>):
+      la línea se <strong>detiene sola</strong> en cada compuerta y espera a que una persona diga "sí, continúa".
+    </p>
+    <p>
+      Esto se conoce como <strong>Human-in-the-Loop</strong> (humano en el bucle). No es que la IA trabaje sola y
+      alguien revise al final: la persona interviene <em>en medio</em>, en los momentos exactos donde una decisión
+      equivocada costaría tiempo o dinero.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 150" role="img" aria-label="Línea de producción con cuatro compuertas de aprobación humana">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <!-- track -->
+        <line x1="40" y1="75" x2="680" y2="75" stroke="var(--g300)" stroke-width="2" stroke-dasharray="4 5"/>
+        <!-- entry -->
+        <rect x="20" y="58" width="70" height="34" rx="8" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+        <text x="55" y="79" text-anchor="middle" font-family="var(--sans)" font-size="11" fill="var(--g700)">Idea</text>
+        <!-- gates -->
+        <g>
+          <path d="M180 75 l16 -16 l16 16 l-16 16 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="196" y="118" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">GATE 0</text>
+        </g>
+        <g>
+          <path d="M330 75 l16 -16 l16 16 l-16 16 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="346" y="118" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">GATE 1</text>
+        </g>
+        <g>
+          <path d="M480 75 l16 -16 l16 16 l-16 16 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="496" y="118" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">GATE 2</text>
+        </g>
+        <g>
+          <path d="M600 75 l16 -16 l16 16 l-16 16 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="616" y="118" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">GATE 3</text>
+        </g>
+        <!-- exit -->
+        <rect x="655" y="58" width="55" height="34" rx="8" fill="var(--paper)" stroke="var(--olive)" stroke-width="1.8"/>
+        <text x="682" y="79" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--olive)">Classroom</text>
+        <!-- persona hint -->
+        <text x="196" y="46" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--clay)">persona aprueba</text>
+      </svg>
+      <figcaption>La línea se detiene en cada compuerta ◆ hasta que una persona aprueba</figcaption>
+    </figure>
+
+    <!-- ============ 3 ============ -->
+    <h2 id="spine"><span class="idx">03</span>Las piezas: cómo se organiza el contenido</h2>
+    <p>
+      Todo el sistema comparte una misma estructura, de lo más grande a lo más pequeño. Entenderla hace que todo
+      lo demás encaje:
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 130" role="img" aria-label="Jerarquía: Ruta contiene Módulos, que agrupan Componentes, que se materializan en Assets">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="13">
+          <rect x="16" y="45" width="150" height="46" rx="10" fill="rgba(217,119,87,.08)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="91" y="66" text-anchor="middle" fill="var(--slate)" font-weight="600">Ruta</text>
+          <text x="91" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">el curso completo</text>
+
+          <line x1="166" y1="68" x2="196" y2="68" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="181" y="40" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">contiene</text>
+
+          <rect x="198" y="45" width="150" height="46" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="273" y="66" text-anchor="middle" fill="var(--slate)" font-weight="600">Módulo</text>
+          <text x="273" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">4–5 por ruta</text>
+
+          <line x1="348" y1="68" x2="378" y2="68" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="363" y="40" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">agrupa</text>
+
+          <rect x="380" y="45" width="150" height="46" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="455" y="66" text-anchor="middle" fill="var(--slate)" font-weight="600">Componente</text>
+          <text x="455" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">video, quiz…</text>
+
+          <line x1="530" y1="68" x2="560" y2="68" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="545" y="40" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">se vuelve</text>
+
+          <rect x="562" y="45" width="142" height="46" rx="10" fill="rgba(120,140,93,.10)" stroke="var(--olive)" stroke-width="1.8"/>
+          <text x="633" y="66" text-anchor="middle" fill="var(--slate)" font-weight="600">Asset</text>
+          <text x="633" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--g500)">el archivo final</text>
+        </g>
+      </svg>
+      <figcaption>Ruta → Módulo → Componente → Asset</figcaption>
+    </figure>
+
+    <p>En palabras sencillas:</p>
+    <table>
+      <thead><tr><th>Pieza</th><th>Es…</th><th>Ejemplo</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Ruta</strong></td><td>El curso completo sobre un tema.</td><td>"Inteligencia avanzada con Gemini"</td></tr>
+        <tr><td><strong>Módulo</strong></td><td>Un capítulo dentro de la ruta.</td><td>"¿Qué es la IA generativa?"</td></tr>
+        <tr><td><strong>Componente</strong></td><td>Un tipo de material dentro del módulo.</td><td>Un video, un quiz…</td></tr>
+        <tr><td><strong>Asset</strong></td><td>El archivo final ya producido.</td><td>El .mp4, el .pdf</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Cada asset carga siempre tres cosas: <strong>sus fuentes</strong> (de dónde salió la información),
+      <strong>su estado</strong> (borrador, en revisión, aprobado) y <strong>su costo</strong> (cuánto se gastó en producirlo).
+      Esa trazabilidad es lo que hace confiable a la fábrica.
+    </p>
+
+    <!-- ============ 4 ============ -->
+    <h2 id="componentes"><span class="idx">04</span>Los 5 tipos de componente</h2>
+    <p>Un módulo puede llevar hasta cinco tipos de material. No todos los módulos llevan los cinco: eso lo decide la persona al crear la ruta.</p>
+    <div class="grid three">
+      <div class="card">
+        <h4>Lesson <span class="tag lo">barato</span></h4>
+        <p>Texto base y guion didáctico. La explicación escrita del tema.</p>
+      </div>
+      <div class="card">
+        <h4>Video <span class="tag hi">caro</span></h4>
+        <p>Cápsula de ~2 min. Es el componente más costoso porque se renderiza con IA de video.</p>
+      </div>
+      <div class="card">
+        <h4>Infografía <span class="tag">medio</span></h4>
+        <p>Una página visual en PDF que resume el concepto.</p>
+      </div>
+      <div class="card">
+        <h4>Quiz <span class="tag lo">barato</span></h4>
+        <p>Preguntas de opción múltiple para evaluar la comprensión.</p>
+      </div>
+      <div class="card">
+        <h4>Laboratorio <span class="tag lo">barato</span></h4>
+        <p>Tutorial paso a paso con fuente, para practicar de forma guiada.</p>
+      </div>
+      <div class="card" style="border-style:dashed;background:transparent">
+        <h4>… y todos comparten algo</h4>
+        <p>Los cinco se generan desde la <strong>misma base de conocimiento verificada</strong>. Ninguno inventa información.</p>
+      </div>
+    </div>
+
+    <!-- ============ 5 ============ -->
+    <h2 id="gate0"><span class="idx">05</span>Crear una ruta: el primer control (Gate 0)</h2>
+    <p>
+      Todo empieza con una persona que aporta una idea. Puede ser algo vago (<em>"quiero algo de IA para banca"</em>)
+      o una estructura ya pensada. También puede subir un documento — un <strong>DOCX, PDF o PPTX</strong> — como
+      un temario existente.
+    </p>
+    <p>
+      La IA toma ese material y <strong>propone una estructura completa</strong>: módulos, orden sugerido, y qué
+      componentes llevaría cada uno. Pero no es la última palabra: la persona la <strong>cura</strong> en un
+      <strong>editor tipo árbol</strong> antes de aprobarla.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 240" role="img" aria-label="Flujo de creación de ruta: entrada, propuesta de IA, edición en bucle y aprobación">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+          <marker id="ar3c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--clay)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="12">
+          <!-- inputs -->
+          <rect x="16" y="28" width="150" height="38" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="91" y="51" text-anchor="middle" fill="var(--g700)">Texto libre</text>
+          <rect x="16" y="86" width="150" height="38" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="91" y="103" text-anchor="middle" fill="var(--g700)">Documento</text>
+          <text x="91" y="117" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">DOCX · PDF · PPTX</text>
+
+          <line x1="166" y1="47" x2="210" y2="70" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <line x1="166" y1="105" x2="210" y2="80" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar3)"/>
+
+          <!-- LLM -->
+          <rect x="212" y="52" width="150" height="46" rx="9" fill="rgba(217,119,87,.08)" stroke="var(--clay)" stroke-width="1.6"/>
+          <text x="287" y="72" text-anchor="middle" fill="var(--slate)" font-weight="600">IA propone</text>
+          <text x="287" y="88" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">estructura inicial</text>
+
+          <line x1="362" y1="75" x2="406" y2="75" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar3)"/>
+
+          <!-- Tree editor -->
+          <rect x="408" y="40" width="170" height="70" rx="10" fill="var(--paper)" stroke="var(--slate)" stroke-width="1.8"/>
+          <text x="493" y="62" text-anchor="middle" fill="var(--slate)" font-weight="600">Editor de árbol</text>
+          <text x="493" y="78" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">la persona cura</text>
+          <text x="493" y="94" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 0 · HITL</text>
+
+          <!-- loop arrows -->
+          <path d="M493 110 q0 40 -60 40 q-60 0 -60 -40" fill="none" stroke="var(--clay)" stroke-width="1.5" marker-end="url(#ar3c)"/>
+          <text x="433" y="168" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">editar a mano</text>
+          <path d="M540 110 q0 60 -120 66 q-150 8 -150 -84" fill="none" stroke="var(--clay)" stroke-width="1.5" marker-end="url(#ar3c)"/>
+          <text x="360" y="196" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">refinar un nodo con IA (sin tocar el resto)</text>
+
+          <!-- approve -->
+          <line x1="578" y1="75" x2="620" y2="75" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <rect x="622" y="52" width="82" height="46" rx="9" fill="rgba(120,140,93,.10)" stroke="var(--olive)" stroke-width="1.8"/>
+          <text x="663" y="72" text-anchor="middle" fill="var(--slate)" font-weight="600">Ruta</text>
+          <text x="663" y="88" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--olive)">en borrador</text>
+        </g>
+      </svg>
+      <figcaption>La IA propone · la persona edita y refina en bucle · aprueba cuando está lista</figcaption>
+    </figure>
+
+    <h3>Dos formas de ajustar, en un mismo bucle</h3>
+    <div class="grid two">
+      <div class="card">
+        <h4>✋ A mano</h4>
+        <p>Reordenar módulos, renombrarlos, borrar un submódulo que sobra, agregar uno que falta, o quitar componentes.</p>
+      </div>
+      <div class="card">
+        <h4>✨ Con IA, puntual</h4>
+        <p>Seleccionar <strong>un módulo</strong> y pedir "replantéalo con otro enfoque". La IA rehace <em>solo ese</em>, sin deshacer lo demás.</p>
+      </div>
+    </div>
+
+    <p>Así se ve la estructura que la persona cura — <strong>haz clic para expandir</strong>:</p>
+    <div class="tree">
+      <details class="n-ruta" open>
+        <summary>📚 Ruta — IA Generativa para Banca</summary>
+        <div class="body">
+          <details class="n-mod" open>
+            <summary>Módulo 1 · ¿Qué es la IA Generativa?</summary>
+            <div class="body">
+              <div class="leaf"><span class="badge lo" style="border:none;padding:0">Lesson</span> Texto base</div>
+              <div class="leaf"><span class="badge" style="border:none;padding:0;color:var(--red)">Video</span> Cápsula ~2 min</div>
+              <div class="leaf"><span class="badge lo" style="border:none;padding:0">Quiz</span> 5 preguntas</div>
+            </div>
+          </details>
+          <details class="n-mod">
+            <summary>Módulo 2 · Casos de uso en banca</summary>
+            <div class="body">
+              <div class="leaf"><span class="badge lo" style="border:none;padding:0">Lesson</span> Texto base</div>
+              <div class="leaf"><span class="badge" style="border:none;padding:0;color:var(--clay)">Infografía</span> 1 página PDF</div>
+            </div>
+          </details>
+          <details class="n-mod">
+            <summary>Módulo 3 · Laboratorio con Gemini</summary>
+            <div class="body">
+              <div class="leaf"><span class="badge lo" style="border:none;padding:0">Laboratorio</span> Tutorial paso a paso</div>
+              <div class="leaf"><span class="badge lo" style="border:none;padding:0">Quiz</span> Evaluación final</div>
+            </div>
+          </details>
+        </div>
+      </details>
+    </div>
+
+    <div class="callout success">
+      <span class="ico">Por qué importa</span>
+      <div>Corregir la estructura aquí — antes de generar nada — es <strong>la forma más barata de arreglar errores</strong>.
+      Es mucho mejor quitar un módulo que sobra en este punto que descubrirlo después de haber pagado por renderizar su video.</div>
+    </div>
+
+    <details>
+      <summary>¿Y el documento que subí, se guarda como fuente?</summary>
+      <div class="body">
+        <p>Tú decides, documento por documento. Por defecto el archivo que subes aquí solo sirve para
+        <strong>sugerir la estructura</strong> y luego se descarta. Pero si ese material también es buena fuente,
+        puedes marcarlo como <em>"usar también como fuente"</em> y entra a la base de conocimiento junto con el
+        resto del material verificado.</p>
+      </div>
+    </details>
+
+    <!-- ============ 6 ============ -->
+    <h2 id="viaje"><span class="idx">06</span>El viaje completo: las cuatro compuertas</h2>
+    <p>
+      Una vez aprobada la estructura, cada módulo recorre la línea de producción. Hay <strong>cuatro momentos</strong>
+      en que una persona toma el control. <strong>Haz clic en cada compuerta</strong> para ver qué pasa:
+    </p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-t="0">Gate 0 · Estructura</button>
+        <button data-t="1">Gate 1 · Fuentes</button>
+        <button data-t="2">Gate 2 · Guion</button>
+        <button data-t="3">Gate 3 · Resultado</button>
+      </div>
+      <div class="pane on">
+        <div class="who">Antes de producir nada</div>
+        <h4>Aprobar la estructura</h4>
+        <p>La persona revisa y cura el árbol de módulos y componentes (lo que vimos arriba). Cuando está conforme,
+        aprueba y la ruta nace en estado <strong>borrador</strong>.</p>
+        <p><strong>Qué se evita:</strong> producir contenido sobre una estructura mal pensada.</p>
+      </div>
+      <div class="pane">
+        <div class="who">Antes de construir la base de conocimiento</div>
+        <h4>Aprobar las fuentes</h4>
+        <p>El sistema busca material (videos, documentos oficiales) y también acepta lo que suba la persona.
+        Todo se presenta como una lista de fuentes candidatas. La persona <strong>descarta las que no son confiables</strong>
+        y aprueba el resto.</p>
+        <p><strong>Qué se evita:</strong> que el contenido se base en información que un cliente no aceptaría.</p>
+      </div>
+      <div class="pane">
+        <div class="who">Antes de gastar en el render de video</div>
+        <h4>Aprobar el guion</h4>
+        <p>La IA escribe el guion y arma un storyboard. La persona lo lee, lo ajusta si hace falta y aprueba.</p>
+        <p><strong>Qué se evita:</strong> pagar el render de un video con IA (el paso más caro, ~$9.50) sobre un
+        guion equivocado. Este es el gate de dinero real.</p>
+      </div>
+      <div class="pane">
+        <div class="who">Antes de publicar</div>
+        <h4>Aprobar el resultado final</h4>
+        <p>La persona ve el video, la infografía y el quiz terminados. Puede aprobarlos, pedir una nueva versión o
+        rechazarlos. Al aprobar, el contenido se <strong>publica a Google Classroom</strong>.</p>
+        <p><strong>Qué se evita:</strong> que llegue a los estudiantes algo con errores.</p>
+      </div>
+    </div>
+
+    <figure>
+      <svg viewBox="0 0 720 210" role="img" aria-label="Recorrido completo desde la idea hasta Google Classroom pasando por cuatro compuertas">
+        <defs>
+          <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="11.5">
+          <!-- row of steps + gates -->
+          <!-- step boxes -->
+          <rect x="14" y="30" width="120" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="74" y="54" text-anchor="middle" fill="var(--g700)">Crear estructura</text>
+
+          <rect x="200" y="30" width="120" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="260" y="54" text-anchor="middle" fill="var(--g700)">Reunir fuentes</text>
+
+          <rect x="386" y="30" width="120" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="446" y="54" text-anchor="middle" fill="var(--g700)">Escribir guion</text>
+
+          <rect x="572" y="30" width="134" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="639" y="54" text-anchor="middle" fill="var(--g700)">Producir assets</text>
+
+          <!-- connectors with gates (diamonds) between -->
+          <line x1="134" y1="50" x2="158" y2="50" stroke="var(--g500)" stroke-width="1.5"/>
+          <path d="M175 50 l14 -14 l14 14 l-14 14 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <line x1="203" y1="50" x2="200" y2="50" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="189" y="88" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 0</text>
+
+          <line x1="320" y1="50" x2="344" y2="50" stroke="var(--g500)" stroke-width="1.5"/>
+          <path d="M361 50 l14 -14 l14 14 l-14 14 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <line x1="389" y1="50" x2="386" y2="50" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="375" y="88" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 1</text>
+
+          <line x1="506" y1="50" x2="530" y2="50" stroke="var(--g500)" stroke-width="1.5"/>
+          <path d="M547 50 l14 -14 l14 14 l-14 14 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <line x1="575" y1="50" x2="572" y2="50" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="561" y="88" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 2</text>
+
+          <!-- gate 3 below producir -->
+          <line x1="639" y1="70" x2="639" y2="120" stroke="var(--g500)" stroke-width="1.5"/>
+          <path d="M639 137 l14 -14 l14 14 l-14 14 z" transform="translate(-14,0)" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="686" y="141" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 3</text>
+          <line x1="639" y1="151" x2="639" y2="160" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar4)"/>
+
+          <!-- classroom -->
+          <rect x="250" y="162" width="200" height="38" rx="9" fill="rgba(120,140,93,.10)" stroke="var(--olive)" stroke-width="1.8"/>
+          <text x="350" y="185" text-anchor="middle" fill="var(--slate)" font-weight="600">Publicado a Google Classroom</text>
+          <path d="M625 170 q-100 20 -175 12" fill="none" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar4)"/>
+        </g>
+      </svg>
+      <figcaption>Idea → 4 compuertas de aprobación → Classroom</figcaption>
+    </figure>
+
+    <!-- ============ 7 ============ -->
+    <h2 id="fuentes"><span class="idx">07</span>De dónde sale la información</h2>
+    <p>
+      Una regla dura del sistema: el contenido solo puede basarse en <strong>fuentes confiables y verificables</strong>
+      (de plataformas oficiales de Google), nunca de wikis abiertas. La información entra por <strong>dos caminos</strong>
+      que se juntan en un mismo lugar:
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 170" role="img" aria-label="Dos vías de fuentes que convergen en la base de conocimiento tras la aprobación humana">
+        <defs>
+          <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="16" y="20" width="200" height="46" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="116" y="40" text-anchor="middle" fill="var(--slate)" font-weight="600">Vía 1 · Búsqueda automática</text>
+          <text x="116" y="56" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">la IA busca en fuentes Google</text>
+
+          <rect x="16" y="104" width="200" height="46" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="116" y="124" text-anchor="middle" fill="var(--slate)" font-weight="600">Vía 2 · Tú subes material</text>
+          <text x="116" y="140" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">PDF · Word · PPT · imágenes</text>
+
+          <line x1="216" y1="43" x2="300" y2="72" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar5)"/>
+          <line x1="216" y1="127" x2="300" y2="98" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar5)"/>
+
+          <!-- gate 1 -->
+          <path d="M330 85 l16 -16 l16 16 l-16 16 z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="346" y="128" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 1</text>
+          <text x="346" y="56" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">aprobar</text>
+
+          <line x1="362" y1="85" x2="410" y2="85" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar5)"/>
+
+          <!-- KB -->
+          <rect x="412" y="60" width="150" height="50" rx="10" fill="rgba(217,119,87,.08)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="487" y="81" text-anchor="middle" fill="var(--slate)" font-weight="600">Base de conocimiento</text>
+          <text x="487" y="97" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">el material aprobado</text>
+
+          <line x1="562" y1="85" x2="600" y2="85" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ar5)"/>
+          <rect x="602" y="62" width="102" height="46" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="653" y="82" text-anchor="middle" fill="var(--g700)">Alimenta los</text>
+          <text x="653" y="98" text-anchor="middle" fill="var(--g700)">5 componentes</text>
+        </g>
+      </svg>
+      <figcaption>Dos vías → la persona aprueba (Gate 1) → base de conocimiento → todo el contenido</figcaption>
+    </figure>
+    <p>
+      Todo lo que se genere después — cada video, cada quiz, cada laboratorio — sale de esa base ya aprobada.
+      Por eso cada asset puede mostrar exactamente <strong>de qué fuentes salió</strong>.
+    </p>
+
+    <!-- ============ 8 ============ -->
+    <h2 id="flujo"><span class="idx">08</span>El mapa completo del flujo</h2>
+    <p>
+      Juntando todo lo anterior, así se ve el recorrido de punta a punta: desde las fuentes hasta el contenido
+      publicado. Es la misma línea de ensamblaje, ahora con sus <strong>cinco carriles de producción</strong> a la vista.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 360" role="img" aria-label="Flujo completo: dos vías de fuentes, aprobación, base de conocimiento, cinco componentes, aprobación final y publicación">
+        <defs>
+          <marker id="ard" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="12">
+          <!-- ingestion -->
+          <rect x="90" y="14" width="180" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="180" y="31" text-anchor="middle" fill="var(--g700)">Vía 1 · Búsqueda automática</text>
+          <text x="180" y="46" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">fuentes oficiales Google</text>
+
+          <rect x="450" y="14" width="180" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="540" y="31" text-anchor="middle" fill="var(--g700)">Vía 2 · Material que subes</text>
+          <text x="540" y="46" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">PDF · Word · PPT · imágenes</text>
+
+          <line x1="180" y1="54" x2="345" y2="80" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <line x1="540" y1="54" x2="375" y2="80" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ard)"/>
+
+          <!-- Gate 1 -->
+          <path d="M344 88 L360 72 L376 88 L360 104 Z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="410" y="80" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 1 · aprobar fuentes</text>
+
+          <!-- KB -->
+          <line x1="360" y1="104" x2="360" y2="120" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <rect x="278" y="120" width="164" height="44" rx="10" fill="rgba(217,119,87,.08)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="360" y="140" text-anchor="middle" fill="var(--slate)" font-weight="600">Base de conocimiento</text>
+          <text x="360" y="155" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">todo el material aprobado</text>
+
+          <!-- fan to 5 components -->
+          <line x1="360" y1="164" x2="79" y2="198" stroke="var(--g300)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <line x1="360" y1="164" x2="219" y2="198" stroke="var(--g300)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <line x1="360" y1="164" x2="359" y2="198" stroke="var(--g300)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <line x1="360" y1="164" x2="499" y2="198" stroke="var(--g300)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <line x1="360" y1="164" x2="639" y2="198" stroke="var(--g300)" stroke-width="1.5" marker-end="url(#ard)"/>
+
+          <!-- component boxes -->
+          <g font-size="11.5">
+            <rect x="16"  y="200" width="126" height="52" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+            <text x="79"  y="221" text-anchor="middle" fill="var(--slate)" font-weight="600">Lesson</text>
+            <text x="79"  y="237" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">texto + guion</text>
+
+            <rect x="156" y="200" width="126" height="52" rx="9" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.6"/>
+            <text x="219" y="221" text-anchor="middle" fill="var(--slate)" font-weight="600">Video</text>
+            <text x="219" y="237" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">pasa por Gate 2</text>
+
+            <rect x="296" y="200" width="126" height="52" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+            <text x="359" y="221" text-anchor="middle" fill="var(--slate)" font-weight="600">Infografía</text>
+            <text x="359" y="237" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">página PDF</text>
+
+            <rect x="436" y="200" width="126" height="52" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+            <text x="499" y="221" text-anchor="middle" fill="var(--slate)" font-weight="600">Quiz</text>
+            <text x="499" y="237" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">desde la base</text>
+
+            <rect x="576" y="200" width="126" height="52" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+            <text x="639" y="221" text-anchor="middle" fill="var(--slate)" font-weight="600">Laboratorio</text>
+            <text x="639" y="237" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">tutorial guiado</text>
+          </g>
+
+          <!-- funnel to gate 3 -->
+          <line x1="79"  y1="252" x2="352" y2="292" stroke="var(--g300)" stroke-width="1.5"/>
+          <line x1="219" y1="252" x2="356" y2="290" stroke="var(--g300)" stroke-width="1.5"/>
+          <line x1="359" y1="252" x2="360" y2="288" stroke="var(--g300)" stroke-width="1.5"/>
+          <line x1="499" y1="252" x2="364" y2="290" stroke="var(--g300)" stroke-width="1.5"/>
+          <line x1="639" y1="252" x2="368" y2="292" stroke="var(--g300)" stroke-width="1.5"/>
+
+          <!-- Gate 3 -->
+          <path d="M344 300 L360 284 L376 300 L360 316 Z" fill="var(--paper)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="446" y="304" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--clay)">GATE 3 · aprobar resultado</text>
+
+          <!-- Classroom -->
+          <line x1="360" y1="316" x2="360" y2="328" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ard)"/>
+          <rect x="262" y="330" width="196" height="26" rx="8" fill="rgba(120,140,93,.10)" stroke="var(--olive)" stroke-width="1.8"/>
+          <text x="360" y="347" text-anchor="middle" font-size="11" fill="var(--slate)" font-weight="600">Publicado a Google Classroom</text>
+        </g>
+      </svg>
+      <figcaption>Dos vías → Gate 1 → base de conocimiento → 5 componentes → Gate 3 → Classroom</figcaption>
+    </figure>
+
+    <p>
+      Fíjate en el patrón clave: <strong>una sola base de conocimiento alimenta los cinco componentes</strong>.
+      Ninguno inventa información; todos beben de la misma fuente ya aprobada. Y todo vuelve a juntarse en el
+      Gate 3 antes de publicarse. Video e infografía tienen su propia línea de producción; lección, quiz y
+      laboratorio son texto que se genera directamente desde la base.
+    </p>
+
+    <details>
+      <summary>¿Por qué el video se arma mezclando dos técnicas?</summary>
+      <div class="body">
+        <p>Un video no se genera de una sola forma, porque cada tipo de escena pide algo distinto:</p>
+        <p><strong>Escenas conceptuales</strong> (metáforas visuales, ideas abstractas) → se generan con
+        <strong>IA de video (Veo)</strong>, que brilla en lo abstracto.</p>
+        <p><strong>Escenas de una pantalla real</strong> (mostrar un producto) → aquí la IA "alucina" interfaces
+        que no existen, así que se usan <strong>capturas reales</strong> con efecto de zoom y resaltado.</p>
+        <p>La <strong>voz es siempre la misma</strong> a lo largo del video, para dar continuidad de instructor.</p>
+      </div>
+    </details>
+
+    <!-- ============ 9 ============ -->
+    <h2 id="sistema"><span class="idx">09</span>Dónde vive el sistema</h2>
+    <p>
+      Sin entrar en tecnicismos, ayuda saber cómo está armado por dentro. Piénsalo en tres capas:
+      <strong>lo que la persona ve</strong>, <strong>el cerebro que coordina</strong> y
+      <strong>dónde se guarda todo</strong>. Todo corre en la nube (Google Cloud + Supabase) y se enciende solo
+      cuando se usa.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 720 290" role="img" aria-label="Piezas del sistema: app web, orquestador, base de datos, pasarela de IA y motores de producción">
+        <defs>
+          <marker id="ars" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--g500)"/>
+          </marker>
+        </defs>
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="16" y="116" width="112" height="48" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="72" y="136" text-anchor="middle" fill="var(--g700)">Equipo de</text>
+          <text x="72" y="151" text-anchor="middle" fill="var(--g700)">contenido</text>
+
+          <line x1="128" y1="140" x2="150" y2="140" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+
+          <rect x="152" y="116" width="112" height="48" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="208" y="136" text-anchor="middle" fill="var(--slate)" font-weight="600">App web</text>
+          <text x="208" y="151" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">lo que ves</text>
+
+          <line x1="264" y1="140" x2="288" y2="140" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+
+          <rect x="290" y="112" width="140" height="56" rx="10" fill="rgba(217,119,87,.08)" stroke="var(--clay)" stroke-width="1.8"/>
+          <text x="360" y="135" text-anchor="middle" fill="var(--slate)" font-weight="600">Orquestador</text>
+          <text x="360" y="151" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">el cerebro · coordina los gates</text>
+
+          <!-- down to supabase -->
+          <line x1="360" y1="168" x2="360" y2="206" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+          <rect x="284" y="208" width="152" height="56" rx="10" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="360" y="231" text-anchor="middle" fill="var(--slate)" font-weight="600">Supabase</text>
+          <text x="360" y="247" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">datos · login · archivos</text>
+
+          <!-- to gateway -->
+          <line x1="430" y1="126" x2="468" y2="86" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+          <rect x="470" y="60" width="120" height="42" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="530" y="79" text-anchor="middle" fill="var(--slate)" font-weight="600">Pasarela de IA</text>
+          <text x="530" y="93" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">un solo enchufe</text>
+
+          <line x1="590" y1="81" x2="606" y2="81" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+          <rect x="608" y="60" width="96" height="42" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="656" y="79" text-anchor="middle" fill="var(--g700)">Modelos IA</text>
+          <text x="656" y="93" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">Gemini…</text>
+
+          <!-- to Veo -->
+          <line x1="430" y1="144" x2="468" y2="150" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+          <rect x="470" y="130" width="120" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="530" y="149" text-anchor="middle" fill="var(--slate)" font-weight="600">Veo</text>
+          <text x="530" y="163" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">genera el video</text>
+
+          <!-- to Playwright -->
+          <line x1="430" y1="158" x2="468" y2="214" stroke="var(--g500)" stroke-width="1.5" marker-end="url(#ars)"/>
+          <rect x="470" y="196" width="120" height="40" rx="9" fill="var(--paper)" stroke="var(--g300)" stroke-width="1.5"/>
+          <text x="530" y="215" text-anchor="middle" fill="var(--slate)" font-weight="600">Playwright</text>
+          <text x="530" y="229" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="var(--g500)">capturas reales</text>
+        </g>
+      </svg>
+      <figcaption>Las piezas del sistema y cómo se conectan</figcaption>
+    </figure>
+
+    <div class="grid two">
+      <div class="card">
+        <h4>🖥️ App web</h4>
+        <p>Lo que la persona ve y usa en el navegador: el dashboard, el editor de rutas, los gates.</p>
+      </div>
+      <div class="card">
+        <h4>🧠 Orquestador</h4>
+        <p>El cerebro. Coordina cada paso y sabe cuándo <strong>detenerse en un gate</strong> a esperar la aprobación.</p>
+      </div>
+      <div class="card">
+        <h4>🗄️ Base de datos (Supabase)</h4>
+        <p>Guarda rutas, módulos, fuentes y el <strong>progreso</strong>: recuerda dónde se quedó cada trabajo.</p>
+      </div>
+      <div class="card">
+        <h4>📦 Almacenamiento</h4>
+        <p>Guarda los archivos pesados ya producidos: los videos, los PDFs, las imágenes.</p>
+      </div>
+      <div class="card">
+        <h4>🔌 Pasarela de IA</h4>
+        <p>Un único punto de conexión con los modelos. Cambiar de modelo de IA <strong>no requiere reprogramar</strong>.</p>
+      </div>
+      <div class="card">
+        <h4>🎬 Motores de producción</h4>
+        <p><strong>Veo</strong> genera el video con IA; <strong>Playwright</strong> toma capturas reales de pantalla.</p>
+      </div>
+    </div>
+
+    <div class="callout success">
+      <span class="ico">3 rasgos</span>
+      <div>
+        <strong>Interno:</strong> el acceso es solo para el equipo de Xertica (login de empleados). ·
+        <strong>Se paga por uso:</strong> la infraestructura se enciende sola cuando se necesita y se apaga sola. ·
+        <strong>No pierde el progreso:</strong> si algo se reinicia, el trabajo retoma donde iba — clave para los
+        gates que pueden esperar horas a que una persona apruebe.
+      </div>
+    </div>
+
+    <!-- ============ 10 ============ -->
+    <h2 id="principios"><span class="idx">10</span>Los cuatro principios que lo sostienen</h2>
+    <div class="grid two">
+      <div class="card">
+        <h4>🔒 Fuentes confiables, siempre</h4>
+        <p>Nada se genera sin material verificable. Cada asset lleva sus fuentes como parte obligatoria.</p>
+      </div>
+      <div class="card">
+        <h4>🙋 Humano en los puntos caros</h4>
+        <p>La línea se detiene y espera aprobación justo antes de cada decisión que cuesta tiempo o dinero.</p>
+      </div>
+      <div class="card">
+        <h4>⏱️ La duración es una regla, no un recorte</h4>
+        <p>Si un video debe durar 2 minutos, se construye para durar 2 minutos — no se graba largo y se corta después.</p>
+      </div>
+      <div class="card">
+        <h4>💰 Conciencia de costo</h4>
+        <p>Se puede simular el costo (modo <em>dry-run</em>, gratis) antes de gastar de verdad. Cada gasto queda registrado.</p>
+      </div>
+    </div>
+
+    <!-- ============ 9 ============ -->
+    <h2 id="faq"><span class="idx">11</span>Preguntas frecuentes</h2>
+    <dl class="faq">
+      <dt>¿La IA trabaja sola?</dt>
+      <dd>No. En cada compuerta una persona revisa y aprueba. La IA propone y produce; la persona decide y controla.</dd>
+
+      <dt>¿Esto reemplaza a Google Classroom?</dt>
+      <dd>No. Lo alimenta. Classroom sigue siendo el aula (inscripciones, notas, seguimiento); Xertica Education solo produce el contenido que se publica ahí.</dd>
+
+      <dt>¿Puedo empezar sin tener una estructura clara?</dt>
+      <dd>Sí. Puedes llegar con una idea vaga y la IA propondrá una estructura completa desde cero. Si ya tienes un temario, lo respeta y solo lo enriquece.</dd>
+
+      <dt>¿Qué pasa si un módulo propuesto no me convence?</dt>
+      <dd>Lo editas a mano o le pides a la IA que replantee <em>solo ese módulo</em>, sin tocar el resto de tu trabajo.</dd>
+
+      <dt>¿Por qué el video es "caro" y el quiz "barato"?</dt>
+      <dd>El video se produce con IA generativa de video, que cuesta dinero real por render. Un quiz o una lección son texto, mucho más económicos de generar.</dd>
+
+      <dt>¿Quién puede usar esta plataforma?</dt>
+      <dd>Es una herramienta interna del equipo de contenido de Xertica, no una app para estudiantes.</dd>
+    </dl>
+
+    <footer>
+      <span class="k">Xertica Education · Documento conceptual · Sistema de diseño Galo</span>
+      <span>Impulso 2026</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // Tabs
+  document.querySelectorAll("[data-tabs]").forEach(box=>{
+    const btns=box.querySelectorAll(".tabbar button");
+    const panes=box.querySelectorAll(".pane");
+    btns.forEach(b=>b.addEventListener("click",()=>{
+      btns.forEach(x=>x.classList.remove("on"));
+      panes.forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      panes[+b.dataset.t].classList.add("on");
+    }));
+  });
+  // Sidebar active-section highlight
+  const links=[...document.querySelectorAll(".side a")];
+  const map=new Map(links.map(a=>[a.getAttribute("href").slice(1),a]));
+  const obs=new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      if(e.isIntersecting){
+        links.forEach(a=>a.classList.remove("on"));
+        const a=map.get(e.target.id);
+        if(a)a.classList.add("on");
+      }
+    });
+  },{rootMargin:"-20% 0px -70% 0px"});
+  document.querySelectorAll("main h2[id]").forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

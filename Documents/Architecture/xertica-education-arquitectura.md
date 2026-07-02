@@ -57,12 +57,17 @@ erDiagram
     MODULO {
         uuid id PK
         uuid ruta_id FK
+        string titulo
+        text descripcion
         enum tipo "intro|capsula|lab|evaluacion|cierre"
         int orden
+        int duracion_objetivo_min "restriccion, no recorte"
     }
     COMPONENTE {
         uuid id PK
         uuid modulo_id FK
+        string titulo
+        text tema "sub-tema sugerido, editable en Gate 0"
         enum tipo "lesson|video|lab|infografia|quiz"
         int orden
     }
@@ -98,9 +103,85 @@ erDiagram
 
 > **Nota MVP:** el spine se implementa completo desde el día 1 (es barato y desbloquea a los 4 devs en paralelo), aunque el MVP solo cargue Ruta 1 con un módulo.
 
+> **Campos que habilitan la curación (Gate 0, §4):** `MODULO.titulo` + `MODULO.descripcion` + `MODULO.duracion_objetivo_min` y `COMPONENTE.titulo` + `COMPONENTE.tema` son lo que el editor de árbol edita. Sin ellos la estructura no sería curable; con ellos, el mismo spine sirve para la creación *y* para la generación.
+
 ---
 
-## 4. Vista de flujo — el DAG de las 4 features
+## 4. Creación de ruta — Gate 0 (Route Builder HITL)
+
+Antes de que exista contenido que generar, tiene que existir una **estructura de ruta**. El spine (§3) modela *qué* es una ruta; esta sección modela *cómo nace*: un humano aporta una idea o un borrador, un LLM lo convierte en una estructura completa, y el mismo humano la **cura** en un editor antes de aprobarla. Es el **Gate 0**: el primer punto humano-en-el-loop, previo al Gate 1 de corpus.
+
+**Por qué es un gate y no un formulario.** La estructura —módulos, orden, componentes, duraciones— determina todo el gasto aguas abajo. Curarla bien (quitar un submódulo redundante, reordenar, ajustar qué componentes lleva cada módulo) es la palanca de costo más barata del sistema: corrige *antes* de generar, no después de renderizar.
+
+### 4.1 Entrada — flexible por diseño
+
+Dos formas de entrada que convergen en un mismo contenido normalizado:
+
+- **Texto libre.** Desde una idea vaga (*"algo de IA generativa para retail"*) hasta una estructura ya pensada (*"Módulo 1: …, Módulo 2: …"*).
+- **Documentos.** DOCX / PDF / PPTX (p. ej. un syllabus existente), parseados con el **mismo adapter MinerU** de la Vía 2, a Markdown.
+
+> **Doble rol del documento (decisión).** Por defecto el documento subido aquí es solo **scaffold**: sirve para inferir la estructura y **no** entra a la KB. El autor puede marcarlo *"usar también como fuente"* para promoverlo a la **Vía 2 de ingesta** (§5) — así un mismo material puede a la vez sugerir la estructura *y* alimentar el grounding, pero es una decisión explícita **por documento**, nunca automática.
+
+### 4.2 El LLM Structurer — respeta la intención del autor
+
+Un rol de LLM (`route_structurer`) produce la estructura propuesta en JSON alineado al spine. Tiene **dos comportamientos** según qué tan definido venga el input:
+
+- **Input vago →** genera la ruta desde cero: propone 4–5 módulos con progresión pedagógica (intro → cápsulas → lab → evaluación → cierre), duraciones y componentes.
+- **Input estructurado →** **respeta** la estructura del autor y solo la enriquece: asigna componentes, orden, duraciones y sub-temas. No la reinventa.
+
+Salida (alineada al spine):
+
+```json
+{
+  "titulo": "IA Generativa para Banca",
+  "tema": "Inteligencia artificial generativa",
+  "industria": "banca",
+  "modulos": [
+    {
+      "orden": 1,
+      "tipo": "intro",
+      "titulo": "¿Qué es la IA Generativa?",
+      "descripcion": "Fundamentos y diferencias con la IA tradicional",
+      "duracion_objetivo_min": 8,
+      "componentes_sugeridos": ["lesson", "video", "quiz"]
+    }
+  ]
+}
+```
+
+### 4.3 El loop de curación — editor tipo árbol
+
+La estructura propuesta se muestra en un **editor tipo árbol** (`Ruta → Módulo → Componente`), la representación natural de la jerarquía del spine. Es un **loop único con dos modos** que el autor alterna libremente hasta aprobar:
+
+- **Modo manual.** Reordenar (drag & drop), renombrar, editar descripciones, eliminar y agregar módulos o componentes.
+- **Modo IA — refinamiento granular.** El autor selecciona **un nodo** (un módulo o un componente) y pide *"replantear con otro enfoque"*; el LLM re-propone **solo ese nodo**, sin tocar el resto del árbol. No hay re-generación global que descarte las ediciones ya hechas.
+
+**Componentes: el LLM propone, el humano elige.** Cada módulo llega con sus `componentes_sugeridos` como checkboxes pre-marcados. El autor valida: desmarca los que no aplican (p. ej. quita *Video* de un módulo puramente conceptual), agrega los que faltan, y ve el **costo estimado** actualizarse en vivo (video = caro; quiz/lesson = barato).
+
+### 4.4 Salida — la ruta nace en `borrador`
+
+Al aprobar, se materializa el árbol en el spine: se crean las filas `RUTA`, `MODULO[]` y `COMPONENTE[]` con `estado = borrador`. Esa estructura aprobada es el **"Spec de Ruta / Módulo"** que arranca el DAG de generación (§5) — cada módulo puede entonces entrar, uno a uno, al pipeline Gate 1 → Gate 2 → Gate 3.
+
+```mermaid
+flowchart TD
+    IN1[Texto libre<br/>idea o estructura] --> NORM
+    IN2[Documentos<br/>DOCX / PDF / PPTX] --> MU[Parsing MinerU]
+    MU --> NORM[Contenido normalizado]
+    NORM --> LLM[LLM route_structurer<br/>propone Ruta, Modulos y Componentes]
+    LLM --> TREE{{Editor tipo arbol · Gate 0 HITL}}
+    TREE -->|Refinar un nodo con IA| G[Re-propuesta granular<br/>solo ese modulo o componente]
+    G --> TREE
+    TREE -->|Edicion manual<br/>reordenar / renombrar / borrar / agregar| TREE
+    TREE -->|Aprobar estructura| DB[(RUTA + MODULO + COMPONENTE<br/>estado = borrador)]
+    DB --> NEXT[Spec de Ruta/Modulo<br/>arranca el DAG · Gate 1]
+    MU -.->|opcional: usar como fuente| V2[Via 2 de ingesta -> KB]
+```
+
+> **Nota MVP:** el Route Builder puede arrancar como un solo paso LLM + editor de árbol en el frontend (sin subgrafo dedicado). Formalizarlo como subgrafo LangGraph durable —con el árbol propuesto como estado y el `interrupt` en la aprobación— es coherente con el grafo padre *"ruta builder"* (§8) y queda como evolución natural.
+
+---
+
+## 5. Vista de flujo — el DAG de las 4 features
 
 El requisito de "fuente verificable" reordena al equipo: **el sourcing es la capa de arriba, no una tool suelta.** Hay **dos vías de ingesta** que alimentan la misma KB — (1) el deep research automatizado de Arantza y (2) el aporte del propio usuario (subida de archivos estilo NotebookLM) — y ambas convergen en el Gate 1 y en la KB de Joseph, que es el hub.
 
@@ -126,9 +207,15 @@ flowchart TD
         E --> F[query grounded con citas]
     end
 
+    F --> L
     F --> G
     F --> H
     F --> I
+    F --> J
+
+    subgraph Lesson["Lesson"]
+        L[Texto base + guion didáctico grounded]
+    end
 
     subgraph Sebas["Sebas — Video"]
         G[Guion + storyboard con word budget] -.->|Gate 2: aprobar guion| G2[Render híbrido]
@@ -143,13 +230,21 @@ flowchart TD
         I[Generación desde KB]
     end
 
+    subgraph Lab["Laboratorio"]
+        J[Tutorial paso a paso con fuente]
+    end
+
+    L --> Z
     G3 --> Z
     H2 --> Z
     I --> Z
+    J --> Z
     Z[/Gate 3: aprobar asset final/] --> ZZ[Asset aprobado -> Classroom]
 ```
 
-**Lectura del DAG:** hay dos vías de ingesta — Arantza (deep research automatizado) y el aporte del usuario (archivos subidos y parseados con MinerU) — que convergen en el Gate 1. Joseph convierte ese corpus aprobado en la capa de grounding que todos consultan → Sebas y Santiago **consumen contenido ya aterrizado** (no inventan info no acreditada) → los quizzes salen también de la KB. Esto garantiza que ningún asset se genere con fuentes que el cliente no pueda aceptar.
+**Lectura del DAG:** hay dos vías de ingesta — Arantza (deep research automatizado) y el aporte del usuario (archivos subidos y parseados con MinerU) — que convergen en el Gate 1. Joseph convierte ese corpus aprobado en la capa de grounding que **todos los componentes consultan**: los cinco tipos del spine (Lesson, Video, Infografía, Quiz, Laboratorio) se generan desde la misma KB, así que ninguno inventa información no acreditada. Sebas (Video) y Santiago (Infografía) tienen pipeline propio; Lesson, Quiz y Laboratorio son generaciones de texto grounded desde la KB. Todos convergen en el Gate 3. Esto garantiza que ningún asset se genere con fuentes que el cliente no pueda aceptar.
+
+> **Nota:** el diagrama muestra los **cinco tipos de componente** del spine (§3). Cuáles se producen para un módulo dado lo decide el autor en el Gate 0 (§4): no todos los módulos llevan los cinco.
 
 > **Nota sobre verificación:** las fuentes de la Vía 1 (Arantza) llegan con el sello *verificable Google*; las de la Vía 2 (aporte del usuario) son responsabilidad de quien las sube y se marcan como *fuente propia* en el Gate 1, con su provenance registrada.
 
@@ -167,7 +262,7 @@ Cada segmento de video exige una estrategia distinta — este es un aprendizaje 
 
 ---
 
-## 5. Mapa conceptual
+## 6. Mapa conceptual
 
 ```mermaid
 mindmap
@@ -181,6 +276,12 @@ mindmap
       Modulo
       Componente
       Asset con sources y provenance
+    Creacion de ruta Gate 0
+      Texto libre o documentos DOCX PDF PPTX
+      LLM route structurer
+      Editor tipo arbol editable
+      Refinamiento granular por nodo
+      HITL antes de generar
     Features
       Arantza Sourcing
         Via 1 deep research
@@ -212,7 +313,7 @@ mindmap
 
 ---
 
-## 6. Arquitectura de sistema y despliegue
+## 7. Arquitectura de sistema y despliegue
 
 **Runtime:** Google Cloud Run (contenedores serverless para web y API) + Supabase Cloud (auth, Postgres+pgvector, storage). Los sistemas OSS pesados quedan como servicios/referencia, fuera del monorepo.
 
@@ -254,7 +355,7 @@ xertica-education/
 
 ---
 
-## 7. Orquestación y HITL
+## 8. Orquestación y HITL
 
 Cada feature es un **subgrafo LangGraph**; un grafo padre *"ruta builder"* hace fan-out. El checkpointer durable vive en **Postgres/Supabase** (reemplaza el in-memory), lo que da persistencia de sesión entre reinicios de Cloud Run.
 
@@ -267,8 +368,13 @@ sequenceDiagram
     participant LG as LangGraph (durable)
     participant KB as pgvector
 
-    U->>API: Crear ruta / módulo
-    API->>LG: start(graph, thread_id)
+    U->>API: Aportar idea / documento de ruta
+    API->>LG: start(route_builder, thread_id)
+    LG->>LG: route_structurer — propone estructura
+    LG-->>API: interrupt (Gate 0: estructura)
+    API-->>U: Curar árbol (refinar nodo / editar)
+    U->>API: Aprobar estructura
+    API->>LG: crea Ruta/Módulo/Componente (borrador) + resume
     LG->>LG: Arantza — sourcing
     LG-->>API: interrupt (Gate 1: corpus)
     API-->>U: Revisar fuentes (polling)
@@ -288,7 +394,7 @@ sequenceDiagram
 
 ---
 
-## 8. Estrategia de desacople de LLM
+## 9. Estrategia de desacople de LLM
 
 Dos capas, y no se confunden entre sí:
 
@@ -296,6 +402,7 @@ Dos capas, y no se confunden entre sí:
 
 ```yaml
 # models.yaml — única fuente de verdad para elegir modelo
+route_structurer:    gemini-2.5-pro       # Gate 0: propone/refina estructura de ruta
 scriptwriter:        gemini-2.5-pro       # Sebas: guion
 infographic_design:  claude-sonnet        # Santiago
 researcher:          gemini-2.5-flash     # Arantza
@@ -315,7 +422,7 @@ llm = get_llm("scriptwriter")
 
 ---
 
-## 9. Responsabilidades por dev (todas contra el mismo spine)
+## 10. Responsabilidades por dev (todas contra el mismo spine)
 
 | Dev | Feature | Entrada | Salida | Notas clave |
 |---|---|---|---|---|
@@ -326,7 +433,7 @@ llm = get_llm("scriptwriter")
 
 ---
 
-## 10. Registro de decisiones (ADR resumido)
+## 11. Registro de decisiones (ADR resumido)
 
 | # | Decisión | Razón | Estado |
 |---|---|---|---|
@@ -338,13 +445,14 @@ llm = get_llm("scriptwriter")
 | 6 | Gateway LLM: OpenRouter ahora, **LiteLLM fase 2** | Empezar simple; centralizar budgets/fallbacks cuando haya varios devs consumiendo. | ✅ Cerrada |
 | 7 | **Segunda vía de ingesta**: aporte de archivos del usuario (estilo NotebookLM) | Dar control al usuario para alimentar la KB con material propio (PDF/Word/Excel/PPT/imágenes/texto/URL), además del deep research automatizado. Ambas vías convergen en el Gate 1. | ✅ Cerrada |
 | 8 | **MinerU** como adapter de parsing/OCR de la vía de uploads | Soporta PDF/Office/imágenes nativo, tiene **loader LangChain nativo** y su licencia **ya no es AGPL** (custom basada en Apache 2.0). Correrlo como servicio separado, modo flash/CPU en MVP; precision+GPU en fase 2. | 🔬 En evaluación (spike de 1 día en Cloud Run pendiente) |
+| 9 | **Gate 0 — Route Builder con curación HITL** de la estructura (árbol editable + refinamiento granular por nodo) antes de generar | La estructura define todo el gasto aguas abajo; curarla antes de generar es la palanca de costo más barata. El `route_structurer` respeta la intención del autor (input vago → genera; input estructurado → enriquece sin reinventar). El documento subido es scaffold por defecto y el humano decide, por documento, si además lo promueve a fuente (Vía 2). | ✅ Cerrada |
 
 ---
 
-## 11. Roadmap por fases
+## 12. Roadmap por fases
 
 **Fase 1 — MVP (rebanada vertical)**
-Spine completo · Ruta 1 / 1 módulo end-to-end · **dos vías de ingesta** (Arantza deep research + uploads del usuario con MinerU en modo flash/CPU) → KB(pgvector) → Sebas/Santiago/Quiz · 3 gates HITL · OpenRouter + `get_llm(role)` · Veo generativo (segmento conceptual) + screenshots Playwright · deploy en Cloud Run + Supabase Cloud.
+**Gate 0 (Route Builder):** idea/documento → `route_structurer` → editor de árbol editable con refinamiento granular por nodo → Ruta/Módulo/Componente en `borrador` · Spine completo · Ruta 1 / 1 módulo end-to-end · **dos vías de ingesta** (Arantza deep research + uploads del usuario con MinerU en modo flash/CPU) → KB(pgvector) → Sebas/Santiago/Quiz · 3 gates HITL · OpenRouter + `get_llm(role)` · Veo generativo (segmento conceptual) + screenshots Playwright · deploy en Cloud Run + Supabase Cloud.
 
 **Fase 2 — Robustez y escala**
 LiteLLM proxy con budgets · adapter `KnowledgeBase` → Gemini Enterprise (si se consiguen licencias) · Deep Research agent gestionado para Arantza · **MinerU en modo precision + GPU** (servicio dedicado) · cola dedicada (Pub/Sub / Cloud Tasks) · compositor **Remotion** para segmentos screenshot y overlays animados.
@@ -354,7 +462,7 @@ Rutas 2–7 · videos hasta ~10 min · rutas personalizadas por industria (banca
 
 ---
 
-## 12. Supuestos y preguntas abiertas
+## 13. Supuestos y preguntas abiertas
 
 **Supuestos vigentes (corregir si aplica):**
 - Auth: Supabase Auth, uso interno (empleados Xertica).
@@ -364,6 +472,7 @@ Rutas 2–7 · videos hasta ~10 min · rutas personalizadas por industria (banca
 - El pipeline de video de Sebas se construye desde cero (Python + Veo 3.1 REST con `predictLongRunning` y polling asíncrono).
 
 **Abiertas:**
+- **Route Builder (Gate 0):** ¿el refinamiento granular por nodo consume presupuesto de dry-run como el resto de pipelines, o es texto barato sin gate de costo? ¿Se persiste el árbol propuesto como versión (para deshacer/comparar) o solo el estado final aprobado? ¿La estimación de costo en vivo del selector de componentes usa las mismas tarifas del dry-run?
 - ¿Cómo se entrega el asset aprobado a Classroom hoy? (¿Apps Script de Andrés Lazo, subida manual, API?) — define la frontera "listo para Classroom".
 - ¿La verificación "fuente Google" es automática (dominios permitidos) o requiere validación humana en el Gate 1? ¿Cómo se marcan las *fuentes propias* de la Vía 2?
 - ¿Límite de costo por ruta/módulo para el dry-run vs. run real?
