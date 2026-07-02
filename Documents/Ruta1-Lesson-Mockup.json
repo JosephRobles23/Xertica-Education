@@ -1,0 +1,41 @@
+{
+  "$schema": "./xertica-education-arquitectura.md#schema-lesson-text-asset",
+  "title": "Introducción a la Inteligencia Avanzada con Gemini y API Network",
+  "summary": "Este módulo introduce el uso de la API de Gemini y la integración con redes de APIs (Function Calling) para crear asistentes inteligentes que actúan sobre datos en tiempo real y ejecutan acciones automatizadas.",
+  "concepts": [
+    {
+      "name": "Function Calling (Llamada a Funciones)",
+      "description": "Capacidad de un LLM para detectar cuándo debe ejecutar una función externa basándose en la consulta del usuario, describiendo la firma de la función y devolviendo los argumentos correspondientes en formato JSON estructurado.",
+      "key_takeaways": [
+        "El LLM no ejecuta la función directamente; detecta la intención y devuelve los parámetros estructurados.",
+        "Permite conectar modelos de lenguaje a bases de datos corporativas, APIs de terceros y scripts locales.",
+        "Garantiza que la salida del modelo esté acotada y estructurada para procesos automatizados."
+      ]
+    },
+    {
+      "name": "System Instructions (Instrucciones del Sistema)",
+      "description": "Directrices globales que definen el comportamiento, tono, restricciones y rol del modelo de lenguaje durante toda la sesión de conversación.",
+      "key_takeaways": [
+        "Se configuran al inicializar el modelo, antes del historial de chat.",
+        "Definen límites de seguridad y reglas de formato inquebrantables.",
+        "Ayudan a evitar inyecciones de prompt básicas estableciendo un contexto autoritario."
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "title": "1. El paradigma de modelos de lenguaje conectados",
+      "content_markdown": "Los modelos de lenguaje tradicionales sufren de falta de información en tiempo real y la incapacidad de interactuar con sistemas externos. El concepto de **API Network** resuelve esto permitiendo que el modelo actúe como un *orquestador inteligente* o 'router de intenciones'. Al exponerle un catálogo de herramientas (APIs), Gemini puede decidir qué herramienta usar en respuesta a la pregunta del usuario.",
+      "diagram_mermaid": "graph TD\n    Usuario[Usuario] -->|Consulta| Gemini{Gemini API}\n    Gemini -->|Detecta Tool Call| Tool[Catálogo de APIs]\n    Tool -->|Ejecuta y Retorna JSON| Gemini\n    Gemini -->|Respuesta Final Grounded| Usuario"
+    },
+    {
+      "title": "2. Flujo de ejecución en Function Calling",
+      "content_markdown": "El flujo completo consta de los siguientes pasos:\n1. **Declaración:** Se le proporciona al modelo una lista de definiciones de funciones escritas en JSON Schema.\n2. **Resolución:** El usuario hace una pregunta ('¿Cuál es el clima en Bogotá?'). El modelo analiza la pregunta y decide llamar a la función `get_weather(city='Bogota')` en lugar de responder con texto libre.\n3. **Ejecución:** Tu código cliente intercepta este comando del modelo, ejecuta la llamada real a la API meteorológica y obtiene el resultado.\n4. **Grounding:** Se le envía de vuelta el resultado de la API al modelo para que redacte la respuesta final en lenguaje natural.",
+      "diagram_mermaid": null
+    }
+  ],
+  "sources": [
+    "https://ai.google.dev/gemini-api/docs/function-calling",
+    "https://ai.google.dev/gemini-api/docs/system-instructions"
+  ]
+}

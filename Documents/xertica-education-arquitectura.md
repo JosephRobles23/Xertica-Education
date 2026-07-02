@@ -126,9 +126,11 @@ flowchart TD
         E --> F[query grounded con citas]
     end
 
-    F --> G
-    F --> H
-    F --> I
+    F --> G[Sebas — Video]
+    F --> H[Santiago — Infografía]
+    F --> ID[Shared Instructional Designer Graph ??]
+    ID --> I[Quiz]
+    ID --> L[Lesson & Lab]
 
     subgraph Sebas["Sebas — Video"]
         G[Guion + storyboard con word budget] -.->|Gate 2: aprobar guion| G2[Render híbrido]
@@ -143,13 +145,18 @@ flowchart TD
         I[Generación desde KB]
     end
 
+    subgraph LessonLab["Lesson & Lab"]
+        L[Generación de estructura Schema-driven]
+    end
+
     G3 --> Z
     H2 --> Z
     I --> Z
+    L --> Z
     Z[/Gate 3: aprobar asset final/] --> ZZ[Asset aprobado -> Classroom]
 ```
 
-**Lectura del DAG:** hay dos vías de ingesta — Arantza (deep research automatizado) y el aporte del usuario (archivos subidos y parseados con MinerU) — que convergen en el Gate 1. Joseph convierte ese corpus aprobado en la capa de grounding que todos consultan → Sebas y Santiago **consumen contenido ya aterrizado** (no inventan info no acreditada) → los quizzes salen también de la KB. Esto garantiza que ningún asset se genere con fuentes que el cliente no pueda aceptar.
+**Lectura del DAG:** hay dos vías de ingesta — Arantza (deep research automatizado) y el aporte del usuario (archivos subidos y parseados con MinerU) — que convergen en el Gate 1. Joseph convierte ese corpus aprobado en la capa de grounding (`F`). De esta capa consumen directamente Sebas (Video) y Santiago (Infografía) para que su contenido multimedia esté debidamente grounded, y en paralelo, el **Shared Instructional Designer Graph** consume de `F` para estructurar los borradores de Lessons, Labs y Quizzes usando esquemas definidos. Todo confluye en el Gate 3 para aprobación final antes de Classroom.
 
 > **Nota sobre verificación:** las fuentes de la Vía 1 (Arantza) llegan con el sello *verificable Google*; las de la Vía 2 (aporte del usuario) son responsabilidad de quien las sube y se marcan como *fuente propia* en el Gate 1, con su provenance registrada.
 
@@ -164,6 +171,97 @@ Cada segmento de video exige una estrategia distinta — este es un aprendizaje 
 | Onboarding interactivo | Captura anotada + highlighting | Playwright + overlays | Requiere precisión sobre elementos reales |
 
 > Continuidad del instructor entre segmentos: **voz TTS fija (voice ID)**, no una identidad de avatar persistente.
+
+---
+
+### 4.1. Shared Instructional Designer & Asset Schemas
+
+El subgrafo **Shared Instructional Designer** es un paso de orquestación centralizado que consume las consultas grounded de la base de conocimientos (`KnowledgeBase`) y genera los borradores de lecciones, laboratorios y evaluaciones de forma estructurada para asegurar consistencia pedagógica.
+
+#### Schema: Lesson (Text Asset)
+
+Representa el material teórico de estudio. Estructura del JSON:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LessonAsset",
+  "type": "object",
+  "properties": {
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "key_takeaways": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["name", "description", "key_takeaways"]
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "content_markdown": { "type": "string" },
+          "diagram_mermaid": { "type": ["string", "null"] }
+        },
+        "required": ["title", "content_markdown"]
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["title", "summary", "concepts", "sections", "sources"]
+}
+```
+
+#### Schema: Lab (Practical Exercise)
+
+Representa el laboratorio práctico guiado. Estructura del JSON:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LabAsset",
+  "type": "object",
+  "properties": {
+    "title": { "type": "string" },
+    "objective": { "type": "string" },
+    "duration_minutes": { "type": "integer" },
+    "requirements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_number": { "type": "integer" },
+          "title": { "type": "string" },
+          "instructions_markdown": { "type": "string" },
+          "starter_code": { "type": ["string", "null"] },
+          "expected_output": { "type": ["string", "null"] }
+        },
+        "required": ["step_number", "title", "instructions_markdown"]
+      }
+    },
+    "verification_step": { "type": "string" }
+  },
+  "required": ["title", "objective", "duration_minutes", "requirements", "steps", "verification_step"]
+}
+```
 
 ---
 
@@ -321,6 +419,7 @@ llm = get_llm("scriptwriter")
 |---|---|---|---|---|
 | **Arantza** | Sourcing (2 vías) | Spec de ruta · archivos del usuario | `SOURCE[]` (verificados / propios) | **Vía 1:** deep research automatizado (fase 2: apoyarse en el **Deep Research agent** de Google vía Interactions API / A2A). **Vía 2:** ingesta de archivos del usuario (PDF/Word/Excel/PPT/imágenes/texto/URL), estilo NotebookLM. |
 | **Joseph** | Knowledge Base (RAG) + parsing | Corpus aprobado + archivos | Grounding + citas | **MVP: pgvector en Supabase.** Parsing de archivos vía adapter **MinerU** (PDF/Office/imágenes → Markdown/JSON), en evaluación. Puerto `KnowledgeBase` con adapter **Gemini Enterprise / NotebookLM** como fase 2 (bloqueado por permisos de licencia). |
+| **Shared (ID Graph)** | Instructional Designer | Grounding + citas | `Lesson` (JSON), `Lab` (JSON), `Quiz` (JSON) | Generación paralela utilizando esquemas estructurados de diseño instruccional; actúa como anclaje pedagógico para videos e infografías. |
 | **Sebas** | Video | Contenido grounded | Cápsula ~2 min | Pipeline propio (Python + Veo 3.1 REST); **OpenMontage solo como referencia** de patrones (stage-gates, instruction-driven). Render híbrido por segmento. |
 | **Santiago** | Infografía | Contenido grounded | PDF | HTML grounded → PDF vía LLM. |
 
