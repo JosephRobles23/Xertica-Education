@@ -15,7 +15,7 @@
 
 **Por qué existe.** Ataca el cuello de botella real de la iniciativa Impulso: hoy la generación de contenido es lo más pesado — ~2 h por cápsula de video, 3–4 h por infografía, más laboratorios y dependencias externas. Ahí está el ROI del piloto.
 
-**MVP (rebanada vertical).** Ruta 1 — *Inteligencia avanzada (Gemini + API Network)*, una de las rápidas — produciendo **un módulo completo end-to-end**: lesson + 1 cápsula de video (~2 min) + 1 infografía + 1 quiz + tutoriales con fuente verificada, pasando por los tres gates HITL. Objetivo: algo demo-able para la 2.ª reunión con Change Management que ejercite las 4 features contra el mismo spine.
+**MVP (rebanada vertical).** Ruta 1 — *Inteligencia avanzada (Gemini + API Network)*, una de las rápidas — produciendo **un módulo completo end-to-end**: lesson + 1 cápsula de video (~2 min) + 1 infografía + 1 quiz + tutoriales con fuente verificada, pasando por los tres gates HITL. La KB se alimenta por **dos vías**: el deep research de Arantza y el aporte de archivos del propio usuario (estilo NotebookLM). Objetivo: algo demo-able para la 2.ª reunión con Change Management que ejercite las 4 features contra el mismo spine.
 
 ---
 
@@ -102,17 +102,24 @@ erDiagram
 
 ## 4. Vista de flujo — el DAG de las 4 features
 
-El requisito de "fuente Google verificada" reordena al equipo: **el sourcing de Arantza es la capa de arriba, no una tool suelta.** El flujo natural es un DAG donde la KB de Joseph es el hub.
+El requisito de "fuente verificable" reordena al equipo: **el sourcing es la capa de arriba, no una tool suelta.** Hay **dos vías de ingesta** que alimentan la misma KB — (1) el deep research automatizado de Arantza y (2) el aporte del propio usuario (subida de archivos estilo NotebookLM) — y ambas convergen en el Gate 1 y en la KB de Joseph, que es el hub.
 
 ```mermaid
 flowchart TD
     A[Spec de Ruta / Módulo] --> B
+    A --> U
 
-    subgraph Arantza["Arantza — Sourcing / Deep Research"]
-        B[Deep research en YouTube y plataformas oficiales Google] --> C[Corpus de fuentes verificadas]
+    subgraph Arantza["Vía 1 · Arantza — Deep Research"]
+        B[Búsqueda en YouTube y plataformas oficiales Google] --> C[Fuentes verificadas]
+    end
+
+    subgraph Upload["Vía 2 · Aporte del usuario (estilo NotebookLM)"]
+        U[Subida: PDF · Word · Excel · PPT · imágenes · texto · URL] --> P[Parsing: MinerU + loaders simples]
+        P --> C2[Documentos estructurados Markdown/JSON]
     end
 
     C -.->|Gate 1: aprobar corpus| D
+    C2 -.->|Gate 1: aprobar corpus| D
 
     subgraph Joseph["Joseph — Knowledge Base RAG"]
         D[Ingesta + chunking + embeddings] --> E[(pgvector en Supabase)]
@@ -142,7 +149,9 @@ flowchart TD
     Z[/Gate 3: aprobar asset final/] --> ZZ[Asset aprobado -> Classroom]
 ```
 
-**Lectura del DAG:** Arantza produce el corpus verificado → Joseph lo convierte en la capa de grounding que todos consultan → Sebas y Santiago **consumen contenido ya aterrizado** (no inventan info no acreditada) → quizzes salen también de la KB. Esto es lo que garantiza que ningún asset se genere con fuentes que el cliente no pueda aceptar.
+**Lectura del DAG:** hay dos vías de ingesta — Arantza (deep research automatizado) y el aporte del usuario (archivos subidos y parseados con MinerU) — que convergen en el Gate 1. Joseph convierte ese corpus aprobado en la capa de grounding que todos consultan → Sebas y Santiago **consumen contenido ya aterrizado** (no inventan info no acreditada) → los quizzes salen también de la KB. Esto garantiza que ningún asset se genere con fuentes que el cliente no pueda aceptar.
+
+> **Nota sobre verificación:** las fuentes de la Vía 1 (Arantza) llegan con el sello *verificable Google*; las de la Vía 2 (aporte del usuario) son responsabilidad de quien las sube y se marcan como *fuente propia* en el Gate 1, con su provenance registrada.
 
 ### Render híbrido por tipo de segmento (feature de Sebas)
 
@@ -174,6 +183,11 @@ mindmap
       Asset con sources y provenance
     Features
       Arantza Sourcing
+        Via 1 deep research
+        Via 2 uploads del usuario
+      Ingesta MinerU
+        PDF Word Excel PPT imagenes
+        parsing a Markdown JSON
       Joseph KB RAG
       Sebas Video
       Santiago Infografia
@@ -305,8 +319,8 @@ llm = get_llm("scriptwriter")
 
 | Dev | Feature | Entrada | Salida | Notas clave |
 |---|---|---|---|---|
-| **Arantza** | Sourcing / Deep Research | Spec de ruta | `SOURCE[]` verificados | Fase 2: apoyarse en el **Deep Research agent** gestionado de Google (Interactions API / A2A). Es fuente-Google por diseño. |
-| **Joseph** | Knowledge Base (RAG) | Corpus aprobado | Grounding + citas | **MVP: pgvector en Supabase.** Puerto `KnowledgeBase` con adapter **Gemini Enterprise / NotebookLM** como fase 2 (bloqueado hoy por permisos de licencia). |
+| **Arantza** | Sourcing (2 vías) | Spec de ruta · archivos del usuario | `SOURCE[]` (verificados / propios) | **Vía 1:** deep research automatizado (fase 2: apoyarse en el **Deep Research agent** de Google vía Interactions API / A2A). **Vía 2:** ingesta de archivos del usuario (PDF/Word/Excel/PPT/imágenes/texto/URL), estilo NotebookLM. |
+| **Joseph** | Knowledge Base (RAG) + parsing | Corpus aprobado + archivos | Grounding + citas | **MVP: pgvector en Supabase.** Parsing de archivos vía adapter **MinerU** (PDF/Office/imágenes → Markdown/JSON), en evaluación. Puerto `KnowledgeBase` con adapter **Gemini Enterprise / NotebookLM** como fase 2 (bloqueado por permisos de licencia). |
 | **Sebas** | Video | Contenido grounded | Cápsula ~2 min | Pipeline propio (Python + Veo 3.1 REST); **OpenMontage solo como referencia** de patrones (stage-gates, instruction-driven). Render híbrido por segmento. |
 | **Santiago** | Infografía | Contenido grounded | PDF | HTML grounded → PDF vía LLM. |
 
@@ -322,16 +336,18 @@ llm = get_llm("scriptwriter")
 | 4 | MVP = **rebanada vertical** (Ruta 1, 1 módulo) | Ejercita las 4 features contra el spine y produce demo para Change Management. | ✅ Cerrada |
 | 5 | Jobs largos: **LangGraph durable + polling** (sin cola) | Suficiente para el volumen del MVP; cola dedicada = fase 2. | ✅ Cerrada |
 | 6 | Gateway LLM: OpenRouter ahora, **LiteLLM fase 2** | Empezar simple; centralizar budgets/fallbacks cuando haya varios devs consumiendo. | ✅ Cerrada |
+| 7 | **Segunda vía de ingesta**: aporte de archivos del usuario (estilo NotebookLM) | Dar control al usuario para alimentar la KB con material propio (PDF/Word/Excel/PPT/imágenes/texto/URL), además del deep research automatizado. Ambas vías convergen en el Gate 1. | ✅ Cerrada |
+| 8 | **MinerU** como adapter de parsing/OCR de la vía de uploads | Soporta PDF/Office/imágenes nativo, tiene **loader LangChain nativo** y su licencia **ya no es AGPL** (custom basada en Apache 2.0). Correrlo como servicio separado, modo flash/CPU en MVP; precision+GPU en fase 2. | 🔬 En evaluación (spike de 1 día en Cloud Run pendiente) |
 
 ---
 
 ## 11. Roadmap por fases
 
 **Fase 1 — MVP (rebanada vertical)**
-Spine completo · Ruta 1 / 1 módulo end-to-end · Arantza→KB(pgvector)→Sebas/Santiago/Quiz · 3 gates HITL · OpenRouter + `get_llm(role)` · Veo generativo (segmento conceptual) + screenshots Playwright · deploy en Cloud Run + Supabase Cloud.
+Spine completo · Ruta 1 / 1 módulo end-to-end · **dos vías de ingesta** (Arantza deep research + uploads del usuario con MinerU en modo flash/CPU) → KB(pgvector) → Sebas/Santiago/Quiz · 3 gates HITL · OpenRouter + `get_llm(role)` · Veo generativo (segmento conceptual) + screenshots Playwright · deploy en Cloud Run + Supabase Cloud.
 
 **Fase 2 — Robustez y escala**
-LiteLLM proxy con budgets · adapter `KnowledgeBase` → Gemini Enterprise (si se consiguen licencias) · Deep Research agent gestionado para Arantza · cola dedicada (Pub/Sub / Cloud Tasks) · compositor **Remotion** para segmentos screenshot y overlays animados.
+LiteLLM proxy con budgets · adapter `KnowledgeBase` → Gemini Enterprise (si se consiguen licencias) · Deep Research agent gestionado para Arantza · **MinerU en modo precision + GPU** (servicio dedicado) · cola dedicada (Pub/Sub / Cloud Tasks) · compositor **Remotion** para segmentos screenshot y overlays animados.
 
 **Fase 3 — Producto**
 Rutas 2–7 · videos hasta ~10 min · rutas personalizadas por industria (banca, retail, finanzas) · métrica de adopción de herramientas antes/después vía consola de admin.
@@ -349,5 +365,7 @@ Rutas 2–7 · videos hasta ~10 min · rutas personalizadas por industria (banca
 
 **Abiertas:**
 - ¿Cómo se entrega el asset aprobado a Classroom hoy? (¿Apps Script de Andrés Lazo, subida manual, API?) — define la frontera "listo para Classroom".
-- ¿La verificación "fuente Google" es automática (dominios permitidos) o requiere validación humana en el Gate 1?
+- ¿La verificación "fuente Google" es automática (dominios permitidos) o requiere validación humana en el Gate 1? ¿Cómo se marcan las *fuentes propias* de la Vía 2?
 - ¿Límite de costo por ruta/módulo para el dry-run vs. run real?
+- **MinerU (spike pendiente):** validar en Cloud Run despliegue, latencia y calidad con un PDF/Word/Excel real; revisar las *condiciones adicionales* de su licencia (basada en Apache 2.0) antes de comprometerlo. ¿Self-host (recomendado, la data no sale) o su Open API hospedado?
+- ¿Qué formatos de la Vía 2 pasan por MinerU (PDF/Office/imágenes) vs. por loaders simples (texto/URL)?
