@@ -13,7 +13,7 @@
 3. [Estructura de archivos por provider](#3-estructura-de-archivos-por-provider)
 4. [Ponytail: qué es y cómo funciona](#4-ponytail-qué-es-y-cómo-funciona)
 5. [El pipeline agéntico completo](#5-el-pipeline-agéntico-completo)
-6. [Ejemplo práctico: Motor de Conciliación](#6-ejemplo-práctico-motor-de-conciliación)
+6. [Ejemplo práctico: Verificación de Fuentes (Gate 1)](#6-ejemplo-práctico-verificación-de-fuentes-gate-1)
 7. [Artefactos que genera el sistema](#7-artefactos-que-genera-el-sistema)
 8. [Referencia rápida de comandos](#8-referencia-rápida-de-comandos)
 9. [Configuración por provider](#9-configuración-por-provider)
@@ -31,7 +31,7 @@
 | 3 | `/grill-with-docs` | **Interrogatorio con documentación** | Combina `/grilling` + `/domain-modeling`. Mientras te interroga, actualiza el glosario (`CONTEXT.md`) y crea ADRs cuando hay decisiones irreversibles. | Cuando quieres que las decisiones se documenten automáticamente mientras las tomas. **Autodocumentación dinámica.** |
 | 4 | `/decision-mapping` | **Mapa de decisiones** | Convierte una idea suelta en un mapa de tickets de investigación secuenciados. Usa "niebla de guerra" — solo mapea lo visible, descubre el resto ticket por ticket. Tres tipos: Research, Prototype, Discuss. | Cuando el problema tiene demasiadas incógnitas. Proyectos multi-sesión donde cada decisión abre nuevas preguntas. |
 | 5 | `/prototype` | **Prototipo** | Código desechable que responde una pregunta. Dos ramas: **Logic** (app de terminal para probar state machines) y **UI** (variaciones radicales en una ruta, switchable por URL). Sin tests, sin polish — se borra cuando responde la pregunta. | Cuando "¿funciona esta lógica?" o "¿cómo debería verse?" no se puede responder sin código. |
-| 6 | `/teach` | **Enseñar** | Crea un workspace de enseñanza con lecciones HTML interactivas, glosarios, reference docs y learning records. Usa principios de ciencia cognitiva (retrieval practice, spacing, interleaving). | Para onboardear gente al dominio (SIRE, detracciones, tipos de comprobantes) o aprender un tema nuevo. |
+| 6 | `/teach` | **Enseñar** | Crea un workspace de enseñanza con lecciones HTML interactivas, glosarios, reference docs y learning records. Usa principios de ciencia cognitiva (retrieval practice, spacing, interleaving). | Para onboardear gente al dominio (gates HITL, spine Ruta/Módulo/Componente, grounding y provenance) o aprender un tema nuevo. |
 
 ### Producción y entrega (3 skills)
 
@@ -91,7 +91,7 @@ Las skills se dividen en dos tipos según cómo se activan:
 ## 3. Estructura de archivos por provider
 
 ```
-tesorito-hack/
+xertica-education/
 ├── .claude/skills/                        ← Claude Code
 │   ├── grilling/SKILL.md                    model-invoked
 │   ├── domain-modeling/SKILL.md             model-invoked
@@ -194,7 +194,7 @@ Las 12 skills forman un pipeline de 8 fases. Cada fase produce artefactos que al
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │     PIPELINE AGÉNTICO DE TESORITO       │
+                    │  PIPELINE AGÉNTICO DE XERTICA EDUCATION │
                     └─────────────────────────────────────────┘
 
   FASE 1                FASE 2                FASE 3              FASE 4
@@ -237,11 +237,12 @@ Las 12 skills forman un pipeline de 8 fases. Cada fase produce artefactos que al
 **Output:** Un `decision-map.md` con tickets numerados.
 
 ```markdown
-## #1: ¿La API SIRE devuelve el porcentaje de detracción en la propuesta RCE?
+## #1: ¿Qué dominios cuentan como "verificable Google" para el Gate 1?
 Type: Research
 ### Question
-Necesitamos saber si el campo detraccion_pct viene en la respuesta de SUNAT
-o si Tesorito debe calcularlo a partir del tipo de bien/servicio.
+Necesitamos la lista de dominios que Arantza puede marcar como verificados
+(youtube.com, docs.google.com, support.google.com…) o si Xertica Education
+debe consultar una API de reputación en vez de un allowlist estático.
 ### Answer
 (se llena al resolver el ticket)
 ```
@@ -255,19 +256,19 @@ o si Tesorito debe calcularlo a partir del tipo de bien/servicio.
 
 El agente pregunta una a una:
 
-> "Tu arquitectura dice que el motor de conciliación usa subset-sum para detracciones con ≤3 movimientos. ¿Qué pasa si un proveedor hace un pago fraccionado en 4 partes? **Mi recomendación:** mantener el límite de 3 y marcar el excedente como Pendiente — las detracciones legales solo generan 2 movimientos (neto + BN)."
+> "Tu arquitectura dice que el `route_structurer` respeta la estructura cuando el input ya viene definido. ¿Qué pasa si el autor trae solo 2 módulos pero pide una duración objetivo de 40 minutos? **Mi recomendación:** el LLM propone dividir en más módulos solo si excede ~10 min por módulo, y lo deja como sugerencia editable en el árbol — nunca lo fuerza sin que el humano lo apruebe en el Gate 0."
 
 Mientras tanto, actualiza `CONTEXT.md`:
 
 ```markdown
-## Detracción
-Retención obligatoria (SPOT) sobre ciertos bienes y servicios. Divide un pago
-en dos movimientos bancarios: el neto al banco comercial del proveedor y el
-depósito de detracción al Banco de la Nación.
+## Gate (HITL)
+Punto de interrupción durable en el grafo LangGraph donde la ejecución se
+detiene y espera aprobación humana antes de continuar. Xertica Education
+tiene cuatro: Gate 0 (estructura), Gate 1 (fuentes), Gate 2 (guion), Gate 3 (asset final).
 
-## Subset-sum (conciliación)
-Técnica del motor que busca combinaciones de ≤3 movimientos bancarios cuya suma
-coincida con el total de un comprobante (dentro de tolerancia).
+## Provenance
+Registro obligatorio en cada `ASSET`: qué modelo/pipeline lo generó, su costo
+y su tiempo. Alimenta la trazabilidad de gasto y la confianza del contenido.
 ```
 
 ### Fase 3: Prototipo (`/prototype`)
@@ -275,8 +276,8 @@ coincida con el total de un comprobante (dentro de tolerancia).
 **Input:** Una pregunta que no se responde sin código.
 **Output:** Código desechable que responde la pregunta.
 
-- **Logic branch:** "¿La state machine del comprobante maneja Vencido → Sugerido?" → app de terminal
-- **UI branch:** "¿Cómo se ve la bandeja de aprobaciones?" → 3 variaciones en `?variant=1|2|3`
+- **Logic branch:** "¿La state machine del asset maneja borrador → generado → en_revisión → aprobado al rechazar en Gate 3?" → app de terminal
+- **UI branch:** "¿Cómo se ve el editor de árbol del Gate 0?" → 3 variaciones en `?variant=1|2|3`
 
 Se borra el prototipo cuando responde la pregunta. Se guarda la decisión en un ADR.
 
@@ -293,10 +294,10 @@ Incluye: Problem Statement, User Stories extensas, Implementation Decisions (sin
 **Output:** Vertical slices publicados en **Linear**.
 
 ```
-TEZ-12: Sincronizar comprobantes de un período SIRE
-TEZ-13: Parsear estado de cuenta Excel (BCP + Interbank)
-TEZ-14: Motor de matching 1:1 con score ponderado        → Blocked by: #12, #13
-TEZ-15: Bandeja de aprobación split-view                  → Blocked by: #14
+XED-12: Adapter MinerU para parsing de PDF/DOCX/PPTX a Markdown
+XED-13: route_structurer — propuesta de estructura desde texto libre
+XED-14: Editor de árbol con refinamiento granular por nodo  → Blocked by: #13
+XED-15: Gate 1 — pantalla de revisión y scoring de fuentes  → Blocked by: #12
 ```
 
 **Labels de Linear:** `ready-for-agent`, `ready-for-human`, `needs-info`, `bug`, `enhancement`.
@@ -307,21 +308,21 @@ TEZ-15: Bandeja de aprobación split-view                  → Blocked by: #14
 **Output:** Código + tests en rama feature.
 
 ```
-RED:   test_monto_match_dentro_de_tolerancia() → FALLA
-GREEN: abs(a - b) <= 0.50, una línea (Ponytail: stdlib)
+RED:   test_dominio_verificado_score_alto() → FALLA
+GREEN: allowlist + comparación de dominio, una línea (Ponytail: stdlib)
 
-RED:   test_score_ponderado_cinco_reglas() → FALLA
-GREEN: dict comprehension + sum() (Ponytail: no clase ScoreCalculator)
+RED:   test_word_budget_no_excede_limite() → FALLA
+GREEN: len(texto.split()) <= budget (Ponytail: no tokenizer custom)
 
-RED:   test_subset_sum_detraccion() → FALLA
-GREEN: itertools.combinations (Ponytail: no solver custom)
+RED:   test_provenance_registra_modelo_y_costo() → FALLA
+GREEN: dict literal en el asset (Ponytail: no clase ProvenanceBuilder)
 ```
 
 ```python
-# ponytail: brute-force combinations ≤3 items, upgrade a DP si N > 10
-for combo in itertools.combinations(movements, r):
-    if abs(sum(m.monto for m in combo) - comprobante.total) <= TOLERANCE:
-        return combo
+# ponytail: allowlist simple, upgrade a API de reputación si la lista crece
+dominio = urlparse(fuente.url).netloc.removeprefix("www.")
+if dominio in DOMINIOS_VERIFICADOS:
+    fuente.verificada_google = True
 ```
 
 ### Fase 7: Revisión minimalista (`/ponytail-review`)
@@ -345,28 +346,28 @@ Se genera un HTML con Tailwind + Mermaid mostrando módulos shallow con diagrama
 
 ---
 
-## 6. Ejemplo práctico: Motor de Conciliación
+## 6. Ejemplo práctico: Verificación de Fuentes (Gate 1)
 
-Walkthrough del pipeline completo aplicado al módulo más complejo del MVP.
+Walkthrough del pipeline completo aplicado a una de las piezas más sensibles del MVP: decidir qué fuentes entran a la Base de Conocimiento antes del Gate 1.
 
 ### Paso 1 — Decision Mapping
 
 ```
-> /decision-mapping "Motor de conciliación bidireccional para Tesorito"
+> /decision-mapping "Verificación de fuentes para el Gate 1 de Xertica Education"
 ```
 
 Produce:
 
 ```markdown
-# Decision Map: Motor de Conciliación
+# Decision Map: Verificación de Fuentes (Gate 1)
 
-## #1: ¿Cómo llegan los datos del banco?
+## #1: ¿Qué dominios cuentan como "verificable Google"?
 Type: Research · Blocked by: —
 
-## #2: ¿El score se calcula al vuelo o se precalcula?
+## #2: ¿El score de confianza se calcula al vuelo o se precalcula?
 Type: Discuss · Blocked by: —
 
-## #3: ¿Cómo se ve la bandeja de aprobaciones?
+## #3: ¿Cómo se ve la pantalla de revisión de fuentes (Gate 1)?
 Type: Prototype · Blocked by: #1
 
 ## #4 – #N: (fog of war)
@@ -375,66 +376,61 @@ Type: Prototype · Blocked by: #1
 ### Paso 2 — Resolver tickets con grilling + docs
 
 ```
-> /decision-mapping resume decision-map-conciliacion.md #2
+> /decision-mapping resume decision-map-gate1-fuentes.md #2
 ```
 
 Sesión de `/grill-with-docs`:
 
-> **Agente:** "Si precalculas en un job nocturno, ¿qué pasa cuando suben un estado de cuenta a las 3pm?"
+> **Agente:** "Si precalculas el score en un job batch, ¿qué pasa cuando Arantza agrega una fuente nueva a mitad de sesión?"
 > **Tú:** "Buen punto, necesita ser on-demand."
-> **Agente:** "Actualizo CONTEXT.md y propongo ADR-0002: Conciliación on-demand."
+> **Agente:** "Actualizo CONTEXT.md y propongo ADR-0002: Scoring de fuentes on-demand."
 
-### Paso 3 — Prototype de la bandeja
+### Paso 3 — Prototype de la pantalla de revisión
 
 ```
-> /prototype "¿Cómo se ve la bandeja de aprobaciones?"
+> /prototype "¿Cómo se ve la pantalla de revisión de fuentes (Gate 1)?"
 ```
 
-3 variaciones UI. Se elige split-view. Se borra el prototipo.
+3 variaciones UI. Se elige la de tarjetas con badge de verificación + quote. Se borra el prototipo.
 
 ### Paso 4 — PRD y tickets
 
 ```
-> /to-prd           → PRD publicado en Linear con ~25 user stories
-> /to-issues        → 8 vertical slices en Linear
+> /to-prd           → PRD publicado en Linear con ~18 user stories
+> /to-issues        → 6 vertical slices en Linear
 ```
 
 ### Paso 5 — Implementar con TDD + Ponytail
 
 ```python
-# test_reconciliation_engine.py
-def test_exact_amount_match_scores_high():
-    comprobante = make_comprobante(total=1000.00)
-    movement = make_movement(monto=1000.00)
-    result = reconcile(comprobante, [movement])
+# test_source_verification.py
+def test_dominio_youtube_oficial_score_alto():
+    fuente = make_fuente(url="https://youtube.com/watch?v=abc123")
+    result = verificar_fuente(fuente)
     assert result.score >= 0.85
+    assert result.verificada_google is True
 
-def test_tolerance_absorbs_itf():
-    comprobante = make_comprobante(total=1000.00)
-    movement = make_movement(monto=999.65)
-    result = reconcile(comprobante, [movement])
-    assert result.score >= 0.85
+def test_dominio_no_google_score_bajo():
+    fuente = make_fuente(url="https://blog-externo.com/post-2026")
+    result = verificar_fuente(fuente)
+    assert result.score < 0.5
+    assert result.verificada_google is False
 ```
 
 ```python
-# reconciliation/engine.py
-from itertools import combinations
+# sourcing/verification.py
+from urllib.parse import urlparse
 
-TOLERANCE = 0.50
-WEIGHTS = {"monto": 0.35, "contraparte": 0.25, "referencia": 0.20,
-           "fecha": 0.15, "moneda": 0.05}
+DOMINIOS_VERIFICADOS = {
+    "youtube.com", "docs.google.com", "support.google.com", "developers.google.com",
+}
 
-def reconcile(comprobante, movements):
-    best = max(
-        (score_match(comprobante, combo)
-         for r in range(1, min(4, len(movements)+1))
-         for combo in combinations(movements, r)),
-        key=lambda s: s.score,
-        default=SugerenciaVacia()
-    )
-    # ponytail: brute-force ≤3 items, upgrade a DP si N > 10
-    best.estado = "SUGERIDO" if best.score >= 0.6 else "PENDIENTE"
-    return best
+def verificar_fuente(fuente):
+    dominio = urlparse(fuente.url).netloc.removeprefix("www.")
+    # ponytail: allowlist simple, upgrade a API de reputación si la lista crece
+    score = 0.95 if dominio in DOMINIOS_VERIFICADOS else 0.3
+    fuente.verificada_google = score >= 0.8
+    return ScoreResult(score=score, verificada=fuente.verificada_google)
 ```
 
 ### Paso 6 — Review
@@ -451,25 +447,25 @@ Lean already. Ship.
 Después de adoptar las 12 skills, el repositorio acumula estos artefactos:
 
 ```
-tesorito-hack/
+xertica-education/
 ├── CONTEXT.md                              ← Glosario de dominio (/domain-modeling)
 ├── docs/
 │   ├── adr/                                ← Decisiones arquitectónicas
-│   │   ├── 0001-sire-como-estandar.md
-│   │   ├── 0002-conciliacion-on-demand.md
-│   │   └── 0003-subset-sum-limite-3.md
+│   │   ├── 0001-mineru-parsing-scaffold.md
+│   │   ├── 0002-scoring-fuentes-on-demand.md
+│   │   └── 0003-gate0-route-builder-hitl.md
 │   ├── decisions/                          ← Mapas de decisiones (/decision-mapping)
-│   │   ├── decision-map-conciliacion.md
-│   │   └── decision-map-agente-ia.md
+│   │   ├── decision-map-gate1-fuentes.md
+│   │   └── decision-map-route-builder.md
 │   ├── architecture/
-│   │   └── Tesorito_Arquitectura_MVP.md
-│   └── Skills_Agenticas_Tesorito.md        ← Este documento
+│   │   └── xertica-education-arquitectura.md
+│   └── Skills_Desarrollo_Agentico.md       ← Este documento
 │
 ├── .claude/skills/    (12 SKILL.md)        ← Claude Code
 ├── .cursor/rules/     (12 .mdc)            ← Cursor
 ├── .agents/rules/     (12 .md)             ← Antigravity
 │
-└── src/
+└── apps/
     └── ...
 ```
 
@@ -481,12 +477,12 @@ tesorito-hack/
 
 | Comando | Cuándo | Ejemplo |
 |---------|--------|---------|
-| `/decision-mapping "idea"` | Idea con muchas incógnitas | `/decision-mapping "Integración con API SIRE"` |
-| `/decision-mapping resume mapa.md #N` | Retomar un ticket | `/decision-mapping resume decision-map-conciliacion.md #3` |
+| `/decision-mapping "idea"` | Idea con muchas incógnitas | `/decision-mapping "Integración con Veo 3.1 REST API"` |
+| `/decision-mapping resume mapa.md #N` | Retomar un ticket | `/decision-mapping resume decision-map-gate1-fuentes.md #3` |
 | `/grill-with-docs` | Stress-test + autodocumentación | `/grill-with-docs` (sobre el plan actual) |
 | `/grilling` | Stress-test puro | `/grilling` (interrogatorio sin documentar) |
-| `/prototype` | Responder pregunta con código | `/prototype "¿funciona la state machine?"` |
-| `/teach "tema"` | Aprender un concepto | `/teach "detracciones SUNAT"` |
+| `/prototype` | Responder pregunta con código | `/prototype "¿funciona la state machine del asset?"` |
+| `/teach "tema"` | Aprender un concepto | `/teach "gates HITL y provenance"` |
 
 ### Producción
 
@@ -553,4 +549,4 @@ Las skills `/to-prd` y `/to-issues` publican directamente en Linear via MCP. Lab
 
 ---
 
-*12 skills adaptadas de [mattpocock/skills](https://github.com/mattpocock/skills) y [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) para el proyecto Tesorito. Configuradas para Claude Code, Cursor y Antigravity.*
+*12 skills adaptadas de [mattpocock/skills](https://github.com/mattpocock/skills) y [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) para el proyecto Xertica Education. Configuradas para Claude Code, Cursor y Antigravity.*
