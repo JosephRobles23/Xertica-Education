@@ -69,7 +69,7 @@
               <h1 style="font-family:"Space Grotesk",system-ui,sans-serif;font-size:32px;font-weight:500;color:#1B1033;margin:0;letter-spacing:-.015em">Rutas de aprendizaje</h1>
               <p style="font-size:14.5px;color:#79738F;margin:10px 0 0;max-width:520px;line-height:1.6">Siete rutas en producción. Cada asset pasa por tres puntos de aprobación humana antes de publicarse a Google Classroom.</p>
             </div>
-            <button onClick="{{ goRuta }}" style="flex:none;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:12px 20px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#6D28D9">＋ Nueva ruta</button>
+            <button onClick="{{ goCrear }}" style="flex:none;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:12px 20px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#6D28D9">＋ Nueva ruta</button>
           </div>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px">
@@ -94,6 +94,106 @@
           </div>
         </div>
       </sc-if>
+      <!-- SCREEN 1B · CREAR RUTA (GATE 0) -->
+      <sc-if value="{{ isCrear }}" hint-placeholder-val="{{ true }}">
+        <div style="max-width:760px;margin:0 auto">
+          <div style="display:flex;align-items:center;gap:9px;font-family:ui-monospace,Menlo,monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#7C3AED;margin-bottom:12px">
+            <span style="width:18px;height:1.5px;background:#7C3AED"></span>Gate 0 · Crear ruta · Aprobación humana
+          </div>
+          <h1 style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:30px;font-weight:500;color:#1B1033;margin:0 0 6px;letter-spacing:-.015em">Nueva ruta de aprendizaje</h1>
+          <p style="font-size:14.5px;color:#79738F;margin:0 0 28px;line-height:1.6">Aporta una idea o sube tu material. La IA propone la estructura — módulos y componentes — y tú la curas antes de crear la ruta.</p>
+
+          <!-- INPUT -->
+          <div style="background:#FFFFFF;border:1.5px solid #E3DDF4;border-radius:12px;padding:24px 26px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <label style="display:block;font-size:12.5px;font-weight:600;color:#1B1033;margin-bottom:8px">Describe la ruta o pega tu estructura</label>
+              <textarea onInput="{{ rbSetText }}" rows="3" style="width:100%;border:1.5px solid #CDC4E8;border-radius:8px;padding:12px 13px;font-size:14px;font-family:inherit;color:#1B1033;background:#F5F3FB;line-height:1.55;resize:vertical">Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio — del concepto al laboratorio, cerrando con una evaluación de dominio. Público: equipos técnicos y de negocio.</textarea>
+            </div>
+
+            <div>
+              <label style="display:block;font-size:12.5px;font-weight:600;color:#1B1033;margin-bottom:8px">O sube material de referencia</label>
+              <div style="border:1.5px dashed #CDC4E8;border-radius:9px;padding:18px;text-align:center;background:#FAF9FE">
+                <div style="font-size:20px;margin-bottom:4px">⬆</div>
+                <div style="font-size:13px;color:#3A3355">Arrastra o selecciona archivos</div>
+                <div style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#79738F;margin-top:4px">DOCX · PDF · PPTX — se parsean con MinerU</div>
+              </div>
+              <div style="margin-top:10px;display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #E3DDF4;border-radius:9px;padding:10px 14px">
+                <span style="font-size:16px">📄</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;color:#1B1033">temario-ia-avanzada.docx</div>
+                  <div style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#79738F">214 KB · procesado</div>
+                </div>
+                <div onClick="{{ rbToggleDoc }}" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <span style="width:18px;height:18px;border:1.5px solid;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;{{ rbDocBox }}">{{ rbDocMark }}</span>
+                  <span style="font-size:12px;color:#3A3355">usar también como fuente</span>
+                </div>
+              </div>
+              <p style="margin:8px 0 0;font-size:11.5px;color:#79738F;line-height:1.5">Por defecto el documento solo sugiere la estructura. Márcalo para que además entre a la base de conocimiento.</p>
+            </div>
+
+            <button onClick="{{ rbPropose }}" style="width:100%;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:12px 18px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit" style-hover="background:#6D28D9">Proponer estructura con IA →</button>
+          </div>
+
+          <!-- TREE (después de proponer) -->
+          <sc-if value="{{ rbProposed }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:32px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+                <h2 style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:20px;font-weight:500;color:#1B1033;margin:0">Estructura propuesta</h2>
+                <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#79738F">{{ rbCount }} módulos</span>
+              </div>
+              <p style="font-size:13px;color:#79738F;margin:0 0 16px;line-height:1.55">Edítala a tu criterio: renombra, quita componentes o elimina un módulo — o pide replantear un módulo con IA (✨) sin tocar el resto.</p>
+
+              <div style="background:#FFFFFF;border:1.5px solid #E3DDF4;border-radius:12px;padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:10px;padding:4px 4px 14px;border-bottom:1.5px solid #EEEAF9;margin-bottom:12px">
+                  <span style="font-size:15px">📚</span>
+                  <span style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:16px;color:#1B1033">Ruta · Inteligencia avanzada</span>
+                  <span style="margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#79738F;background:#EEEAF9;padding:3px 9px;border-radius:999px">borrador</span>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <sc-for list="{{ rbModulesView }}" as="m" hint-placeholder-count="5">
+                    <div style="border:1.5px solid #E3DDF4;border-radius:10px;padding:14px 16px">
+                      <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px">
+                        <span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:600;color:#7C3AED">{{ m.num }}</span>
+                        <span style="flex:1;font-family:'Space Grotesk',system-ui,sans-serif;font-size:15.5px;color:#1B1033">{{ m.title }}</span>
+                        <span style="font-family:ui-monospace,Menlo,monospace;font-size:10px;color:#7C3AED;background:rgba(124,58,237,.08);padding:3px 8px;border-radius:999px">{{ m.min }}</span>
+                        <span onClick="{{ m.onRefine }}" style="cursor:pointer;font-family:ui-monospace,Menlo,monospace;font-size:11px;font-weight:600;color:#7C3AED;padding:4px 9px;border:1.5px solid #E5DEFA;border-radius:7px" style-hover="border-color:#7C3AED">✨ IA</span>
+                        <span onClick="{{ m.onRemove }}" style="cursor:pointer;font-size:13px;color:#CDC4E8;padding:2px 6px" style-hover="color:#E5484D">✕</span>
+                      </div>
+                      <p style="margin:0 0 12px;font-size:13px;color:#79738F;line-height:1.5;padding-left:24px">{{ m.desc }}</p>
+                      <div style="display:flex;flex-wrap:wrap;gap:8px;padding-left:24px">
+                        <sc-for list="{{ m.comps }}" as="c" hint-placeholder-count="5">
+                          <span onClick="{{ c.onToggle }}" style="cursor:pointer;font-size:12px;padding:5px 11px;border:1.5px solid;border-radius:999px;{{ c.pill }}">{{ c.mark }}{{ c.label }}</span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <button onClick="{{ rbAddModule }}" style="margin-top:12px;width:100%;background:#fff;color:#7C3AED;border:1.5px dashed #CDC4E8;border-radius:9px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" style-hover="border-color:#7C3AED">＋ Agregar módulo</button>
+              </div>
+
+              <div style="margin-top:18px;background:#EEEAF9;border-radius:10px;padding:16px 18px;display:flex;align-items:center;gap:14px">
+                <span style="font-family:ui-monospace,Menlo,monospace;font-size:20px;color:#79738F">≈</span>
+                <div style="flex:1">
+                  <div style="font-size:12.5px;color:#3A3355;margin-bottom:2px">Costo estimado de generar la ruta completa</div>
+                  <div style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#79738F">El video domina el costo · se confirma con dry-run por módulo</div>
+                </div>
+                <span style="font-family:'Space Grotesk',system-ui,sans-serif;font-size:24px;color:#1B1033">{{ rbCost }}</span>
+              </div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px;padding-top:20px;border-top:1.5px solid #E3DDF4">
+                <span style="font-size:12.5px;color:#79738F;line-height:1.5">Al aprobar, la ruta nace en <b style="color:#1B1033">borrador</b> con estos módulos. Cada módulo entra luego al pipeline (Gate 1 → 3).</span>
+                <div style="display:flex;gap:12px;flex:none">
+                  <button onClick="{{ goDashboard }}" style="background:#fff;color:#3A3355;border:1.5px solid #CDC4E8;border-radius:9px;padding:12px 18px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit" style-hover="border-color:#1B1033">Descartar</button>
+                  <button onClick="{{ rbApprove }}" style="background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:12px 22px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#6D28D9">Aprobar estructura →</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
       <!-- SCREEN 2 · DETALLE DE RUTA -->
       <sc-if value="{{ isRuta }}" hint-placeholder-val="{{ true }}">
         <div style="max-width:1120px;margin:0 auto;display:grid;grid-template-columns:1fr 300px;gap:36px;align-items:start">
@@ -557,7 +657,15 @@
 class Component extends DCLogic {
   state = { screen:'dashboard', tab:'video', minutes:8, dryrun:false, openModule:1,
             gen:{lesson:true,video:true,info:true,quiz:true},
-            qSel:{}, qDone:false, labStep:0, labRun:false };
+            qSel:{}, qDone:false, labStep:0, labRun:false,
+            rbText:'', rbProposed:false, rbDocSource:false,
+            rbModules:[
+              {title:'Introducción a la IA avanzada',desc:'Ubica al equipo: qué cambió y por qué importa ahora.',min:6,comps:{lesson:true,video:true,info:false,quiz:true,lab:false},alt:{title:'Panorama del razonamiento con IA',desc:'Un mapa rápido del terreno antes de profundizar.'}},
+              {title:'Cápsulas de concepto',desc:'Ideas núcleo en formato corto y visual.',min:8,comps:{lesson:true,video:true,info:true,quiz:true,lab:false},alt:{title:'Conceptos clave, explicados',desc:'Cada concepto en su propia cápsula digerible.'}},
+              {title:'Laboratorio práctico',desc:'Manos a la obra sobre el corpus verificado.',min:12,comps:{lesson:true,video:false,info:false,quiz:true,lab:true},alt:{title:'Práctica guiada con un agente',desc:'Construye y observa un agente paso a paso.'}},
+              {title:'Evaluación de dominio',desc:'Mide comprensión antes de cerrar.',min:5,comps:{lesson:true,video:false,info:false,quiz:true,lab:false},alt:{title:'Checkpoint de dominio',desc:'Una evaluación breve de lo aprendido.'}},
+              {title:'Cierre y síntesis',desc:'Recap y una acción concreta para la semana.',min:4,comps:{lesson:true,video:false,info:true,quiz:false,lab:false},alt:{title:'Síntesis y próximos pasos',desc:'Cierra el arco y define el siguiente paso.'}},
+            ] };
 
   go(s){ this.setState({screen:s}); try{window.scrollTo(0,0);}catch(e){} }
 
@@ -629,6 +737,7 @@ class Component extends DCLogic {
 
     const crumbMap={
       dashboard:[{label:'Rutas',color:'#1B1033'}],
+      crearuta:[{label:'Rutas',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Nueva ruta',color:'#1B1033'}],
       ruta:[{label:'Rutas',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Ruta 01',color:'#1B1033'}],
       config:[{label:'Rutas',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Ruta 01',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Módulo 02',color:'#1B1033'}],
       pipeline:[{label:'Ruta 01',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Módulo 02',color:'#79738F'},{label:'›',color:'#CDC4E8'},{label:'Pipeline',color:'#1B1033'}],
@@ -644,7 +753,7 @@ class Component extends DCLogic {
     };
 
     const navDef=[
-      {label:'Rutas',screens:['dashboard','ruta','config','pipeline','gate1','gate2','gate3','publicado','v_lesson','v_video','v_info','v_quiz','v_lab'],onClick:go('dashboard')},
+      {label:'Rutas',screens:['dashboard','crearuta','ruta','config','pipeline','gate1','gate2','gate3','publicado','v_lesson','v_video','v_info','v_quiz','v_lab'],onClick:go('dashboard')},
       {label:'Biblioteca',screens:[],onClick:go('dashboard')},
       {label:'Costos',screens:[],onClick:go('dashboard')},
       {label:'Ajustes',screens:[],onClick:go('dashboard')},
@@ -685,8 +794,31 @@ class Component extends DCLogic {
       icon:x.verified?'✓':'!',
     }));
 
+    const rbCompMeta=[{key:'lesson',label:'Lesson'},{key:'video',label:'Video'},{key:'info',label:'Infografía'},{key:'quiz',label:'Quiz'},{key:'lab',label:'Laboratorio'}];
+    const rbModulesView=this.state.rbModules.map((m,i)=>({
+      num:'0'+(i+1), title:m.title, desc:m.desc, min:m.min+' min',
+      onRefine:()=>this.setState({rbModules:this.state.rbModules.map((x,idx)=>idx===i?{...x,title:x.alt.title,desc:x.alt.desc,alt:{title:x.title,desc:x.desc}}:x)}),
+      onRemove:()=>{ if(this.state.rbModules.length<=1) return; this.setState({rbModules:this.state.rbModules.filter((_,idx)=>idx!==i)}); },
+      comps:rbCompMeta.map(cm=>{
+        const on=!!m.comps[cm.key];
+        return {label:cm.label, mark:on?'✓ ':'',
+          pill:on?'background:#7C3AED;border-color:#7C3AED;color:#fff':'background:#fff;border-color:#CDC4E8;color:#79738F',
+          onToggle:()=>this.setState({rbModules:this.state.rbModules.map((x,idx)=>idx===i?{...x,comps:{...x.comps,[cm.key]:!x.comps[cm.key]}}:x)})};
+      }),
+    }));
+    const rbCost=this.state.rbModules.reduce((sum,m)=>{const c=m.comps;return sum+(c.lesson?0.8:0)+(c.video?9.5:0)+(c.info?2.1:0)+(c.quiz?1.4:0)+(c.lab?1.6:0);},0);
+
     return {
       quizList:this._quizList(),
+      isCrear:s==='crearuta', goCrear:go('crearuta'),
+      rbProposed:this.state.rbProposed, rbCount:this.state.rbModules.length,
+      rbModulesView, rbCost:'$'+rbCost.toFixed(2),
+      rbSetText:e=>this.setState({rbText:e.target.value}),
+      rbPropose:()=>this.setState({rbProposed:true}),
+      rbToggleDoc:()=>this.setState({rbDocSource:!this.state.rbDocSource}),
+      rbDocBox:box(this.state.rbDocSource), rbDocMark:this.state.rbDocSource?'✓':'',
+      rbAddModule:()=>this.setState({rbModules:[...this.state.rbModules,{title:'Nuevo módulo',desc:'Describe el objetivo de este módulo.',min:6,comps:{lesson:true,video:false,info:false,quiz:true,lab:false},alt:{title:'Módulo alternativo',desc:'Otro enfoque para este bloque.'}}]}),
+      rbApprove:go('ruta'),
       routes, modules, sources, crumbs:crumbMap[s]||crumbMap.dashboard, navItems,
       scriptBlocks:[
         {tag:'Conceptual',used:210,budget:260,pct:'81%',text:'Abrimos definiendo qué distingue a un modelo de razonamiento: la capacidad de descomponer un problema en pasos verificables antes de comprometerse con una respuesta.'},

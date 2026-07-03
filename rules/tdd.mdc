@@ -1,0 +1,39 @@
+---
+description: "Desarrollo guiado por tests — Test-driven development with red-green-refactor cycles. Use when implementing business logic, the user says 'test-first', 'red-green', 'TDD', or another rule needs disciplined testing."
+alwaysApply: false
+---
+
+# TDD
+
+## Philosophy
+
+Tests verify **behavior** through **public interfaces**, not implementation details. A good test reads like a specification and survives refactors.
+
+DO NOT write all tests first then all implementation (horizontal slices). Use vertical slices:
+
+```
+RED→GREEN: test1→impl1
+RED→GREEN: test2→impl2
+```
+
+## Workflow
+
+1. **Plan**: Read `CONTEXT.md` for domain vocabulary. Confirm with user: interface shape, behaviors to test, priorities. Identify deep modules (small interface, lots of implementation).
+2. **Tracer bullet**: ONE test → ONE implementation. Prove the path works.
+3. **Incremental loop**: One test at a time. Only enough code to pass. Don't anticipate.
+4. **Refactor**: Only when GREEN. Extract duplication, deepen modules.
+
+## Rules
+
+- One test at a time
+- Tests use public interface only
+- Tests survive internal refactors
+- No speculative features
+- Never refactor while RED
+
+## Design vocabulary
+
+- **Module** — anything with an interface and implementation.
+- **Depth** — behavior per unit of interface. Deep = good.
+- **Seam** — where you alter behavior without editing there. The test surface.
+- **Deletion test** — delete the module; if complexity disperses to callers, it was earning its keep.
