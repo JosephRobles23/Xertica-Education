@@ -428,6 +428,7 @@ llm = get_llm("scriptwriter")
 |---|---|---|---|---|
 | **Arantza** | Sourcing (2 vías) | Spec de ruta · archivos del usuario | `SOURCE[]` (verificados / propios) | **Vía 1:** deep research automatizado (fase 2: apoyarse en el **Deep Research agent** de Google vía Interactions API / A2A). **Vía 2:** ingesta de archivos del usuario (PDF/Word/Excel/PPT/imágenes/texto/URL), estilo NotebookLM. |
 | **Joseph** | Knowledge Base (RAG) + parsing | Corpus aprobado + archivos | Grounding + citas | **MVP: pgvector en Supabase.** Parsing de archivos vía adapter **MinerU** (PDF/Office/imágenes → Markdown/JSON), en evaluación. Puerto `KnowledgeBase` con adapter **Gemini Enterprise / NotebookLM** como fase 2 (bloqueado por permisos de licencia). |
+| **Shared (ID Graph)** | Instructional Designer | Grounding + citas | `Lesson` (JSON), `Lab` (JSON), `Quiz` (JSON) | Generación paralela utilizando esquemas estructurados de diseño instruccional; actúa como anclaje pedagógico para videos e infografías. |
 | **Sebas** | Video | Contenido grounded | Cápsula ~2 min | Pipeline propio (Python + Veo 3.1 REST); **OpenMontage solo como referencia** de patrones (stage-gates, instruction-driven). Render híbrido por segmento. |
 | **Santiago** | Infografía | Contenido grounded | PDF | HTML grounded → PDF vía LLM. |
 

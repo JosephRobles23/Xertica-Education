@@ -1,0 +1,35 @@
+{
+  "$schema": "./xertica-education-arquitectura.md#schema-lab-practical-exercise",
+  "title": "Laboratorio: Conexión de Gemini a una API de Tipo de Cambio en Tiempo Real",
+  "objective": "Aprender a declarar herramientas (tools) en la API de Gemini y escribir un bucle de ejecución que intercepte la llamada a la herramienta, realice la petición HTTP a una API externa y devuelva los resultados al modelo para una respuesta grounded.",
+  "duration_minutes": 45,
+  "requirements": [
+    "Python 3.10 o superior instalado.",
+    "Una API key válida de Google AI Studio.",
+    "Librería `google-genai` instalada (`pip install google-genai`)."
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "title": "Instalación de dependencias y configuración del entorno",
+      "instructions_markdown": "Comienza configurando tu entorno e instalando la SDK oficial de Gemini `google-genai`. Además, deberás exportar tu clave de API en una variable de entorno llamada `GEMINI_API_KEY`.",
+      "starter_code": "pip install google-genai requests\nexport GEMINI_API_KEY=\"tu_api_key_aqui\"",
+      "expected_output": "Successfully installed google-genai..."
+    },
+    {
+      "step_number": 2,
+      "title": "Definición de la función de tipo de cambio",
+      "instructions_markdown": "Escribe una función de Python que consulte una API pública para obtener la tasa de cambio entre dos divisas. Es fundamental documentar la función con docstrings claros, ya que Gemini los lee como parte del esquema de la herramienta.",
+      "starter_code": "import requests\n\ndef get_exchange_rate(base_currency: str, target_currency: str) -> float:\n    \"\"\"Obtiene la tasa de cambio actual entre dos divisas usando una API externa.\n\n    Args:\n        base_currency: Código de la divisa de origen (ej. USD, EUR).\n        target_currency: Código de la divisa de destino (ej. MXN, COP).\n    \"\"\"\n    url = f\"https://open.er-api.com/v6/latest/{base_currency.upper()}\"\n    response = requests.get(url).json()\n    return response[\"rates\"][target_currency.upper()]",
+      "expected_output": "get_exchange_rate('USD', 'COP') -> 4150.25 (o tasa actual)"
+    },
+    {
+      "step_number": 3,
+      "title": "Inicializar el cliente y ejecutar la consulta con Function Calling",
+      "instructions_markdown": "Inicializa el cliente de Gemini y proporciona la función `get_exchange_rate` dentro del parámetro `tools` de la configuración. Ejecuta una consulta que obligue al modelo a usar la herramienta.",
+      "starter_code": "from google import genai\nfrom google.genai import types\n\nclient = genai.Client()\n\n# Enviamos la consulta con la herramienta disponible\nresponse = client.models.generate_content(\n    model='gemini-2.5-flash',\n    contents='¿A cuánto está el dólar en pesos colombianos hoy?',\n    config=types.GenerateContentConfig(\n        tools=[get_exchange_rate]\n    )\n)\n\n# Verificamos si el modelo decidió llamar a la función\nfor part in response.candidates[0].content.parts:\n    if part.function_call:\n        print(\"Función a llamar:\", part.function_call.name)\n        print(\"Argumentos:\", part.function_call.args)",
+      "expected_output": "Función a llamar: get_exchange_rate\nArgumentos: {'base_currency': 'USD', 'target_currency': 'COP'}"
+    }
+  ],
+  "verification_step": "Ejecuta el script final de integración y verifica que el asistente responda con lenguaje natural mencionando la tasa de cambio exacta obtenida de la API externa."
+}
