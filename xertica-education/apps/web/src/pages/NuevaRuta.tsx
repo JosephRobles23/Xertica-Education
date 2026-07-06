@@ -19,7 +19,7 @@ export default function NuevaRuta() {
     briefText, setBriefText,
     deepResearch, setDeepResearch,
     uploadedStructure, setUploadedStructure,
-    trackJob, fetchRoutes,
+    trackJob, fetchRoutes, setActiveRouteId,
   } = useStore()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [useAsSource, setUseAsSource] = useState(true)
@@ -40,6 +40,8 @@ export default function NuevaRuta() {
           brief: briefText,
         }),
       })
+
+      setActiveRouteId(newPath.id)
 
       toast.loading('Generando módulos y componentes con IA...', {
         id: toastId,

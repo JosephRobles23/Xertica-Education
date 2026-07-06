@@ -29,6 +29,7 @@ import { Eyebrow, PageDescription, PageTitle } from '@/components/PageHeader'
 import { CONTENT_KINDS, KIND_LABEL, type ProposalModule } from '@/lib/types'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/api'
 
 function ModuleRow({ m, index }: { m: ProposalModule; index: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -174,7 +175,8 @@ function ModuleRow({ m, index }: { m: ProposalModule; index: number }) {
 
 export default function EstructuraPropuesta() {
   const nav = useNavigate()
-  const { proposal, reorderProposal, addProposal } = useStore()
+  const { proposal, reorderProposal, addProposal, activeRouteId, fetchRoutes } = useStore()
+  const [approving, setApproving] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -187,11 +189,27 @@ export default function EstructuraPropuesta() {
     }
   }
 
-  const approve = () => {
-    toast.success('Estructura aprobada', {
-      description: `La ruta nace en borrador con ${proposal.length} módulos.`,
-    })
-    nav('/ruta/01')
+  const approve = async () => {
+    setApproving(true)
+    const targetId = activeRouteId || '01'
+    const toastId = toast.loading('Aprobando estructura y configurando ruta...')
+    try {
+      await api.request(`/learning-paths/${targetId}/approve`, { method: 'POST' })
+      await fetchRoutes()
+      toast.success('Estructura aprobada', {
+        id: toastId,
+        description: `La ruta nace en producción con ${proposal.length} módulos.`,
+      })
+      nav(`/ruta/${targetId}`)
+    } catch (err) {
+      console.error(err)
+      toast.error('Error al aprobar la estructura', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setApproving(false)
+    }
   }
 
   return (
@@ -247,8 +265,8 @@ export default function EstructuraPropuesta() {
           <Button variant="outline" asChild>
             <Link to="/nueva-ruta">Volver</Link>
           </Button>
-          <Button onClick={approve}>
-            Aprobar estructura <ArrowRight />
+          <Button onClick={approve} disabled={approving}>
+            {approving ? 'Aprobando...' : 'Aprobar estructura'} <ArrowRight />
           </Button>
         </div>
       </div>

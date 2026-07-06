@@ -55,7 +55,6 @@ async def generate_structure(
         
     job_id = await jobs_service.create_job("structure_generation")
     
-    # Generate mock modules and update route status
     mock_modules = [
         {
             "id": "r1m1",
@@ -83,8 +82,23 @@ async def generate_structure(
     ]
     
     await route_service.update_route(route_id, {
-        "status": "en-revision",
+        "status": "borrador", # set to borrador initially while structure is in proposal
         "modules": mock_modules
     })
     
     return {"job_id": job_id}
+
+@router.post("/{route_id}/approve", response_model=Dict[str, Any])
+async def approve_learning_path(
+    route_id: str,
+    route_service: RouteService = Depends(get_route_service)
+):
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    # Transition status to "en-revision" (representing PATH_READY / curriculum approved)
+    updated = await route_service.update_route(route_id, {
+        "status": "en-revision"
+    })
+    return updated

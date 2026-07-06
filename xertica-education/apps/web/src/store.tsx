@@ -66,6 +66,8 @@ interface AppStore {
   routes: readonly LearningRoute[]
   fetchRoutes: () => Promise<void>
   updateRoute: (id: string, data: Partial<LearningRoute>) => Promise<void>
+  activeRouteId: string | null
+  setActiveRouteId: (id: string | null) => void
 
   /* Jobs */
   activeJobs: Record<string, JobState>
@@ -94,6 +96,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
 
   const [routes, setRoutes] = useState<readonly LearningRoute[]>(ROUTES)
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null)
 
   const fetchRoutes = useCallback(async () => {
     try {
@@ -245,6 +248,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
       routes, fetchRoutes, updateRoute,
+      activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     }),
     [
@@ -256,6 +260,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
       routes, fetchRoutes, updateRoute,
+      activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     ],
   )
