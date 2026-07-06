@@ -1,8 +1,10 @@
 from services.jobs.service import JobsService
 from services.route.service import RouteService
+from repositories.jobs.repository import SupabaseJobRepository
 
-# Singleton instances for local memory mock store (to be replaced by DB repositories later)
-_jobs_service = JobsService()
+# Instantiate repository and services
+_jobs_repository = SupabaseJobRepository()
+_jobs_service = JobsService(_jobs_repository)
 _route_service = RouteService()
 
 def get_jobs_service() -> JobsService:
