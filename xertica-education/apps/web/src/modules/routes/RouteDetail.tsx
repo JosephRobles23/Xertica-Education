@@ -320,19 +320,15 @@ function ContentRow({
 export default function Ruta() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { routes, isCorpusApproved, markGenerated, contentStatusOf } = useStore()
+  const { routes, isCorpusApproved, markGenerated, moduleStatusOf, approveModule, routeProgressOf } = useStore()
   const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
   const [openModule, setOpenModule] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
 
-  const approvedModules = useMemo(() => {
-    if (!route) return 0
-    return route.modules.filter((m) =>
-      m.contents.every(
-        (c) => contentStatusOf(route.id, m.id, c.kind, c.status) === 'aprobado',
-      ),
-    ).length
-  }, [route, contentStatusOf])
+  const progress = useMemo(
+    () => (route ? routeProgressOf(route) : { done: 0, total: 0, pct: 0 }),
+    [route, routeProgressOf],
+  )
 
   if (!route) {
     return (
@@ -346,7 +342,7 @@ export default function Ruta() {
   }
 
   const corpusOk = isCorpusApproved(route.id)
-  const activeModule = route.modules.find((m) => m.status === 'en-revision')
+  const activeModule = route.modules.find((m) => moduleStatusOf(route.id, m) === 'en-revision')
   const effectiveOpen = openModule ?? activeModule?.id ?? route.modules[0]?.id ?? null
 
   const generate = () => {
@@ -399,17 +395,18 @@ export default function Ruta() {
         <div className="mb-3.5 flex items-center justify-between">
           <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
           <span className="font-mono text-[11px] text-muted-foreground">
-            {approvedModules} de {route.modules.length} aprobados
+            {progress.done} de {route.modules.length} aprobados
           </span>
         </div>
 
         <div className="flex flex-col gap-3">
           {route.modules.map((m) => {
             const isOpen = effectiveOpen === m.id
+            const moduleStatus = moduleStatusOf(route.id, m)
             return (
               <Card
                 key={m.id}
-                className={cn('gap-0 overflow-hidden p-0', m.status === 'en-revision' && 'border-primary')}
+                className={cn('gap-0 overflow-hidden p-0', moduleStatus === 'en-revision' && 'border-primary')}
               >
                 <button
                   type="button"
@@ -428,13 +425,37 @@ export default function Ruta() {
                       {m.type}
                     </span>
                   </span>
-                  <StatusBadge status={m.status} />
+                  <StatusBadge status={moduleStatus} />
                 </button>
                 {isOpen && (
                   <div className="border-t-[1.5px] border-secondary px-4.5 pt-3 pb-4 pl-11">
                     {m.contents.map((c) => (
                       <ContentRow key={c.kind} route={route} module={m} content={c} />
                     ))}
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-secondary px-3.5 py-3">
+                      <span className="text-[12.5px] text-muted-foreground">
+                        Aprueba todos los assets de este módulo en una sola acción.
+                      </span>
+                      <Button
+                        variant={moduleStatus === 'aprobado' ? 'outline' : 'success'}
+                        size="sm"
+                        disabled={moduleStatus === 'aprobado'}
+                        onClick={() => {
+                          approveModule(route.id, m)
+                          toast.success('Módulo aprobado', { description: `${m.name} · ${route.name}` })
+                        }}
+                      >
+                        {moduleStatus === 'aprobado' ? (
+                          <>
+                            <CircleCheck /> Aprobado
+                          </>
+                        ) : (
+                          <>
+                            <Check /> Aprobar módulo completo
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </Card>

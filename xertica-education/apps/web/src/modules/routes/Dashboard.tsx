@@ -7,12 +7,11 @@ import { Card } from '@/shared/ui/card'
 import { Progress } from '@/shared/ui/progress'
 import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
-import { routeProgress } from '@/shared/data/routes'
 import { cn } from '@/shared/lib/utils'
 import { useStore } from '@/shared/store'
 
 export default function Dashboard() {
-  const { routes } = useStore()
+  const { routes, routeProgressOf, routeStatusOf } = useStore()
   return (
     <div className="mx-auto max-w-[1080px]">
       <div className="mb-7 flex items-end justify-between gap-5">
@@ -33,8 +32,9 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4.5">
         {routes.map((r) => {
-          const { done, total, pct } = routeProgress(r)
-          const active = r.status === 'en-revision'
+          const { done, total, pct } = routeProgressOf(r)
+          const status = routeStatusOf(r)
+          const active = status === 'en-revision'
           return (
             <Link key={r.id} href={`/ruta/${r.id}`} className="group outline-none">
               <Card
@@ -45,7 +45,7 @@ export default function Dashboard() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[13px] font-semibold text-primary">{r.id}</span>
-                  <StatusBadge status={r.status} />
+                  <StatusBadge status={status} />
                 </div>
                 <h3 className="font-display text-lg font-medium leading-snug text-ink">
                   {r.name}
@@ -53,7 +53,7 @@ export default function Dashboard() {
                 <div className="mt-auto flex flex-col gap-2">
                   <Progress
                     value={pct}
-                    indicatorClassName={r.status === 'aprobado' ? 'bg-success' : 'bg-primary'}
+                    indicatorClassName={status === 'aprobado' ? 'bg-success' : 'bg-primary'}
                   />
                   <div className="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
                     <span>
