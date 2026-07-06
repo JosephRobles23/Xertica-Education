@@ -86,5 +86,9 @@ Para evitar conflictos y trabajar de forma simultánea, cada programador tiene a
   * [apps/api/services/video/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/video/) — Storyboards y prompts visuales.
   * [apps/api/adapters/renderer/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/adapters/renderer/) — Render de Google Veo.
   * [apps/api/workflows/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/workflows/) — Orquestadores de pipelines.
-* **Flujo de Mocking:**
+* **Flujo de Mocking & Independencia:**
+  * El servicio de video se expone de forma aislada a través del router `/videos` con un endpoint dual:
+    1. Permite pasar un `component_id` (vía base de datos) para integrarse con la ruta general.
+    2. Permite pasar un storyboard JSON de manera directa para desarrollo y pruebas 100% independientes, sin depender de que la base de datos o los servicios de los demás compañeros estén listos.
   * Lee el texto del lesson de Santiago (usando lessons mock si Santiago no ha terminado) y orquesta el pipeline de renderizado de video MP4 final.
+

@@ -71,8 +71,9 @@ All of the above must work end-to-end using either real implementations or contr
 
 ### 3. Video Scripting & Storyboarding (Gate 2)
 8. **As an** editor, **I want to** review the generated script segmented by narrative blocks (Conceptual, Walkthrough, Onboarding), **so that** I can ensure the copy respects word-budgets.
-9. **As an** editor, **I want to** preview the visual storyboard placeholders for each scene, **so that** I can authorize the expensive rendering pipeline before it starts.
-10. **As an** editor, **I want to** approve the script and storyboard, **so that** the backend renders the video using Google Veo.
+9. **As an** editor, **I want to** preview the visual storyboard placeholders for each scene, **so that** I can authorize the rendering pipeline before it starts.
+10. **As an** editor, **I want to** approve the script and storyboard, **so that** the backend renders the video. (For detailed requirements and specifications, see the [Video Creation PRD](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/docs/prd/video_creation_prd.md)).
+
 
 ### 4. Asset Generation & Approval (Gate 3)
 11. **As an** editor, **I want to** track the progress of long-running generation jobs, **so that** I know when my modules are fully compiled.
