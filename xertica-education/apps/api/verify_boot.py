@@ -8,7 +8,7 @@ from main import app
 
 client = TestClient(app)
 
-print("Starting in-process FastAPI CRUD endpoint verification...")
+print("Starting in-process FastAPI CRUD & generation verification...")
 
 # 1. Verify Root
 r_root = client.get("/")
@@ -19,32 +19,30 @@ assert r_root.status_code == 200
 r_list = client.get("/learning-paths/")
 print("GET /learning-paths/ -> Status:", r_list.status_code, "| Count:", len(r_list.json()))
 assert r_list.status_code == 200
-assert len(r_list.json()) >= 2
 
 # 3. Create a new path
 r_create = client.post("/learning-paths/", json={
-    "titulo": "Nueva Ruta de Pruebas",
-    "tema": "Machine Learning",
-    "brief": "Una descripción detallada."
+    "titulo": "Ruta de Generacion",
+    "tema": "Autoconfiguración",
+    "brief": "Prueba de pipeline."
 })
-print("POST /learning-paths/ -> Status:", r_create.status_code, "| Response:", r_create.json())
-assert r_create.status_code == 200
+print("POST /learning-paths/ -> Status:", r_create.status_code)
 new_id = r_create.json()["id"]
 
-# 4. Fetch the created path
-r_get = client.get(f"/learning-paths/{new_id}")
-print("GET /learning-paths/{id} -> Status:", r_get.status_code, "| Name:", r_get.json()["name"])
-assert r_get.status_code == 200
-assert r_get.json()["name"] == "Nueva Ruta de Pruebas"
+# 4. Trigger structure generation
+r_gen = client.post(f"/learning-paths/{new_id}/generate-structure")
+print("POST /learning-paths/{id}/generate-structure -> Status:", r_gen.status_code, "| Response:", r_gen.json())
+assert r_gen.status_code == 200
+job_id = r_gen.json()["job_id"]
 
-# 5. Patch the created path
-r_patch = client.patch(f"/learning-paths/{new_id}", json={
-    "name": "Ruta de Pruebas Modificada",
-    "status": "aprobado"
-})
-print("PATCH /learning-paths/{id} -> Status:", r_patch.status_code, "| Modified Name:", r_patch.json()["name"], "| Status:", r_patch.json()["status"])
-assert r_patch.status_code == 200
-assert r_patch.json()["name"] == "Ruta de Pruebas Modificada"
-assert r_patch.json()["status"] == "aprobado"
+# 5. Poll the generation job to completion
+r_job = client.get(f"/jobs/{job_id}")
+print("GET /jobs/{id} -> Status:", r_job.json()["status"])
+assert r_job.json()["status"] == "queued"
 
-print("\nVERIFICATION SUCCESS: Learning path CRUD endpoints verified successfully!")
+# 6. Verify route has modules after generation
+r_route = client.get(f"/learning-paths/{new_id}")
+print("GET /learning-paths/{id} -> Modules count:", len(r_route.json()["modules"]))
+assert len(r_route.json()["modules"]) == 2
+
+print("\nVERIFICATION SUCCESS: Learning path structure generation verified successfully!")

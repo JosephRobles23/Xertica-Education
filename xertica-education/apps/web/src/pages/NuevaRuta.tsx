@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Eyebrow, PageDescription, PageTitle } from '@/components/PageHeader'
 import { UploadStructureDialog } from '@/components/UploadStructureDialog'
 import { useStore } from '@/store'
+import { api } from '@/lib/api'
 
 export default function NuevaRuta() {
   const nav = useNavigate()
@@ -18,15 +19,55 @@ export default function NuevaRuta() {
     briefText, setBriefText,
     deepResearch, setDeepResearch,
     uploadedStructure, setUploadedStructure,
+    trackJob, fetchRoutes,
   } = useStore()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [useAsSource, setUseAsSource] = useState(true)
+  const [generating, setGenerating] = useState(false)
 
-  const propose = () => {
-    toast.success('Estructura propuesta con IA', {
-      description: 'Revisa, reordena y cura los módulos antes de aprobar.',
+  const propose = async () => {
+    setGenerating(true)
+    const toastId = toast.loading('Iniciando generación de estructura con IA...', {
+      description: 'Creando ruta en el backend...',
     })
-    nav('/estructura-propuesta')
+
+    try {
+      const newPath = await api.request<{ id: string }>('/learning-paths/', {
+        method: 'POST',
+        body: JSON.stringify({
+          titulo: 'Ruta de Inteligencia Avanzada',
+          tema: 'Razonamiento',
+          brief: briefText,
+        }),
+      })
+
+      toast.loading('Generando módulos y componentes con IA...', {
+        id: toastId,
+        description: 'Esto tomará unos segundos (simulando pipeline)...',
+      })
+      
+      const genResult = await api.request<{ job_id: string }>(
+        `/learning-paths/${newPath.id}/generate-structure`,
+        { method: 'POST' }
+      )
+
+      await trackJob(genResult.job_id)
+      await fetchRoutes()
+
+      toast.success('Estructura generada con éxito', {
+        id: toastId,
+        description: 'Revisa, reordena y cura los módulos antes de aprobar.',
+      })
+      nav('/estructura-propuesta')
+    } catch (err) {
+      console.error(err)
+      toast.error('Error al generar la estructura', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setGenerating(false)
+    }
   }
 
   return (
@@ -128,8 +169,8 @@ export default function NuevaRuta() {
           </div>
         </div>
 
-        <Button className="w-full" onClick={propose}>
-          Proponer estructura con IA <ArrowRight />
+        <Button className="w-full" onClick={propose} disabled={generating}>
+          {generating ? 'Generando estructura...' : 'Proponer estructura con IA'} <ArrowRight />
         </Button>
       </Card>
 
