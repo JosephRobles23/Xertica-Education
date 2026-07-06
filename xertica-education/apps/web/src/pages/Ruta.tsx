@@ -318,10 +318,10 @@ function ContentRow({
 export default function Ruta() {
   const { id } = useParams()
   const nav = useNavigate()
-  const route = getRoute(id)
+  const { routes, isCorpusApproved, markGenerated, contentStatusOf } = useStore()
+  const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
   const [openModule, setOpenModule] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
-  const { isCorpusApproved, markGenerated, contentStatusOf } = useStore()
 
   const approvedModules = useMemo(() => {
     if (!route) return 0

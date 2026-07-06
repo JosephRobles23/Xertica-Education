@@ -5,10 +5,12 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Eyebrow, PageDescription, PageTitle } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/content/StatusBadge'
-import { ROUTES, routeProgress } from '@/data/routes'
+import { routeProgress } from '@/data/routes'
 import { cn } from '@/lib/utils'
+import { useStore } from '@/store'
 
 export default function Dashboard() {
+  const { routes } = useStore()
   return (
     <div className="mx-auto max-w-[1080px]">
       <div className="mb-7 flex items-end justify-between gap-5">
@@ -28,7 +30,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4.5">
-        {ROUTES.map((r) => {
+        {routes.map((r) => {
           const { done, total, pct } = routeProgress(r)
           const active = r.status === 'en-revision'
           return (

@@ -4,10 +4,11 @@ import {
   useContext,
   useMemo,
   useState,
+  useEffect,
   type ReactNode,
 } from 'react'
-import type { ContentKind, ContentStatus, ProposalModule } from '@/lib/types'
-import { INITIAL_PROPOSAL } from '@/data/routes'
+import type { ContentKind, ContentStatus, ProposalModule, LearningRoute } from '@/lib/types'
+import { INITIAL_PROPOSAL, ROUTES } from '@/data/routes'
 import { api, type JobState } from '@/lib/api'
 
 /** Clave estable para el estado de un contenido concreto. */
@@ -61,6 +62,11 @@ interface AppStore {
   isGenerated: (routeId: string) => boolean
   markGenerated: (routeId: string) => void
 
+  /* Routes */
+  routes: readonly LearningRoute[]
+  fetchRoutes: () => Promise<void>
+  updateRoute: (id: string, data: Partial<LearningRoute>) => Promise<void>
+
   /* Jobs */
   activeJobs: Record<string, JobState>
   trackJob: (jobId: string) => Promise<JobState>
@@ -86,6 +92,33 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [storyboardOk, setStoryboardOk] = useState<Record<string, boolean>>({})
   const [labGuideOk, setLabGuideOk] = useState<Record<string, boolean>>({})
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
+
+  const [routes, setRoutes] = useState<readonly LearningRoute[]>(ROUTES)
+
+  const fetchRoutes = useCallback(async () => {
+    try {
+      const data = await api.request<LearningRoute[]>('/learning-paths/')
+      setRoutes(data)
+    } catch (e) {
+      console.error('Failed to fetch routes', e)
+    }
+  }, [])
+
+  const updateRoute = useCallback(async (id: string, data: Partial<LearningRoute>) => {
+    try {
+      const updated = await api.request<LearningRoute>(`/learning-paths/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      })
+      setRoutes((prev) => prev.map((r) => (r.id === id ? updated : r)))
+    } catch (e) {
+      console.error('Failed to update route', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchRoutes()
+  }, [fetchRoutes])
 
   const [activeJobs, setActiveJobs] = useState<Record<string, JobState>>({})
 
@@ -211,6 +244,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
+      routes, fetchRoutes, updateRoute,
       activeJobs, trackJob,
     }),
     [
@@ -221,6 +255,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
+      routes, fetchRoutes, updateRoute,
       activeJobs, trackJob,
     ],
   )

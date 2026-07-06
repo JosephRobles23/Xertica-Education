@@ -8,38 +8,43 @@ from main import app
 
 client = TestClient(app)
 
-print("Starting in-process FastAPI endpoint verification...")
+print("Starting in-process FastAPI CRUD endpoint verification...")
 
 # 1. Verify Root
 r_root = client.get("/")
 print("GET / -> Status:", r_root.status_code, "| Response:", r_root.json())
 assert r_root.status_code == 200
 
-# 2. Create a Job
-r_create = client.post("/jobs/", json={"type": "test_sourcing", "payload": {}})
-print("POST /jobs/ -> Status:", r_create.status_code, "| Response:", r_create.json())
+# 2. List initial paths
+r_list = client.get("/learning-paths/")
+print("GET /learning-paths/ -> Status:", r_list.status_code, "| Count:", len(r_list.json()))
+assert r_list.status_code == 200
+assert len(r_list.json()) >= 2
+
+# 3. Create a new path
+r_create = client.post("/learning-paths/", json={
+    "titulo": "Nueva Ruta de Pruebas",
+    "tema": "Machine Learning",
+    "brief": "Una descripción detallada."
+})
+print("POST /learning-paths/ -> Status:", r_create.status_code, "| Response:", r_create.json())
 assert r_create.status_code == 200
-job_id = r_create.json()["id"]
+new_id = r_create.json()["id"]
 
-# 3. Poll and verify state transitions
-print("Checking initial state (should be queued)...")
-r_status1 = client.get(f"/jobs/{job_id}")
-print("GET /jobs/{id} -> Status:", r_status1.json()["status"], "| Progress:", r_status1.json()["progress"])
-assert r_status1.json()["status"] == "queued"
+# 4. Fetch the created path
+r_get = client.get(f"/learning-paths/{new_id}")
+print("GET /learning-paths/{id} -> Status:", r_get.status_code, "| Name:", r_get.json()["name"])
+assert r_get.status_code == 200
+assert r_get.json()["name"] == "Nueva Ruta de Pruebas"
 
-print("Waiting 2.5 seconds...")
-time.sleep(2.5)
-print("Checking intermediate state (should be running)...")
-r_status2 = client.get(f"/jobs/{job_id}")
-print("GET /jobs/{id} -> Status:", r_status2.json()["status"], "| Progress:", r_status2.json()["progress"])
-assert r_status2.json()["status"] == "running"
+# 5. Patch the created path
+r_patch = client.patch(f"/learning-paths/{new_id}", json={
+    "name": "Ruta de Pruebas Modificada",
+    "status": "aprobado"
+})
+print("PATCH /learning-paths/{id} -> Status:", r_patch.status_code, "| Modified Name:", r_patch.json()["name"], "| Status:", r_patch.json()["status"])
+assert r_patch.status_code == 200
+assert r_patch.json()["name"] == "Ruta de Pruebas Modificada"
+assert r_patch.json()["status"] == "aprobado"
 
-print("Waiting 4 seconds...")
-time.sleep(4.0)
-print("Checking final state (should be completed)...")
-r_status3 = client.get(f"/jobs/{job_id}")
-print("GET /jobs/{id} -> Status:", r_status3.json()["status"], "| Progress:", r_status3.json()["progress"], "| Result:", r_status3.json()["result"])
-assert r_status3.json()["status"] == "completed"
-assert r_status3.json()["result"] is not None
-
-print("\nVERIFICATION SUCCESS: FastAPI successfully booted, and Job State transitions correctly polled/verified!")
+print("\nVERIFICATION SUCCESS: Learning path CRUD endpoints verified successfully!")
