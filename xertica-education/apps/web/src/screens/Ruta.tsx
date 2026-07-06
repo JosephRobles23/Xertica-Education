@@ -1,5 +1,8 @@
+'use client'
+
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowRight,
@@ -26,7 +29,6 @@ import { StatusBadge } from '@/components/content/StatusBadge'
 import { ContentPreview } from '@/components/content/ContentPreview'
 import { SourceVideoPreview } from '@/components/content/SourceVideoPreview'
 import { RefinePopover } from '@/components/RefinePopover'
-import { getRoute } from '@/data/routes'
 import {
   KIND_LABEL,
   type LearningRoute,
@@ -170,7 +172,7 @@ function ContentRow({
   module: RouteModule
   content: ModuleContentRef
 }) {
-  const nav = useNavigate()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const { contentStatusOf, approveContent, refineContent, isStoryboardApproved, isLabGuideApproved } = useStore()
 
@@ -230,7 +232,7 @@ function ContentRow({
           {videoBlocked && (
             <button
               type="button"
-              onClick={() => nav(`/ruta/${route.id}/video-storyboard`)}
+              onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
               className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
             >
               <Clapperboard className="size-4.5 text-primary" />
@@ -256,7 +258,7 @@ function ContentRow({
           {labBlocked && (
             <button
               type="button"
-              onClick={() => nav(`/ruta/${route.id}/lab-guia`)}
+              onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
               className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
             >
               <FlaskConical className="size-4.5 text-primary" />
@@ -316,8 +318,8 @@ function ContentRow({
 
 /* ── Página ────────────────────────────────────────────────────── */
 export default function Ruta() {
-  const { id } = useParams()
-  const nav = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const { routes, isCorpusApproved, markGenerated, contentStatusOf } = useStore()
   const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
   const [openModule, setOpenModule] = useState<string | null>(null)
@@ -337,7 +339,7 @@ export default function Ruta() {
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>
         <Button asChild className="mt-6">
-          <Link to="/">Volver a las rutas</Link>
+          <Link href="/">Volver a las rutas</Link>
         </Button>
       </div>
     )
@@ -356,7 +358,7 @@ export default function Ruta() {
         id: 'gen',
         description: 'Revisa el asset final antes de publicar.',
       })
-      nav(`/ruta/${route.id}/asset-final`)
+      router.push(`/ruta/${route.id}/asset-final`)
     }, 1400)
   }
 

@@ -1,4 +1,7 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+'use client'
+
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowRight, BookOpen, Check, Info, Lightbulb, RefreshCcw, SquarePen, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -9,8 +12,8 @@ import { getRoute } from '@/data/routes'
 import { useStore } from '@/store'
 
 export default function LabGuide() {
-  const { id } = useParams()
-  const nav = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const route = getRoute(id)
   const { approveLabGuide } = useStore()
 
@@ -19,7 +22,7 @@ export default function LabGuide() {
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>
         <Button asChild className="mt-6">
-          <Link to="/">Volver a las rutas</Link>
+          <Link href="/">Volver a las rutas</Link>
         </Button>
       </div>
     )
@@ -30,7 +33,7 @@ export default function LabGuide() {
     toast.success('Guía del laboratorio aprobada', {
       description: 'El laboratorio quedó listo para generarse desde la ruta.',
     })
-    nav(`/ruta/${route.id}`)
+    router.push(`/ruta/${route.id}`)
   }
 
   return (

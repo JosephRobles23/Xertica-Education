@@ -1,4 +1,7 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+'use client'
+
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowRight, Check, Info, RefreshCcw, SquarePen } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -16,8 +19,8 @@ const SCRIPT_BLOCKS = [
 ] as const
 
 export default function Storyboard() {
-  const { id } = useParams()
-  const nav = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const route = getRoute(id)
   const { approveStoryboard } = useStore()
 
@@ -26,7 +29,7 @@ export default function Storyboard() {
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>
         <Button asChild className="mt-6">
-          <Link to="/">Volver a las rutas</Link>
+          <Link href="/">Volver a las rutas</Link>
         </Button>
       </div>
     )
@@ -37,7 +40,7 @@ export default function Storyboard() {
     toast.success('Guion y storyboard aprobados', {
       description: 'El video quedó listo para generarse desde la ruta.',
     })
-    nav(`/ruta/${route.id}`)
+    router.push(`/ruta/${route.id}`)
   }
 
   return (

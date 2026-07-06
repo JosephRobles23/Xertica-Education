@@ -1,5 +1,8 @@
+'use client'
+
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   DndContext,
   KeyboardSensor,
@@ -174,7 +177,7 @@ function ModuleRow({ m, index }: { m: ProposalModule; index: number }) {
 }
 
 export default function EstructuraPropuesta() {
-  const nav = useNavigate()
+  const router = useRouter()
   const { proposal, reorderProposal, addProposal, activeRouteId, fetchRoutes } = useStore()
   const [approving, setApproving] = useState(false)
 
@@ -200,7 +203,7 @@ export default function EstructuraPropuesta() {
         id: toastId,
         description: `La ruta nace en producción con ${proposal.length} módulos.`,
       })
-      nav(`/ruta/${targetId}`)
+      router.push(`/ruta/${targetId}`)
     } catch (err) {
       console.error(err)
       toast.error('Error al aprobar la estructura', {
@@ -263,7 +266,7 @@ export default function EstructuraPropuesta() {
         </span>
         <div className="flex flex-none gap-3">
           <Button variant="outline" asChild>
-            <Link to="/nueva-ruta">Volver</Link>
+            <Link href="/nueva-ruta">Volver</Link>
           </Button>
           <Button onClick={approve} disabled={approving}>
             {approving ? 'Aprobando...' : 'Aprobar estructura'} <ArrowRight />

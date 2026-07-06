@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom'
+'use client'
+
+import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -23,7 +25,7 @@ export default function Dashboard() {
           </PageDescription>
         </div>
         <Button asChild className="flex-none">
-          <Link to="/nueva-ruta">
+          <Link href="/nueva-ruta">
             <Plus /> Nueva ruta
           </Link>
         </Button>
@@ -34,7 +36,7 @@ export default function Dashboard() {
           const { done, total, pct } = routeProgress(r)
           const active = r.status === 'en-revision'
           return (
-            <Link key={r.id} to={`/ruta/${r.id}`} className="group outline-none">
+            <Link key={r.id} href={`/ruta/${r.id}`} className="group outline-none">
               <Card
                 className={cn(
                   'h-full gap-4 p-5 transition-all group-hover:-translate-y-0.5 group-hover:shadow-(--shadow-soft) group-focus-visible:ring-[3px] group-focus-visible:ring-ring/40',
