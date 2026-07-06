@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers.jobs import router as jobs_router
+from routers.learning_paths import router as learning_paths_router
 
 app = FastAPI(
     title="Xertica Education API",
@@ -16,6 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(jobs_router)
+app.include_router(learning_paths_router)
+
 @app.get("/")
 async def root():
     return {"message": "Xertica Education API is active."}
+
