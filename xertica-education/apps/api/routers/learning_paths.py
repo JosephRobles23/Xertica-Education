@@ -82,7 +82,7 @@ async def generate_structure(
     ]
     
     await route_service.update_route(route_id, {
-        "status": "borrador", # set to borrador initially while structure is in proposal
+        "status": "borrador",
         "modules": mock_modules
     })
     
@@ -97,8 +97,22 @@ async def approve_learning_path(
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
         
-    # Transition status to "en-revision" (representing PATH_READY / curriculum approved)
     updated = await route_service.update_route(route_id, {
         "status": "en-revision"
+    })
+    return updated
+
+@router.post("/{route_id}/sourcing/approve", response_model=Dict[str, Any])
+async def approve_sourcing(
+    route_id: str,
+    route_service: RouteService = Depends(get_route_service)
+):
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    # Transition status to "generado" (representing SOURCES_READY / pgvector RAG compiled)
+    updated = await route_service.update_route(route_id, {
+        "status": "generado"
     })
     return updated
