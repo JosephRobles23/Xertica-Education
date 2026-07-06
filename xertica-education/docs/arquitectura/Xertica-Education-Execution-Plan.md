@@ -7,12 +7,11 @@
 
 ---
 
-## Cómo leer este plan
+## Cómo leer este plan y trabajar en paralelo
 
-- **Fase 0 es la puerta de entrada.** Nada de la fase 1 en adelante empieza si el cliente no valida el Mockup end-to-end hoy.
-- **Fases 1→2→3→4 son estrictamente secuenciales** (cada una depende del artefacto que produce la anterior: spine → estructura de ruta → fuentes → KB).
-- **Fase 5 es el primer punto de paralelismo real**: Lesson/Quiz/Lab, guion de Video y HTML de Infografía se generan en paralelo, todos leyendo de la misma KB (fase 4).
-- **Fase 6 vuelve a converger** en el Gate 3 antes del demo final.
+- **Desarrollo en paralelo desde el Día 1:** Aunque las fases lógicas del pipeline son secuenciales en ejecución (brief → estructura → fuentes → RAG → generación), **el desarrollo del código es 100% paralelo**. Cada programador trabaja de forma autónoma en su servicio mockeando las entradas/salidas según los contratos establecidos.
+- **Uso de Contratos Estables:** Si un servicio aguas arriba no está terminado, los servicios dependientes deben consumir datos mockeados que sigan el esquema estándar (conforme a la regla de oro: *"ningún feature bloquea a otro"*).
+- **Gate 0, 1, 2 y 3** actúan como puntos de validación de negocio, pero no bloquean la construcción técnica de otros componentes.
 
 ---
 
@@ -49,6 +48,43 @@ Fase 0 (Mockup, hoy)
                                                     └─▶ Fase 8 (Demo)
 ```
 
-**Riesgo de ruta crítica:** las fases 1→4 son 100% secuenciales — un bloqueo en cualquiera de ellas (p. ej. el spike de MinerU aún "en evaluación" según la arquitectura) corre directamente el resto de la semana. Si MinerU no está listo el martes, usar solo Vía 1 (deep research de Arantza) para no detener el Gate 1.
+**Riesgo de ruta crítica:** Aunque el desarrollo del código está desacoplado mediante mocks, la ruta crítica de validación de negocio depende de la integración de pgvector (Fase 4). Si la ingesta de MinerU se retrasa, se prioriza el uso de la Vía 1 (deep research de YouTube de Arantza) como fuente principal para no bloquear la validación del RAG.
 
 **Nota sobre el fin de semana:** no hay actividad planeada Sáb 4 / Dom 5 — el plan asume que el cliente valida el mockup el mismo viernes o a más tardar el lunes temprano, para no correr la fase 1.
+
+---
+
+## Guía de Carpetas y Trabajo por Desarrollador
+
+Para evitar conflictos y trabajar de forma simultánea, cada programador tiene asignado su alcance dentro del monorepo y un flujo de mocking claro:
+
+### 1. Arantza (Sourcing & Deep Research)
+* **Carpetas de Trabajo:**
+  * [apps/api/services/sourcing/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/sourcing/) — Lógica del motor de búsqueda (YouTube y Google).
+  * [apps/api/adapters/parser/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/adapters/parser/) — Adapter para MinerU.
+* **Flujo de Mocking:**
+  * Lee el `brief` o estructura de la ruta.
+  * Produce objetos `Source`. Mientras programa los crawlers reales, puede alimentar el sistema con un array mock de fuentes en su `mock.py`.
+
+### 2. Joseph (Knowledge Base & Spine DB)
+* **Carpetas de Trabajo:**
+  * [apps/api/services/kb/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/kb/) — Lógica del RAG (embeddings, chunking).
+  * [apps/api/repositories/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/repositories/) — Consultas directas a tablas Supabase.
+* **Flujo de Mocking:**
+  * Consume la lista de `Source` generadas. Mientras Arantza desarrolla la ingesta real, Joseph indexa fragmentos estáticos de prueba para exponer la API RAG.
+
+### 3. Santiago (Lessons & Infographics)
+* **Carpetas de Trabajo:**
+  * [apps/api/services/lesson/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/lesson/) / [apps/api/services/quiz/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/quiz/) / [apps/api/services/lab/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/lab/) — Prompting y generación.
+  * [apps/api/services/infographic/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/infographic/) — Renderizador HTML to PDF.
+  * [apps/web/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/web/) — Componentes de UI comunes.
+* **Flujo de Mocking:**
+  * Consume citas de la KB (usando respuestas mock de Joseph si pgvector no está listo) y produce el contenido HTML/Markdown del lesson.
+
+### 4. Sebas (Workflows & Video Capsule)
+* **Carpetas de Trabajo:**
+  * [apps/api/services/video/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/services/video/) — Storyboards y prompts visuales.
+  * [apps/api/adapters/renderer/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/adapters/renderer/) — Render de Google Veo.
+  * [apps/api/workflows/](file:///Users/sebastianmoseres/Desktop/All%20Folders/Xertica/Xertica%20Education/xertica-education/apps/api/workflows/) — Orquestadores de pipelines.
+* **Flujo de Mocking:**
+  * Lee el texto del lesson de Santiago (usando lessons mock si Santiago no ha terminado) y orquesta el pipeline de renderizado de video MP4 final.
