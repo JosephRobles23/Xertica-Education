@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ─── Maia-style tokens · Xertica identity ─────────────────────────── */
+:root {
+  --radius: 0.75rem;
+
+  --background: #f5f3fb;
+  --foreground: #3a3355;
+
+  --card: #ffffff;
+  --card-foreground: #1b1033;
+  --popover: #ffffff;
+  --popover-foreground: #1b1033;
+
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #eeeaf9;
+  --secondary-foreground: #3a3355;
+  --muted: #eeeaf9;
+  --muted-foreground: #79738f;
+  --accent: #e5defa;
+  --accent-foreground: #1b1033;
+
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --success: #2fa36b;
+  --success-foreground: #ffffff;
+
+  --border: #e3ddf4;
+  --input: #cdc4e8;
+  --ring: #7c3aed;
+
+  --ink: #1b1033;
+  --lime: #c4f24c;
+  --sidebar: #1b1033;
+  --sidebar-foreground: #a99fc7;
+  --sidebar-muted: #8b80b0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ink: var(--ink);
+  --color-lime: var(--lime);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+
+  --shadow-soft: 0 10px 30px rgba(27, 16, 51, 0.08);
+  --shadow-lift: 0 18px 44px rgba(27, 16, 51, 0.14);
+
+  --animate-pulse-dot: xpulse 1.6s ease-in-out infinite;
+
+  @keyframes xpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html, body {
+    margin: 0;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-accent;
+  }
+}
+
+@layer utilities {
+  .eyebrow {
+    @apply flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.08em];
+  }
+  .eyebrow::before {
+    content: "";
+    @apply block h-px w-[18px] bg-primary;
+  }
+}

@@ -1,0 +1,324 @@
+# Implementation Plan (MVP)
+
+This document is for humans and coding agents. It does not cover pedagogy or RAG. It answers one core question:
+**What do we build first, who builds it, and what contracts do we agree on?**
+
+---
+
+# MVP Golden Rules
+
+> **1. No feature may block another feature. If a dependency is unavailable, return mock or placeholder data that conforms to the contract.**
+> 
+> **2. If an implementation decision requires changing an API contract, stop and discuss it first. If it only changes the internal implementation behind an existing contract, proceed.**
+
+These rules ensure development continues smoothly in parallel. Coding agents must respect these rules.
+
+---
+
+# 1. Freeze the contracts (first priority)
+
+**Goal:** Nobody writes feature code yet.
+
+Create:
+`docs/contracts.md`
+
+Define, for every service:
+* Endpoint
+* Request schema (as Pydantic models in `apps/api/models/dto/requests.py`)
+* Response schema (as Pydantic models in `apps/api/models/dto/responses.py`)
+* Owner
+
+### Contract Enforcement
+* **DTO Models:** All input/output schemas must be declared using Pydantic models inside `apps/api/models/dto/`.
+
+### Shared Domain Models (`apps/api/models/domain/`)
+Business entities must live in `apps/api/models/domain/` to separate domain definitions from network transport models:
+* `learning_path.py` (Domain representation of a learning path)
+* `component.py` (Domain representation of modules/components)
+* `asset.py` (Domain representation of generated assets)
+* `source.py` (Domain representation of sourcing items)
+
+---
+
+# 2. Freeze the repository structure
+
+Define this structure before coding anything:
+
+```
+apps/
+    web/
+    api/
+
+apps/api/
+    config/
+        settings.py
+    routers/
+        learning_paths.py
+        workflow.py
+        jobs.py
+    workflows/
+        interface.py
+        service.py
+        pipelines/
+            generate_module.py
+            regenerate_component.py
+            approve_asset.py
+    services/
+        jobs/
+            interface.py, service.py, mock.py
+        learning_path/
+            interface.py, service.py, mock.py
+        kb/
+            interface.py, service.py, mock.py
+        video/
+            interface.py, service.py, mock.py
+            prompts/
+        infographic/
+            interface.py, service.py, mock.py
+        lesson/
+            interface.py, service.py, mock.py
+        quiz/
+            interface.py, service.py, mock.py
+    repositories/
+        learning_path/
+            interface.py, repository.py
+        kb/
+            interface.py, repository.py
+        jobs/
+            interface.py, repository.py
+        assets/
+            interface.py, repository.py
+    models/
+        domain/
+        dto/
+    adapters/
+        llm/
+        storage/
+        parser/
+        renderer/
+    tests/
+        learning_path/
+        workflow/
+        video/
+
+packages/
+    types/
+    config/
+    schemas/
+```
+
+Nobody invents folders later.
+
+---
+
+# 3. Define ownership
+
+One folder = one owner.
+
+| Folder | Owner |
+| :--- | :--- |
+| learning_path + workflows | Joseph |
+| jobs | Joseph |
+| kb | Joseph |
+| video | Sebas |
+| infographic | Santiago |
+| lesson + quiz | Shared |
+| sourcing | Arantza |
+
+Nobody edits another person's service.
+
+---
+
+# 4. Create mock implementations
+
+Every endpoint should work immediately with simple mocks (no AI, no Veo, no KB).
+
+### Storage of Mock Files
+* **Metadata Mocks:** Static JSON responses representing final payloads are stored in service folders (e.g., `apps/api/services/video/mock_data/`).
+* **Asset Mocks:** Static placeholder files (e.g., a sample video or PDF) are uploaded to a public bucket in Supabase Storage.
+
+---
+
+# 5. Integration Test Phase
+
+Before replacing any mock implementations with real AI integrations, test the entire flow end-to-end using fake data:
+
+```
+Frontend ──> API ──> Workflows (Pipelines) ──> Mock Responses ──> Frontend updates correctly
+```
+
+Verify that:
+* The user flow works without error.
+* Frontend screens display mock data properly.
+* The state transitions of jobs are fully visible.
+
+Only after the whole application works with fake data do you begin replacing mocks. This isolates UI bugs from AI/generation bugs.
+
+---
+
+# 6. Frontend integration
+
+The frontend should only call the backend API. Never call OpenRouter or Supabase directly.
+
+**Flow:**
+```
+Frontend
+   ↓
+API (FastAPI Gateway Routers)
+   ↓
+Workflows (Pipeline Orchestration)
+   ↓
+Services (Video, KB, Infographic, etc.)
+   ↓
+Repositories & Adapters
+   ↓
+Database & External APIs
+```
+
+* **Frontend Routes:** Maintain the Spanish URL routes matching the mockup (e.g. `/nueva-ruta`, `/estructura-propuesta`, `/ruta/[id]`) to minimize migration friction.
+* **Environment Configuration:** Frontend reads API URLs via a `NEXT_PUBLIC_API_URL` env variable in `.env.local` connected through a centralized fetch/axios client wrapper.
+* **Frontend Styles:** Leverage Tailwind CSS v4 and shadcn/ui components (under `components/ui/`) for clean UI consistency.
+
+---
+
+# 7. Replace mocks one service at a time
+
+Suggested order:
+1. LearningPath/Workflow Pipelines
+2. KB Service
+3. Lesson/Quiz
+4. Infographic
+5. Video
+
+Each replacement should not affect the frontend because the API contract remains unchanged.
+
+---
+
+# 8. Branch strategy
+
+Don't have everyone working on `main`.
+
+```
+main
+  ↓
+develop
+  ├── feature/learning-path-workflow
+  ├── feature/kb
+  ├── feature/video
+  ├── feature/infographic
+  ├── feature/lesson
+  └── feature/frontend
+```
+
+Merge only after:
+* The endpoint works.
+* The contract is unchanged.
+* The mock is replaced with the real implementation.
+
+---
+
+# 9. API Ownership, Orchestration, and Dependencies
+
+### Public Routers
+Only expose three public HTTP routing controllers inside `apps/api/routers/` to reduce public surface and keep workflow coordination backend-side:
+* `learning_paths.py` (CRUD operations for paths)
+* `workflow.py` (Pipeline trigger events)
+* `jobs.py` (Background job queries)
+
+### Workflow Pipelines
+Workflow logic is isolated in individual file classes under `apps/api/workflows/pipelines/` (e.g., `generate_module.py`) to prevent a bloated `WorkflowService` file.
+
+### Dependency Injection (DI)
+FastAPI's native `Depends()` mechanism is utilized in routers to inject services, and services receive repositories via standard constructor injection. This makes swapping between mock and real instances trivial.
+
+### Dependency Rule
+To maintain decoupling, features should never call each other directly:
+* **Allowed:** `Workflow Pipeline` ──> `Video Service` ──> `Renderer Adapter` ──> `Veo API`
+* **Forbidden:** `Video Service` ──> `Infographic Service`
+* **Forbidden:** `Video Service` ──> `Lesson Service`
+
+### Service Interfaces (Python Signatures)
+Expose explicit class interfaces to prevent different developers from implementing conflicting signatures:
+```python
+class VideoService:
+    async def generate(self, component_id: str, sources: list[str], word_budget: int) -> str:
+        """Starts video generation job, returns job_id."""
+        pass
+
+    async def status(self, job_id: str) -> dict:
+        """Returns the job status details."""
+        pass
+```
+
+### First-Class Jobs Service
+Every long-running workflow uses a standardized `Jobs Service` (`apps/api/services/jobs/`) rather than inventing its own mechanism:
+1. **Creation:** Frontend calls `POST /jobs` to launch a workflow.
+2. **Persistence:** The backend creates a Job row in the database with status `queued` and returns the `job_id` immediately.
+3. **Execution:** The async task updates the job status row: `queued` ──> `running` ──> `rendering` ──> `completed` | `failed`.
+4. **Tracking:** Frontend queries `GET /jobs/{id}` to poll progress.
+
+### Workflow States
+Workflow executions transition through explicit pipeline states to coordinate progress cleanly:
+`CREATED` ──> `PATH_READY` ──> `SOURCES_READY` ──> `KB_READY` ──> `GENERATING` ──> `WAITING_REVIEW` ──> `DONE`
+
+---
+
+# 10. Replaceable Adapters & Repositories
+
+No service should call external APIs or databases directly. 
+* **Repositories:** Mirror services under `apps/api/repositories/<domain>/` to isolate database transactions and Supabase storage logic. Connect to Supabase via direct PostgreSQL clients (e.g. `SQLModel`, `SQLAlchemy`, or `asyncpg`).
+* **Adapters:** Organized by capability in `apps/api/adapters/`.
+
+```
+adapters/
+    llm/        <-- openrouter.py, vertex.py
+    storage/    <-- supabase.py
+    parser/     <-- mineru.py
+    renderer/   <-- veo.py, runway.py
+```
+
+---
+
+# 11. Configuration Settings
+
+Manage all configuration properties centrally inside `apps/api/config/settings.py` utilizing `pydantic-settings` to parse and type-check env vars:
+* `SUPABASE_URL` / `SUPABASE_KEY`
+* `OPENROUTER_KEY`
+* `VEO_KEY`
+* `MODEL_NAMES`
+* `STORAGE_BUCKET`
+
+---
+
+# 12. Definition of Done (DoD)
+
+Each service is finished when it satisfies:
+* Endpoint exists.
+* Request/response follows the contract.
+* Unit test passes (optional for MVP).
+* Frontend can call it.
+* Mock is replaced with the real implementation.
+
+---
+
+# 13. Explicit Dependency Graph (Mindset Shift)
+
+Coding agents must follow this exact development lifecycle. Always work left-to-right:
+
+```
+Contracts ──> Models (Domain/DTO) ──> Endpoints ──> Frontend (Integration Tests) ──> Real AI Integrations
+```
+
+---
+
+# 14. Daily implementation order
+
+Coding agents must follow this sequence:
+
+* **Step 1:** Freeze folder structure.
+* **Step 2:** Create all endpoint files.
+* **Step 3:** Create request/response models.
+* **Step 4:** Implement mock responses for every endpoint.
+* **Step 5:** Perform integration testing (Frontend connected to Mock API).
+* **Step 6:** Replace one mock service at a time with the real implementation.
+* **Step 7:** Integrate and test the complete end-to-end flow.

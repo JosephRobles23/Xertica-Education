@@ -1,0 +1,27 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_packages/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Python environment
+venv/
+.venv/
+env/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
