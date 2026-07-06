@@ -7,6 +7,12 @@
       "skillPath": "skills/caveman/SKILL.md",
       "computedHash": "d18cdf73a5f5c496d681a43a6846336b110223bdffa6817b8992529c57f1a815"
     },
+    "code-comments": {
+      "source": "petekp/claude-code-setup",
+      "sourceType": "github",
+      "skillPath": "skills/code-comments/SKILL.md",
+      "computedHash": "f2119c255923c9e2673104e352b7be69ab54fde338b1364c3e2db4ac3fc037a3"
+    },
     "code-review": {
       "source": "mattpocock/skills",
       "sourceType": "github",
