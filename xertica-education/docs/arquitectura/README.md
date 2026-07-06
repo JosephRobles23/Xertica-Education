@@ -182,6 +182,8 @@ Cada servicio o componente desarrollado en el monorepo se considera finalizado c
 
 ## 10. Registro de Decisiones de Arquitectura (ADRs)
 
-*   **ADR 1: pgvector en Supabase como Base de Conocimiento.** Se seleccionó la base de datos relacional PostgreSQL con extensión pgvector integrada de Supabase por simplicidad de infraestructura, reutilizando la base de datos principal para las búsquedas semánticas del MVP.
-*   **ADR 2: Mocks como First-Class Citizens.** La habilitación de clases mock para cada servicio es obligatoria desde el inicio del MVP. Esto previene cuellos de botella entre desarrolladores y aísla los bugs de UI de fallas de APIs generativas.
-*   **ADR 3: Nomenclatura del Dominio en Inglés.** Para evitar ambigüedades e inconsistencias de lenguaje dentro del código, se oficializa la denominación técnica en inglés para las entidades del Spine, mapeándose `Ruta` como `LearningPath` en toda la API y persistencia.
+Los ADRs viven como archivos numerados en [`docs/adr/`](../adr/). Índice:
+
+*   [ADR-0001](../adr/0001-pgvector-supabase-knowledge-base.md): pgvector en Supabase como Knowledge Base.
+*   [ADR-0002](../adr/0002-mocks-first-class-citizens.md): Mocks como first-class citizens.
+*   [ADR-0003](../adr/0003-domain-naming-in-english.md): Nomenclatura del dominio en inglés.
