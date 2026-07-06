@@ -103,7 +103,7 @@ function CorpusSection({ route }: { route: LearningRoute }) {
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <h2 className="font-display text-xl font-medium text-ink">Revisar corpus de fuentes</h2>
+          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
           {approved && (
             <Badge variant="success">
               <Check className="size-3" /> aprobado
@@ -147,12 +147,12 @@ function CorpusSection({ route }: { route: LearningRoute }) {
           <Button
             onClick={() => {
               approveCorpus(route.id)
-              toast.success('Corpus aprobado', {
+              toast.success('Fuentes aprobadas', {
                 description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
               })
             }}
           >
-            Aprobar corpus <ArrowRight />
+            Aprobar fuentes <ArrowRight />
           </Button>
         </div>
       )}
@@ -180,14 +180,14 @@ function ContentRow({
   const isLab = content.kind === 'lab'
   const storyboardOk = isStoryboardApproved(route.id)
   const labGuideOk = isLabGuideApproved(route.id)
-  const videoBlocked = isVideo && status !== 'aprobado' && !storyboardOk
-  const labBlocked = isLab && status !== 'aprobado' && !labGuideOk
+  const videoNeedsReview = isVideo && status !== 'aprobado' && !storyboardOk
+  const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
 
   const approveButton = (
     <Button
       variant={status === 'aprobado' ? 'outline' : 'success'}
       size="sm"
-      disabled={status === 'aprobado' || videoBlocked || labBlocked}
+      disabled={status === 'aprobado'}
       onClick={() => {
         approveContent(route.id, module.id, content.kind)
         toast.success(`${label} aprobado`, { description: `${module.name} · ${route.name}` })
@@ -227,7 +227,7 @@ function ContentRow({
             {content.summary}
           </p>
 
-          {videoBlocked && (
+          {videoNeedsReview && (
             <button
               type="button"
               onClick={() => nav(`/ruta/${route.id}/video-storyboard`)}
@@ -239,7 +239,7 @@ function ContentRow({
                   Revisar guion y storyboard
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El video requiere aprobar guion y storyboard antes de generarse.
+                  Recomendado para validar el guion. También puedes aprobar el video directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -253,7 +253,7 @@ function ContentRow({
             </div>
           )}
 
-          {labBlocked && (
+          {labNeedsReview && (
             <button
               type="button"
               onClick={() => nav(`/ruta/${route.id}/lab-guia`)}
@@ -265,7 +265,7 @@ function ContentRow({
                   Personalizar guía del laboratorio
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El laboratorio requiere aprobar la guía paso a paso antes de generarse.
+                  Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -285,20 +285,7 @@ function ContentRow({
           </div>
 
           <div className="flex gap-2.5">
-            {videoBlocked || labBlocked ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>{approveButton}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {videoBlocked
-                    ? 'Primero aprueba el guion y storyboard'
-                    : 'Primero aprueba la guía del laboratorio'}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              approveButton
-            )}
+            {approveButton}
             <RefinePopover
               label={label}
               onRefine={() => refineContent(route.id, module.id, content.kind)}
@@ -321,16 +308,15 @@ export default function Ruta() {
   const route = getRoute(id)
   const [openModule, setOpenModule] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
-  const { isCorpusApproved, markGenerated, contentStatusOf } = useStore()
+  const {
+    isCorpusApproved,
+    markGenerated,
+    moduleStatusOf,
+    approveModule,
+    routeProgressOf,
+  } = useStore()
 
-  const approvedModules = useMemo(() => {
-    if (!route) return 0
-    return route.modules.filter((m) =>
-      m.contents.every(
-        (c) => contentStatusOf(route.id, m.id, c.kind, c.status) === 'aprobado',
-      ),
-    ).length
-  }, [route, contentStatusOf])
+  const progress = useMemo(() => (route ? routeProgressOf(route) : { done: 0, total: 0, pct: 0 }), [route, routeProgressOf])
 
   if (!route) {
     return (
@@ -344,7 +330,7 @@ export default function Ruta() {
   }
 
   const corpusOk = isCorpusApproved(route.id)
-  const activeModule = route.modules.find((m) => m.status === 'en-revision')
+  const activeModule = route.modules.find((m) => moduleStatusOf(route.id, m) === 'en-revision')
   const effectiveOpen = openModule ?? activeModule?.id ?? route.modules[0]?.id ?? null
 
   const generate = () => {
@@ -397,17 +383,18 @@ export default function Ruta() {
         <div className="mb-3.5 flex items-center justify-between">
           <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
           <span className="font-mono text-[11px] text-muted-foreground">
-            {approvedModules} de {route.modules.length} aprobados
+            {progress.done} de {route.modules.length} aprobados
           </span>
         </div>
 
         <div className="flex flex-col gap-3">
           {route.modules.map((m) => {
             const isOpen = effectiveOpen === m.id
+            const moduleStatus = moduleStatusOf(route.id, m)
             return (
               <Card
                 key={m.id}
-                className={cn('gap-0 overflow-hidden p-0', m.status === 'en-revision' && 'border-primary')}
+                className={cn('gap-0 overflow-hidden p-0', moduleStatus === 'en-revision' && 'border-primary')}
               >
                 <button
                   type="button"
@@ -426,13 +413,37 @@ export default function Ruta() {
                       {m.type}
                     </span>
                   </span>
-                  <StatusBadge status={m.status} />
+                  <StatusBadge status={moduleStatus} />
                 </button>
                 {isOpen && (
                   <div className="border-t-[1.5px] border-secondary px-4.5 pt-3 pb-4 pl-11">
                     {m.contents.map((c) => (
                       <ContentRow key={c.kind} route={route} module={m} content={c} />
                     ))}
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-secondary px-3.5 py-3">
+                      <span className="text-[12.5px] text-muted-foreground">
+                        Aprueba todos los assets de este módulo en una sola acción.
+                      </span>
+                      <Button
+                        variant={moduleStatus === 'aprobado' ? 'outline' : 'success'}
+                        size="sm"
+                        disabled={moduleStatus === 'aprobado'}
+                        onClick={() => {
+                          approveModule(route.id, m)
+                          toast.success('Módulo aprobado', { description: `${m.name} · ${route.name}` })
+                        }}
+                      >
+                        {moduleStatus === 'aprobado' ? (
+                          <>
+                            <CircleCheck /> Aprobado
+                          </>
+                        ) : (
+                          <>
+                            <Check /> Aprobar módulo completo
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </Card>
@@ -451,7 +462,7 @@ export default function Ruta() {
               </>
             ) : (
               <>
-                <b className="text-ink">Aprueba el corpus</b> para habilitar la generación de
+                <b className="text-ink">Aprueba las fuentes</b> para habilitar la generación de
                 contenido.
               </>
             )}
@@ -463,7 +474,7 @@ export default function Ruta() {
               <TooltipTrigger asChild>
                 <span>{generateButton}</span>
               </TooltipTrigger>
-              <TooltipContent>Primero aprueba el corpus de fuentes</TooltipContent>
+              <TooltipContent>Primero aprueba las fuentes</TooltipContent>
             </Tooltip>
           )}
         </div>

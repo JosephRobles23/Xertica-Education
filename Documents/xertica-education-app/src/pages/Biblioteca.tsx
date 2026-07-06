@@ -1,13 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  BookOpen,
   Check,
   ClipboardCopy,
   Download,
-  FileImage,
-  FlaskConical,
-  ListChecks,
-  Video as VideoIcon,
+  Eye,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -17,88 +14,145 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Eyebrow, PageDescription, PageTitle } from '@/components/PageHeader'
 import { ROUTES } from '@/data/routes'
-import type { ContentKind, LearningRoute } from '@/lib/types'
+import { KIND_LABEL, STATUS_LABEL } from '@/lib/types'
+import type { LearningRoute, RouteModule } from '@/lib/types'
+import { useStore } from '@/store'
 
-const DOWNLOADABLE_KINDS: { kind: ContentKind; label: string; icon: typeof VideoIcon; ext: string }[] = [
-  { kind: 'video', label: 'Video', icon: VideoIcon, ext: '.mp4' },
-  { kind: 'infografia', label: 'Infografía', icon: FileImage, ext: '.pdf' },
-  { kind: 'quiz', label: 'Quiz', icon: ListChecks, ext: '.json' },
-  { kind: 'lab', label: 'Laboratorio', icon: FlaskConical, ext: '.pdf' },
-  { kind: 'lesson', label: 'Lesson', icon: BookOpen, ext: '.docx' },
-]
+function getAssetCount(route: LearningRoute) {
+  return route.modules.reduce((total, module) => total + module.contents.length, 0)
+}
 
-function copyToClipboard(route: LearningRoute, kind: ContentKind) {
-  const label = DOWNLOADABLE_KINDS.find((k) => k.kind === kind)?.label ?? kind
-  const text = `[Xertica Education] ${route.name} — ${label}\nContenido listo para importar a Google Classroom.\nRuta ${route.id} · ${route.modules.length} módulos`
+function copyToClipboard(route: LearningRoute) {
+  const text = [
+    `[Xertica Education] Curso publicado: ${route.name}`,
+    route.objective,
+    `Ruta ${route.id} · ${route.modules.length} módulos · ${getAssetCount(route)} assets aprobados`,
+    'Módulos:',
+    ...route.modules.map((module) => `${module.num}. ${module.name} (${module.type})`),
+  ].join('\n')
+
   navigator.clipboard.writeText(text).then(
-    () => toast.success('Copiado al portapapeles', { description: `${label} de «${route.name}» listo para Classroom.` }),
+    () => toast.success('Curso copiado al portapapeles', { description: `«${route.name}» listo para Classroom.` }),
     () => toast.error('No se pudo copiar'),
   )
 }
 
-function downloadMock(route: LearningRoute, kind: ContentKind) {
-  const entry = DOWNLOADABLE_KINDS.find((k) => k.kind === kind)
+function downloadMock(route: LearningRoute) {
   toast.info('Descarga simulada', {
-    description: `${entry?.label ?? kind} de «${route.name}» (${route.id}_${kind}${entry?.ext ?? ''})`,
+    description: `Paquete completo de «${route.name}» (${route.id}_curso_publicado.zip)`,
   })
 }
 
-function RouteLibraryCard({ route }: { route: LearningRoute }) {
-  const isPublished = route.status === 'aprobado'
+function ModuleRow({ route, module }: { route: LearningRoute; module: RouteModule }) {
+  const { moduleStatusOf } = useStore()
+  const preview = module.contents.slice(0, 4)
+  const status = moduleStatusOf(route.id, module)
+
+  return (
+    <div className="rounded-lg border-[1.5px] border-border px-3.5 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[11px] font-semibold text-primary">{module.num}</span>
+        <span className="min-w-0 flex-1 text-[13px] font-semibold text-ink">{module.name}</span>
+        <Badge variant={status === 'aprobado' ? 'success' : 'muted'}>
+          {STATUS_LABEL[status]}
+        </Badge>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {preview.map((content) => (
+          <span
+            key={content.kind}
+            className="rounded-full bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground"
+          >
+            {KIND_LABEL[content.kind]}
+          </span>
+        ))}
+        {module.contents.length > preview.length ? (
+          <span className="rounded-full bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground">
+            +{module.contents.length - preview.length}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function CourseLibraryCard({ route }: { route: LearningRoute }) {
+  const { routeStatusOf, routeProgressOf } = useStore()
+  const status = routeStatusOf(route)
+  const progress = routeProgressOf(route)
+  const isPublished = status === 'aprobado'
+  const assetCount = getAssetCount(route)
 
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <div className="flex items-center gap-3 px-5 py-4">
-        <span className="font-mono text-[13px] font-semibold text-primary">{route.id}</span>
-        <h3 className="min-w-0 flex-1 font-display text-[15.5px] font-medium text-ink truncate">
-          {route.name}
-        </h3>
-        {isPublished ? (
-          <Badge variant="success">
-            <Check className="size-3" /> Publicado
-          </Badge>
-        ) : (
-          <Badge variant="muted">{route.status}</Badge>
-        )}
+      <div className="px-5 py-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-1 font-mono text-[13px] font-semibold text-primary">{route.id}</span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-[18px] font-medium text-ink">{route.name}</h3>
+            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+              {route.objective}
+            </p>
+          </div>
+          {isPublished ? (
+            <Badge variant="success">
+              <Check className="size-3" /> Publicado
+            </Badge>
+          ) : (
+            <Badge variant="muted">{STATUS_LABEL[status]}</Badge>
+          )}
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg bg-secondary px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+              Módulos
+            </div>
+            <div className="mt-1 text-[17px] font-semibold text-ink">{route.modules.length}</div>
+          </div>
+          <div className="rounded-lg bg-secondary px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+              Aprobados
+            </div>
+            <div className="mt-1 text-[17px] font-semibold text-ink">
+              {progress.done}/{route.modules.length}
+            </div>
+          </div>
+          <div className="rounded-lg bg-secondary px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+              Assets
+            </div>
+            <div className="mt-1 text-[17px] font-semibold text-ink">{assetCount}</div>
+          </div>
+        </div>
       </div>
 
       <div className="border-t border-secondary px-5 py-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[13px] font-semibold text-ink">Módulos del curso</div>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              Vista resumida del curso publicado, no archivos sueltos.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/ruta/${route.id}`}>
+                <Eye className="size-3.5" /> Ver curso
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" className="size-8" onClick={() => copyToClipboard(route)} title="Copiar curso para Classroom">
+              <ClipboardCopy className="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-8" onClick={() => downloadMock(route)} title="Descargar paquete del curso">
+              <Download className="size-3.5" />
+            </Button>
+          </div>
+        </div>
         <div className="grid gap-2.5">
-          {DOWNLOADABLE_KINDS.map(({ kind, label, icon: Icon, ext }) => {
-            const hasContent = kind in route.pack
-            if (!hasContent) return null
-
-            return (
-              <div
-                key={kind}
-                className="flex items-center gap-3 rounded-lg border-[1.5px] border-border px-3.5 py-2.5"
-              >
-                <Icon className="size-4 text-primary" />
-                <span className="flex-1 text-[13px] font-medium text-ink">{label}</span>
-                <span className="font-mono text-[10px] text-muted-foreground">{ext}</span>
-                <div className="flex gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => copyToClipboard(route, kind)}
-                    title="Copiar para Classroom"
-                  >
-                    <ClipboardCopy className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => downloadMock(route, kind)}
-                    title="Descargar"
-                  >
-                    <Download className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
+          {route.modules.map((module) => (
+            <ModuleRow key={module.id} route={route} module={module} />
+          ))}
         </div>
       </div>
     </Card>
@@ -106,54 +160,56 @@ function RouteLibraryCard({ route }: { route: LearningRoute }) {
 }
 
 export default function Biblioteca() {
-  const [tab, setTab] = useState<'all' | 'published'>('all')
+  const [tab, setTab] = useState<'published' | 'all'>('published')
+  const { routeStatusOf } = useStore()
 
-  const published = ROUTES.filter((r) => r.status === 'aprobado')
+  const published = ROUTES.filter((r) => routeStatusOf(r) === 'aprobado')
   const visible = tab === 'published' ? published : ROUTES
 
   return (
     <div className="mx-auto max-w-[960px]">
       <Eyebrow>Biblioteca de contenido</Eyebrow>
-      <PageTitle className="text-[32px]">Biblioteca</PageTitle>
+      <PageTitle className="text-[32px]">Cursos publicados</PageTitle>
       <PageDescription className="mb-6">
-        Todo el material generado y aprobado, listo para descargar o copiar a Google Classroom.
+        Catálogo de cursos completos aprobados para Google Classroom. Cada curso agrupa sus módulos,
+        assets y materiales de apoyo en un solo paquete.
       </PageDescription>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'all' | 'published')}>
         <div className="mb-5 flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="all">Todas las rutas</TabsTrigger>
             <TabsTrigger value="published">
-              <Check className="size-3.5" /> Publicadas
+              <Check className="size-3.5" /> Publicados
             </TabsTrigger>
+            <TabsTrigger value="all">Todos los cursos</TabsTrigger>
           </TabsList>
           <span className="font-mono text-[11px] text-muted-foreground">
-            {visible.length} ruta{visible.length !== 1 ? 's' : ''}
+            {visible.length} curso{visible.length !== 1 ? 's' : ''}
           </span>
         </div>
-
-        <TabsContent value="all" className="mt-0">
-          <div className="flex flex-col gap-4">
-            {ROUTES.map((r) => (
-              <RouteLibraryCard key={r.id} route={r} />
-            ))}
-          </div>
-        </TabsContent>
 
         <TabsContent value="published" className="mt-0">
           {published.length === 0 ? (
             <Card className="py-12 text-center">
               <p className="text-muted-foreground">
-                Aún no hay rutas publicadas. Aprueba y publica una ruta para verla aquí.
+                Aún no hay cursos publicados. Aprueba y publica un curso para verlo aquí.
               </p>
             </Card>
           ) : (
             <div className="flex flex-col gap-4">
               {published.map((r) => (
-                <RouteLibraryCard key={r.id} route={r} />
+                <CourseLibraryCard key={r.id} route={r} />
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="all" className="mt-0">
+          <div className="flex flex-col gap-4">
+            {ROUTES.map((r) => (
+              <CourseLibraryCard key={r.id} route={r} />
+            ))}
+          </div>
         </TabsContent>
       </Tabs>
 

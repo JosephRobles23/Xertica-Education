@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { ContentKind, ContentStatus, ProposalModule } from '@/lib/types'
+import type { ContentKind, ContentStatus, LearningRoute, ProposalModule, RouteModule } from '@/lib/types'
 import { INITIAL_PROPOSAL } from '@/data/routes'
 
 /** Clave estable para el estado de un contenido concreto. */
@@ -45,6 +45,10 @@ interface AppStore {
   ) => ContentStatus
   approveContent: (routeId: string, moduleId: string, kind: ContentKind) => void
   refineContent: (routeId: string, moduleId: string, kind: ContentKind) => void
+  moduleStatusOf: (routeId: string, module: RouteModule) => ContentStatus
+  approveModule: (routeId: string, module: RouteModule) => void
+  routeStatusOf: (route: LearningRoute) => ContentStatus
+  routeProgressOf: (route: LearningRoute) => { done: number; total: number; pct: number }
 
   isCorpusApproved: (routeId: string) => boolean
   approveCorpus: (routeId: string) => void
@@ -151,6 +155,49 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setStatusOverride((prev) => ({ ...prev, [contentKey(routeId, moduleId, kind)]: 'en-revision' }))
   }, [])
 
+  const moduleStatusOf = useCallback(
+    (routeId: string, module: RouteModule): ContentStatus => {
+      const allContentApproved = module.contents.every(
+        (content) =>
+          (statusOverride[contentKey(routeId, module.id, content.kind)] ?? content.status) ===
+          'aprobado',
+      )
+
+      return allContentApproved ? 'aprobado' : module.status
+    },
+    [statusOverride],
+  )
+
+  const approveModule = useCallback((routeId: string, module: RouteModule) => {
+    setStatusOverride((prev) => {
+      const next = { ...prev }
+      module.contents.forEach((content) => {
+        next[contentKey(routeId, module.id, content.kind)] = 'aprobado'
+      })
+      return next
+    })
+  }, [])
+
+  const routeStatusOf = useCallback(
+    (route: LearningRoute): ContentStatus => {
+      const allModulesApproved = route.modules.every(
+        (module) => moduleStatusOf(route.id, module) === 'aprobado',
+      )
+
+      return allModulesApproved ? 'aprobado' : route.status
+    },
+    [moduleStatusOf],
+  )
+
+  const routeProgressOf = useCallback(
+    (route: LearningRoute) => {
+      const done = route.modules.filter((module) => moduleStatusOf(route.id, module) === 'aprobado').length
+      const total = route.modules.length
+      return { done, total, pct: total === 0 ? 0 : Math.round((done / total) * 100) }
+    },
+    [moduleStatusOf],
+  )
+
   /* ── Gates ────────────────────────────────────────────────── */
   const isCorpusApproved = useCallback((routeId: string) => corpusApproved[routeId] ?? false, [corpusApproved])
   const approveCorpus = useCallback((routeId: string) => {
@@ -186,7 +233,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       deepResearch, setDeepResearch,
       uploadedStructure, setUploadedStructure,
       proposal, reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
-      contentStatusOf, approveContent, refineContent,
+      contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
@@ -195,7 +242,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [
       briefText, deepResearch, uploadedStructure, proposal,
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
-      contentStatusOf, approveContent, refineContent,
+      contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
