@@ -11,6 +11,7 @@ class Settings(BaseModel):
     storage_bucket: str = os.getenv("STORAGE_BUCKET", "xertica-education-assets")
     
     # Load model_names dict, fallback to standard defaults if env var not set or invalid
+    # Estos son placeholders por ahora:
     model_names: Dict[str, str] = {
         "route_structurer": "gemini-2.5-pro",
         "scriptwriter": "gemini-2.5-pro",

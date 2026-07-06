@@ -18,11 +18,11 @@ Welcome to the **Xertica Education** application workspace. This project is stru
 *   `apps/api/`: FastAPI backend application.
     *   `routers/`: Exposes HTTP routes (`learning_paths.py`, `workflow.py`, `jobs.py`).
     *   `workflows/`: Pipeline orchestrators (`pipelines/generate_module.py`, etc.).
-    *   `services/`: Decoupled business capabilities (video, kb, infographic, lesson, quiz, jobs, learning_path). Each service contains `interface.py`, `service.py`, and `mock.py`.
+    *   `services/`: Decoupled business capabilities (video, kb, infographic, lesson, quiz, lab, jobs, learning_path). Each service contains `interface.py`, `service.py`, and `mock.py`.
     *   `repositories/`: Mirrored persistence layer handling database transactions.
     *   `models/`: Separated into `domain/` models and `dto/` API contracts.
     *   `adapters/`: capability-based external adapters (`llm/`, `storage/`, `parser/`, `renderer/`).
-*   `packages/`: Shared workspaces (`types/`, `config/`, `schemas/`).
+*   `packages/`: Shared workspaces (`types/`, `ui/`, `config/`, `schemas/`).
 *   `docs/`:
     *   `backlog.md`: The complete 15 vertical slice backlog and team ownership mappings.
     *   `issues/`: Independent ticket files representing each slice (e.g. `issue-01-foundation.md`) for coding agents to execute in parallel.

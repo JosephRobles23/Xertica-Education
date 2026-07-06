@@ -25,3 +25,7 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Agent local identity
+.agents/identity.json
+
