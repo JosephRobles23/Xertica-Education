@@ -516,7 +516,7 @@ Rutas 2–7 · videos hasta ~10 min · rutas personalizadas por industria (banca
 
 ## 14. Tareas próximas por dev (sprint actual)
 
-Tareas concretas del sprint, contra el mismo spine (§3). Cada una anota la sección de arquitectura que toca. También listadas en [`docs/backlog.md`](../backlog.md). *(Santiago no trae tareas nuevas en este batch.)*
+Tareas concretas del sprint, contra el mismo spine (§3). Cada una anota la sección de arquitectura que toca. Los **issue-files canónicos** (con acceptance criteria y numeración del equipo #16–22) viven en [`docs/issues/pending/<dev>/`](../issues/pending/); los kickoffs de cómo abordarlas con las skills, en [`docs/dev/`](../dev/). *(Santiago no trae tareas nuevas en este batch; su feature es la infografía, issue #13.)*
 
 ### 👩‍💻 Arantza — Sourcing / Deep Research
 - **Contexto del Cliente (formulario previo a la ruta)** — *cruza §4.1*

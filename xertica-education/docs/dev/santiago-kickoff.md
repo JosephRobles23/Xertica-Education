@@ -4,7 +4,7 @@
 > Lee primero: [`Skills_Desarrollo_Agentico.md`](../../../Documents/Skills/Skills_Desarrollo_Agentico.md) · [`CONTEXT.md`](../../CONTEXT.md) · [`docs/adr/`](../adr/) · [`architecture.md`](../arquitectura/architecture.md) §5 y §10.
 
 ## Tu primera tarea
-- **Pipeline de generación de infografía** (backlog #13) — de contenido *grounded* de la KB a una **infografía en PDF**. Ruta: `HTML grounded → PDF`.
+- **Pipeline de generación de infografía** ([issue #13](../issues/pending/santiago/issue-13-infographic-generation-pipeline.md)) — de contenido *grounded* de la KB a una **infografía en PDF**. Ruta: `HTML grounded → PDF`.
 
 *(No tienes tareas nuevas en el batch de §14, así que tu kickoff arranca por tu feature de dueño: la infografía. También compartes UI común con el resto del equipo.)*
 

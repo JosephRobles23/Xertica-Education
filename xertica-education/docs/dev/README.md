@@ -4,12 +4,12 @@ Guías de arranque: **cómo desarrollar tus primeras tareas usando las 12 skills
 
 | Dev | Feature | Primeras tareas | Kickoff |
 | :-- | :-- | :-- | :-- |
-| **Arantza** | Sourcing / Deep Research | Contexto del Cliente (#16) · Spike Deep Research (#17) | [arantza-kickoff.md](arantza-kickoff.md) |
-| **Joseph** | Knowledge Base / Integraciones | Google Drive (#18) · Quick wins descargas (#19) | [joseph-kickoff.md](joseph-kickoff.md) |
-| **Sebas** | Video | Spike video largo (#21) · Reutilización de videos (#20) | [sebas-kickoff.md](sebas-kickoff.md) |
+| **Arantza** | Sourcing / Deep Research | Contexto del Cliente (#16) · Spike Deep Research (#21) | [arantza-kickoff.md](arantza-kickoff.md) |
+| **Joseph** | Knowledge Base / Integraciones | Drive ingesta (#17) · Drive export (#18) · Descarga por módulo (#20) | [joseph-kickoff.md](joseph-kickoff.md) |
+| **Sebas** | Video | Reutilización de videos (#19) · Spike video largo (#22) | [sebas-kickoff.md](sebas-kickoff.md) |
 | **Santiago** | Infografía | Pipeline de infografía (#13) | [santiago-kickoff.md](santiago-kickoff.md) |
 
-Tareas: [`docs/backlog.md`](../backlog.md) · cruces de arquitectura: [`architecture.md`](../arquitectura/architecture.md) §14.
+Issues canónicos por dev: [`docs/issues/pending/<dev>/`](../issues/pending/) · cruces de arquitectura: [`architecture.md`](../arquitectura/architecture.md) §14.
 
 ## El pipeline en una línea
 ```

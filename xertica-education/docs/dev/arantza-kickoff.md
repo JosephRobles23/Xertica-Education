@@ -4,8 +4,8 @@
 > Lee primero: [`Skills_Desarrollo_Agentico.md`](../../../Documents/Skills/Skills_Desarrollo_Agentico.md) (pipeline completo) · [`CONTEXT.md`](../../CONTEXT.md) (dominio) · [`docs/adr/`](../adr/) · [`architecture.md`](../arquitectura/architecture.md) §14.
 
 ## Tus primeras tareas
-1. **Spike — límites de Deep Research** (backlog #17) — *research primero: define el terreno antes de construir*.
-2. **Contexto del Cliente — formulario previo a la ruta** (backlog #16) — captura `URL`, `industria`, `área`, `Google Workspace` e inyéctalos en el prompt del `route_structurer`.
+1. **Spike — límites de Deep Research** ([issue #21](../issues/pending/shared/issue-21-research-spike-quotas.md)) — *research primero: define el terreno antes de construir*.
+2. **Contexto del Cliente — formulario previo a la ruta** ([issue #16](../issues/pending/arantza/issue-16-customer-context-route.md)) — captura `URL`, `industria`, `área`, `Google Workspace` e inyéctalos en el prompt del `route_structurer`.
 
 El orden es a propósito: el **spike** acota qué es posible con Deep Research; con eso claro, construyes el **formulario** sabiendo qué contexto vale la pena capturar.
 
@@ -16,7 +16,7 @@ El orden es a propósito: el **spike** acota qué es posible con Deep Research; 
 Piensa en las skills como un **pipeline de 8 fases**. No todas aplican a cada tarea: un *spike* vive en las fases de exploración; una *feature* recorre el pipeline completo.
 
 ```
-Spike (#17)      → /decision-mapping → /prototype → /grill-with-docs → ADR
+Spike (#21)      → /decision-mapping → /prototype → /grill-with-docs → ADR
 Feature (#16)    → /decision-mapping → /grill-with-docs → /prototype → /to-prd → /to-issues → /tdd+/ponytail → /ponytail-review
 ```
 

@@ -4,8 +4,8 @@
 > Lee primero: [`Skills_Desarrollo_Agentico.md`](../../../Documents/Skills/Skills_Desarrollo_Agentico.md) · [`CONTEXT.md`](../../CONTEXT.md) · [`docs/adr/`](../adr/) · [`architecture.md`](../arquitectura/architecture.md) §5 ("Render híbrido") y §14.
 
 ## Tus primeras tareas
-1. **Spike — procesamiento de video de larga duración** (backlog #21) — viabilidad y costos.
-2. **Reutilización de videos existentes** (backlog #20) — indexar videos largos (~2 h) por **timestamps + transcripciones segmentadas**, sin edición física.
+1. **Spike — procesamiento de video de larga duración** ([issue #22](../issues/pending/sebas/issue-22-long-video-processing-spike.md)) — viabilidad y costos.
+2. **Reutilización de videos existentes** ([issue #19](../issues/pending/sebas/issue-19-existing-video-reuse.md)) — indexar videos largos (~2 h) por **timestamps + transcripciones segmentadas**, sin edición física.
 
 Orden: el **spike** decide si el enfoque de indexación es viable/costeable; recién entonces implementas la **reutilización**. Es tentador saltar al código, pero un spike barato te evita construir sobre una suposición falsa.
 

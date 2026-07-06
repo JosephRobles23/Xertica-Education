@@ -4,8 +4,8 @@
 > Lee primero: [`Skills_Desarrollo_Agentico.md`](../../../Documents/Skills/Skills_Desarrollo_Agentico.md) · [`CONTEXT.md`](../../CONTEXT.md) · [`docs/adr/`](../adr/) · [`architecture.md`](../arquitectura/architecture.md) §5 y §14.
 
 ## Tus primeras tareas
-1. **Integración con Google Drive (ingesta y exportación)** (backlog #18) — Drive como **fuente** (Vía 2) y como **destino de export** de assets, con carpetas auto-organizadas por `cliente → ruta → módulo`.
-2. **Quick wins — descargas de assets** (backlog #19) — descarga agrupada por módulo y descarga directa a Drive.
+1. **Integración con Google Drive** — Drive como **fuente** ([issue #17](../issues/pending/joseph/issue-17-google-drive-source-ingestion.md), Vía 2) y como **destino de export** de assets ([issue #18](../issues/pending/joseph/issue-18-export-assets-google-drive.md)), con carpetas auto-organizadas por `cliente → ruta → módulo`.
+2. **Quick win — descarga por módulo** ([issue #20](../issues/pending/joseph/issue-20-module-download-zip.md)) — descarga de assets agrupados por módulo (la descarga directa a Drive se apoya en el export de #18).
 
 Orden: la **integración con Drive** primero (es la pieza estructural con incógnitas de OAuth); los **quick wins** después, porque reutilizan el mismo cliente de Drive.
 
