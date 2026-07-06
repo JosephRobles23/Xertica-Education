@@ -1,5 +1,7 @@
 # Xertica Education — Documento de Arquitectura Consolidado
 
+> ⚠️ **Documento histórico.** La fuente de verdad de la arquitectura es **[`architecture.md`](architecture.md)** (v0.2, con lineamientos de la monorepo y tareas por dev). Este consolidado v1.0 se conserva como referencia pero **no se mantiene**; ante cualquier discrepancia, gana `architecture.md`.
+
 > **Versión:** 1.0 (Línea base para agentes de desarrollo)  
 > **Alcance:** Arquitectura general y especificaciones del MVP.  
 > **Runtime:** Google Cloud Run + Supabase Cloud.

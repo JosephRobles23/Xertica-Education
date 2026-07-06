@@ -1,1 +1,1 @@
-export { default } from '@/screens/EstructuraPropuesta'
+export { default } from '@/modules/curriculum'

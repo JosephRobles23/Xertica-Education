@@ -1,1 +1,1 @@
-export { default } from '@/screens/Biblioteca'
+export { default } from '@/modules/library'

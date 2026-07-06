@@ -187,3 +187,55 @@ This backlog organizes the 5-day sprint tasks into prioritized vertical slices (
     - [ ] All 4 asset previews display generated outputs.
     - [ ] Approving assets transitions module state to `Ready for Classroom` automatically.
 *   **Blocked by:** Issue 11, Issue 12, Issue 13, Issue 14.
+
+---
+
+# Sprint actual — tareas adicionales por dev
+
+> Detalle y cruces de arquitectura en [`docs/arquitectura/architecture.md`](arquitectura/architecture.md) §14.
+
+## 16. Contexto del Cliente (formulario previo a la ruta)
+*   **Owner:** Arantza
+*   **What to build:**
+    *   Formulario que captura `URL del cliente`, `industria`, `área` (RRHH, Finanzas, TI…) y uso de `Google Workspace`.
+    *   Inyectar ese contexto en el prompt del `route_structurer` para personalizar la ruta.
+*   **Acceptance criteria:**
+    - [ ] El formulario persiste el contexto y precede a la creación de la ruta.
+    - [ ] La estructura generada refleja industria/área en su contenido.
+
+## 17. Spike — límites de Deep Research
+*   **Owner:** Arantza
+*   **What to build:** documento con **límites técnicos y de cuotas** de Deep Research (rate limits, costo, latencia).
+*   **Acceptance criteria:**
+    - [ ] Reporte con límites y recomendación de uso para el MVP.
+
+## 18. Integración con Google Drive (ingesta y exportación)
+*   **Owner:** Joseph
+*   **What to build:**
+    *   Adjuntar archivos **desde Drive** como fuentes (Vía 2).
+    *   Guardar automáticamente los assets finales en Drive.
+    *   Auto-organizar carpetas por **cliente → ruta → módulo**.
+*   **Acceptance criteria:**
+    - [ ] Se pueden seleccionar archivos de Drive como fuentes.
+    - [ ] Los assets aprobados aparecen en Drive en la carpeta correcta.
+
+## 19. Quick wins — descargas de assets
+*   **Owner:** Joseph
+*   **What to build:**
+    *   Descarga de assets **agrupados por módulo**.
+    *   Descarga **directa a Drive**.
+*   **Acceptance criteria:**
+    - [ ] Descarga por módulo funcional.
+    - [ ] Descarga a Drive funcional.
+
+## 20. Reutilización de videos de entrenamiento existentes
+*   **Owner:** Sebas
+*   **What to build:** indexar videos largos (ej. ~2 h) por **timestamps + transcripciones segmentadas**, sin edición física, para reaprovechar tramos en el guion.
+*   **Acceptance criteria:**
+    - [ ] Un segmento del guion puede referenciar un tramo (timestamp) de un video fuente.
+
+## 21. Spike — procesamiento de video de larga duración
+*   **Owner:** Sebas
+*   **What to build:** análisis de **viabilidad y costos** del procesamiento de videos largos.
+*   **Acceptance criteria:**
+    - [ ] Reporte con viabilidad, costos y enfoque recomendado.

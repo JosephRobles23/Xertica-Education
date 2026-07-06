@@ -1,5 +1,7 @@
 # Xertica Education — Arquitectura Objetivo
 
+> ⚠️ **Copia externa (fuera del monorepo).** La versión mantenida y canónica vive en el repo: **`xertica-education/docs/arquitectura/architecture.md`** (v0.2+). Esta copia puede quedar desactualizada; sincronízala desde el repo o edítala allí.
+
 > **Versión:** 0.1 (borrador para revisión de equipo)
 > **Alcance:** Arquitectura objetivo completa, con la rebanada **MVP** resaltada en cada sección.
 > **Equipo:** Sebas (Video), Santiago (Infografía), Joseph (Knowledge Base), Arantza (Sourcing/Deep Research).

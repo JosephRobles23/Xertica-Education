@@ -1,1 +1,1 @@
-export { default } from '@/screens/Dashboard'
+export { Dashboard as default } from '@/modules/routes'

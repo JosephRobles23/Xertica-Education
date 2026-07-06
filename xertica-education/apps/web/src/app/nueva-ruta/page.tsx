@@ -1,1 +1,1 @@
-export { default } from '@/screens/NuevaRuta'
+export { default } from '@/modules/new-route'

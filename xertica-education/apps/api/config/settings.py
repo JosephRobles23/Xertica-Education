@@ -1,17 +1,34 @@
-import os
-import json
-from pydantic import BaseModel
 from typing import Dict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class Settings(BaseModel):
-    supabase_url: str = os.getenv("SUPABASE_URL", "https://placeholder-project.supabase.co")
-    supabase_key: str = os.getenv("SUPABASE_KEY", "placeholder-key")
-    openrouter_key: str = os.getenv("OPENROUTER_KEY", "placeholder-key")
-    veo_key: str = os.getenv("VEO_KEY", "placeholder-key")
-    storage_bucket: str = os.getenv("STORAGE_BUCKET", "xertica-education-assets")
-    
-    # Load model_names dict, fallback to standard defaults if env var not set or invalid
-    # Estos son placeholders por ahora:
+
+class Settings(BaseSettings):
+    """Configuración de la API cargada desde variables de entorno / apps/api/.env.
+
+    Los valores por defecto son *placeholders* a propósito: los repositorios
+    detectan la cadena ``placeholder`` para decidir si usan Supabase real o el
+    fallback in-memory (regla de oro #1 del MVP · ADR-0004).
+    """
+
+    # env_file relativo al CWD del proceso (apps/api al correr `uv run uvicorn ...`).
+    # protected_namespaces=() para permitir el campo `model_names` (pydantic v2
+    # reserva el prefijo `model_`). extra="ignore" para no romper con vars
+    # ajenas presentes en el entorno.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        protected_namespaces=(),
+    )
+
+    supabase_url: str = "https://placeholder-project.supabase.co"
+    supabase_key: str = "placeholder-key"
+    openrouter_key: str = "placeholder-key"
+    veo_key: str = "placeholder-key"
+    storage_bucket: str = "xertica-education-assets"
+
+    # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
+    # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {
         "route_structurer": "gemini-2.5-pro",
         "scriptwriter": "gemini-2.5-pro",
@@ -19,13 +36,5 @@ class Settings(BaseModel):
         "researcher": "gemini-2.5-flash",
     }
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        env_model_names = os.getenv("MODEL_NAMES")
-        if env_model_names:
-            try:
-                self.model_names = json.loads(env_model_names)
-            except Exception:
-                pass
 
 settings = Settings()

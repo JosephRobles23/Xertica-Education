@@ -1,1 +1,1 @@
-export { default } from '@/screens/Publicado'
+export { Publicado as default } from '@/modules/assets'

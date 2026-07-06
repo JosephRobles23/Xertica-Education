@@ -1,9 +1,9 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { AppStoreProvider } from '@/store'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { Toaster } from '@/components/ui/sonner'
+import { AppStoreProvider } from '@/shared/store'
+import { TooltipProvider } from '@/shared/ui/tooltip'
+import { Toaster } from '@/shared/ui/sonner'
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (

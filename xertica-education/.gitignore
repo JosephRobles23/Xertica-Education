@@ -3,6 +3,11 @@ node_modules/
 jspm_packages/
 web_packages/
 
+# Secrets / env (nunca commitear; sí versionar los .env.example)
+.env
+.env.*
+!.env.example
+
 # Build outputs
 dist/
 build/
@@ -14,7 +19,6 @@ out/
 venv/
 .venv/
 env/
-.env
 __pycache__/
 *.pyc
 *.pyo

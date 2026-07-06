@@ -32,9 +32,9 @@ Welcome to the **Xertica Education** application workspace. This project is stru
 ## Getting Started
 
 ### 1. Root Installation
-Ensure Node.js is installed, then run the workspace setup command from the monorepo root:
+This monorepo uses **pnpm** (see `packageManager` in the root `package.json` and `pnpm-workspace.yaml`). Ensure Node.js and pnpm are installed (`corepack enable` will provide pnpm), then run the workspace setup command from the monorepo root:
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2. Backend Setup (`apps/api`)
@@ -50,7 +50,7 @@ npm install
    ```
 3. Run the development server (runs FastAPI on port 8000):
    ```bash
-   npm run dev  # Triggered via package.json uv scripts at monorepo root
+   pnpm dev  # Triggered via package.json uv scripts at monorepo root
    ```
 
 ### 3. Frontend Setup (`apps/web`)
@@ -60,7 +60,7 @@ npm install
    ```
 2. Run the Next.js development server:
    ```bash
-   npm run dev --workspace=xertica-education-web
+   pnpm --filter xertica-education-web dev
    ```
 
 ---

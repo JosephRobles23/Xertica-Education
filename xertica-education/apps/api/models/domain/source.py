@@ -4,7 +4,8 @@ from typing import Optional
 
 class Source(BaseModel):
     id: Optional[UUID] = None
+    asset_id: UUID
     url: str
-    title: str
-    tipo: str  # e.g., "youtube", "google_docs", "blog_oficial"
-    verified: bool
+    title: Optional[str] = None
+    tipo: Optional[str] = None  # "youtube" | "google_docs" | "blog_oficial" | "soporte_google"
+    verificada_google: bool = False
