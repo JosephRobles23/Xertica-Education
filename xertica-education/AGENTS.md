@@ -30,11 +30,11 @@ Agents must respect file access and modification limits based on their active id
 
 | Developer | Scope / Responsibility | Primary Folders & Files |
 | :--- | :--- | :--- |
-| **joseph** | (None currently assigned) | |
-| **arantza** | Sourcing & Deep Research | `apps/api/services/sourcing.py`, `apps/api/services/sourcing/`, `apps/api/adapters/` (sourcing-related) |
-| **sebas** | Learning Path, Workflows, Jobs, KB, Video Production | `apps/api/workflows/`, `apps/api/routers/`, `apps/api/services/kb/`, `apps/api/services/jobs/`, `apps/api/services/video/`, `apps/api/repositories/`, `apps/api/models/`, `apps/api/adapters/` (video/rendering-related), `packages/types/`, `supabase/` |
-| **santiago** | Infographics & Common UI | `apps/api/services/infographic/`, `apps/web/` |
-| *Shared* | Instructional Design, UI / Docs | `apps/web/` (general UI updates), `apps/api/services/lesson/`, `apps/api/services/quiz/`, `apps/api/services/lab/`, `docs/` |
+| **joseph** | Knowledge Base & Core Persistence | `apps/api/services/kb/`, `apps/api/repositories/` |
+| **arantza** | Sourcing & Deep Research | `apps/api/services/sourcing/`, `apps/api/repositories/sourcing/`, `apps/api/adapters/parser/` |
+| **sebas** | Learning Paths, Workflows, Jobs, Video | `apps/api/services/route/`, `apps/api/services/jobs/`, `apps/api/services/video/`, `apps/api/workflows/`, `apps/api/routers/`, `apps/api/models/` |
+| **santiago** | Lessons, Quizzes, Labs, Infographics | `apps/api/services/lesson/`, `apps/api/services/quiz/`, `apps/api/services/lab/`, `apps/api/services/infographic/`, `apps/web/` |
+| *Shared* | General UI, Docs, Shared Config | `apps/web/` (general UI updates), `docs/`, `apps/api/config/` |
 
 ### 3. Execution Rules
 - **Write Actions**: You are only allowed to edit/modify files in the **Primary Folders & Files** of your active developer, or files under *Shared* directories.
