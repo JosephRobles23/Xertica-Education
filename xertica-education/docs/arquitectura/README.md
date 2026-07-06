@@ -162,13 +162,13 @@ Para garantizar la organización paralela del equipo y la resolución limpia de 
 
 | Feature / Módulo de Código | Owner | Responsabilidad Principal |
 | :--- | :--- | :--- |
-| **Learning Path & Workflows** | Joseph | Modelado de datos global (Spine), orquestación general de pipelines. |
+| **Learning Path & Workflows** | Sebas | Modelado de datos global (Spine), orquestación general de pipelines. |
 | **Jobs Service** | Joseph | Mecanismo de persistencia y seguimiento de tareas en segundo plano. |
 | **Knowledge Base (KB)** | Joseph | Ingesta, indexación vectorial, almacenamiento y consultas con citas (RAG). |
 | **Sourcing & Deep Research** | Arantza | Pipelines de búsqueda, recuperación y estructuración de fuentes. |
 | **Video Production** | Sebas | Generación de guiones, storyboard y renderizado de video asíncrono. |
 | **Infographics** | Santiago | Composición HTML y renderizado de infografías a formato PDF. |
-| **Instructional Design (Lesson/Quiz/Lab)** | Compartido | Generación de contenido didáctico basado en texto plano estructurado. |
+| **Instructional Design (Lesson/Quiz/Lab)** | Santiago | Generación de contenido didáctico basado en texto plano estructurado. |
 
 ---
 

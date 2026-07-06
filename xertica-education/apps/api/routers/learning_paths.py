@@ -1,15 +1,29 @@
+# routers/learning_paths.py
+#
+# API router managing endpoints for learning paths (also referred to as routes).
+# Handles CRUD operations, state transitions (draft, under review, generated), and triggering
+# AI-based structure generation workflows.
+#
+# Related files:
+# - services/route/service.py: Performs business logic and DB edits for learning paths.
+# - services/jobs/service.py: Creates background generation jobs.
+
 from fastapi import APIRouter, Depends, HTTPException
 from config.dependencies import get_route_service, get_jobs_service
 from services.route.service import RouteService
 from services.jobs.service import JobsService
 from typing import Dict, Any, List
 
+# Define the router namespace under `/learning-paths`.
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
 
 @router.get("/", response_model=List[Dict[str, Any]])
 async def list_learning_paths(
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Fetches a list of all existing learning paths.
+    """
     return await route_service.list_routes()
 
 @router.post("/", response_model=Dict[str, Any])
@@ -17,6 +31,14 @@ async def create_learning_path(
     payload: Dict[str, Any],
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Creates a new learning path shell.
+
+    Expects Spanish keys in payload:
+    - 'titulo': The title of the path.
+    - 'tema': The primary subject/topic.
+    - 'brief': The design description or objective.
+    """
     title = payload.get("titulo", "")
     tema = payload.get("tema", "")
     brief = payload.get("brief", "")
@@ -27,6 +49,11 @@ async def get_learning_path(
     route_id: str,
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Retrieves the complete data of a specific learning path by its ID.
+
+    Raises a 404 error if the learning path does not exist.
+    """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
@@ -38,6 +65,11 @@ async def update_learning_path(
     payload: Dict[str, Any],
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Updates fields on an existing learning path (e.g. metadata, title, modules).
+
+    Raises a 404 error if the path does not exist.
+    """
     route = await route_service.update_route(route_id, payload)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
@@ -49,6 +81,13 @@ async def generate_structure(
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service)
 ):
+    """
+    Triggers the generation of modules and contents for a learning path.
+
+    Spawns an asynchronous structure generation background job and inserts a pre-defined
+    mock structure (two modules with lessons/videos/quizzes) in draft status ('borrador')
+    for preview. Returns the job ID to allow the client to track background progress.
+    """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
@@ -93,6 +132,9 @@ async def approve_learning_path(
     route_id: str,
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Approves a proposed learning path structure, changing its status to 'en-revision'.
+    """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
@@ -107,12 +149,17 @@ async def approve_sourcing(
     route_id: str,
     route_service: RouteService = Depends(get_route_service)
 ):
+    """
+    Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
+    
+    Represents the completion of RAG/source document indexing for the learning path.
+    """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
         
-    # Transition status to "generado" (representing SOURCES_READY / pgvector RAG compiled)
     updated = await route_service.update_route(route_id, {
         "status": "generado"
     })
     return updated
+

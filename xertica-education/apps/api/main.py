@@ -1,27 +1,52 @@
+# main.py
+#
+# Entry point for the Xertica Education FastAPI application.
+# It initializes the FastAPI instance, configures CORS middleware,
+# and registers routers to expose backend endpoints for learning paths and background jobs.
+#
+# Related files:
+# - routers/jobs.py: Handles background tasks and content generation queues.
+# - routers/learning_paths.py: Core logic for curating, building, and serving learning paths.
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.jobs import router as jobs_router
 from routers.learning_paths import router as learning_paths_router
 
+# Initialize the main FastAPI application instance.
+# This object acts as the central router and coordinator for all incoming HTTP requests.
 app = FastAPI(
     title="Xertica Education API",
     description="Backend API for managing learning routes and content orchestration",
     version="0.1.0",
 )
 
-# Enable CORS for the local React/Vite frontend
+# Configure Cross-Origin Resource Sharing (CORS).
+# This middleware enables web browsers to securely make requests to this backend API
+# from a different origin (specifically, the React/Vite frontend).
+#
+# Production Note: Currently configured to allow all origins ("*"). Before production deployment,
+# restrict this to specific domain lists to prevent unauthorized cross-origin requests.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production security
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register feature-specific API routers.
+# This groups related endpoints together and prevents main.py from bloating.
 app.include_router(jobs_router)
 app.include_router(learning_paths_router)
 
 @app.get("/")
 async def root():
+    """
+    Returns a simple health check message to verify the API is running and reachable.
+    
+    Used by load balancers, monitoring tools, or developers to check basic status.
+    """
     return {"message": "Xertica Education API is active."}
+
 
