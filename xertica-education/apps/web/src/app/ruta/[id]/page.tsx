@@ -1,1 +1,1 @@
-export { default } from '@/screens/Ruta'
+export { RouteDetail as default } from '@/modules/routes'

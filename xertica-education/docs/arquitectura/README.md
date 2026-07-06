@@ -1,5 +1,7 @@
 # Xertica Education — Documento de Arquitectura Consolidado
 
+> ℹ️ **Documento complementario.** Este consolidado y **[`architecture.md`](architecture.md)** (arquitectura objetivo v0.2) se solapan en el *Spine* y los gates. Para **lineamientos de la monorepo** (pnpm, estructura web modular, estado de Supabase) y las **tareas por dev** del sprint, ver `architecture.md` §7 y §14.
+
 > **Versión:** 1.0 (Línea base para agentes de desarrollo)  
 > **Alcance:** Arquitectura general y especificaciones del MVP.  
 > **Runtime:** Google Cloud Run + Supabase Cloud.

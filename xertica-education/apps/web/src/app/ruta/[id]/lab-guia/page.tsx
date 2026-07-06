@@ -1,1 +1,1 @@
-export { default } from '@/screens/LabGuide'
+export { default } from '@/modules/lab'

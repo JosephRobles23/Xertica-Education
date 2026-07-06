@@ -17,3 +17,5 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0001](0001-pgvector-supabase-knowledge-base.md) | pgvector en Supabase como Knowledge Base | Aceptado |
 | [0002](0002-mocks-first-class-citizens.md) | Mocks como first-class citizens | Aceptado |
 | [0003](0003-domain-naming-in-english.md) | Nomenclatura del dominio en inglés | Aceptado |
+| [0004](0004-supabase-postgres-persistence.md) | Supabase Postgres como persistencia primaria | Aceptado |
+| [0005](0005-full-spine-schema.md) | Schema del Spine completo desde el día 1 | Aceptado |

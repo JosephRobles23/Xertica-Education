@@ -18,13 +18,15 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 
 | Término (dominio) | En código | Definición |
 | :--- | :--- | :--- |
-| **Ruta / Learning Path** | `LearningPath`, `RouteService`, `/learning-paths` | Currículo completo sobre un tema. Unidad de trabajo raíz. Atraviesa estados desde borrador hasta publicado. |
+| **Ruta / Learning Path** | `LearningPath`, `RouteService`, `learning_paths` | Currículo completo sobre un tema. Raíz del *Spine*. |
 | **Tema** | `tema` | Asunto sobre el que se genera la ruta (payload de creación). |
 | **Brief** | `brief` | Descripción/intención libre que el usuario da al crear una ruta. |
 | **Estructura / Currículo propuesto** | `generate-structure`, `WorkflowService` | Árbol de módulos y componentes que la IA propone y que el humano revisa en `/estructura-propuesta`. |
-| **Componente** | `models/domain/component.py` | Pieza de contenido dentro de una ruta: lección, quiz, infografía, lab o video. |
-| **Asset** | `models/domain/asset.py` | Artefacto final generado (video renderizado, PDF de infografía, etc.). |
-| **Source / Fuente** | `models/domain/source.py`, *sourcing* | Material de referencia recopilado (deep research) que alimenta la Knowledge Base. |
+| **Módulo** | `models/domain/module.py`, `modules` | Bloque de una ruta (`tipo`: intro/capsula/lab/evaluacion/cierre) con orden y duración objetivo. |
+| **Componente** | `models/domain/component.py`, `components` | Pieza de contenido de un módulo: `lesson`/`video`/`lab`/`infografia`/`quiz`. |
+| **Asset** | `models/domain/asset.py`, `assets` | Artefacto materializado de un componente, con `estado` de aprobación, `storage_path`, `word_budget`, `provenance`. |
+| **AssetVersion** | `models/domain/asset_version.py`, `asset_versions` | Versión histórica de un asset. |
+| **Source / Fuente** | `models/domain/source.py`, `sources` | Material de referencia (con `verificada_google`) que cita un asset y alimenta la KB. |
 | **KB (Knowledge Base)** | `services/kb/` | Base de conocimiento RAG construida a partir de las fuentes; alimenta la generación de contenido. |
 | **Job** | `JobsService`, `/jobs` | Unidad de trabajo asíncrona con estado y progreso. Toda generación pesada corre como job y se consulta por *polling*. |
 | **Gate (Compuerta)** | ver §3 | Punto de aprobación humana que transiciona el estado de la ruta y desbloquea la siguiente fase. |
@@ -34,8 +36,13 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 ### Estados de un Job
 `queued` → `running` → (`rendering`) → `completed` | `failed`
 
+### El *Spine* (jerarquía de dominio · [[docs/adr/0005-full-spine-schema]])
+`Ruta → Módulo → Componente → Asset → { Source, AssetVersion }`. Es el modelo compartido que leen/escriben las 4 features; se implementa completo en `supabase/migrations` aunque el MVP cargue una sola ruta.
+
 ### Estados de una Ruta (LearningPath)
-`DRAFT` → `PATH_READY` (tras Gate 0) → … → publicado. Las transiciones ocurren **solo** vía endpoints de aprobación.
+`borrador` → `en-revision` (tras Gate 0 · `/approve`) → `generado` (tras Gate 1 · `/sourcing/approve`) → `aprobado`.
+
+> **Split de `estado` (ADR-0005):** hoy la Ruta lleva un vocabulario de *aprobación* (el `ContentStatus` del frontend) — es **interino**. En el Spine, la aprobación vive en el **Asset** (`draft`/`generado`/`en_revision`/`aprobado`) y la Ruta debería llevar un *ciclo de vida* (`borrador`/`en_produccion`/`publicada`). La migración a ese split requiere desacoplar `RouteStatus` del `ContentStatus` en el frontend (contrato de API) y queda como deuda registrada.
 
 ---
 
@@ -43,8 +50,8 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 
 | Gate | Momento | Transición / efecto |
 | :--- | :--- | :--- |
-| **Gate 0 — Aprobación de currículo** | Tras proponer la estructura | `DRAFT → PATH_READY`; desbloquea las siguientes fases. Endpoint `POST /learning-paths/{id}/approve`. |
-| **Gate 1 — Sourcing** | Antes de ingestar KB | Aprueba las fuentes recopiladas por deep research. |
+| **Gate 0 — Aprobación de currículo** | Tras proponer la estructura | `borrador → en-revision`; desbloquea las siguientes fases. Endpoint `POST /learning-paths/{id}/approve`. |
+| **Gate 1 — Sourcing** | Antes de ingestar KB | `en-revision → generado`; aprueba las fuentes recopiladas. Endpoint `POST /learning-paths/{id}/sourcing/approve`. |
 | **Gate 3 — Revisión de assets (E2E)** | Antes de publicar | Revisión final de los assets generados de punta a punta. |
 
 ---
@@ -80,14 +87,15 @@ Estas reglas gobiernan cómo se construye, y son parte del contrato del dominio:
 
 ## 6. Contradicciones conocidas (a corregir, no a imitar)
 
-El `README.md` describe una arquitectura **aspiracional** que difiere del código real. La verdad de campo es:
+El `README.md` y el doc de arquitectura describen partes **aspiracionales** que aún difieren del código real. La verdad de campo es:
 
-- El frontend **no es Next.js 15 App Router**: es **Vite + React 18 + React Router 6 + Tailwind 4 + Radix UI** (estilo shadcn/ui). Ver `apps/web/`.
-- No existe (aún) la carpeta `packages/` con workspaces compartidos que menciona el README.
+- El frontend es **Next.js 14 (App Router) + React 18 + Tailwind 4 + shadcn/ui (Radix)**, modular por feature (`src/app` routing · `src/modules/*` · `src/shared/*`). El gestor de paquetes es **pnpm**. El README dice "Next.js 15" (versión aproximada, ok).
+- No existe (aún) la carpeta `packages/` con workspaces compartidos que mencionan el README y el doc de arquitectura.
 - Los servicios reales presentes son `route`, `jobs`, `video`, `workflow` (no todos los del README todavía).
-- `apps/web/src/lib/api.ts` lee `import.meta.env.NEXT_PUBLIC_API_URL`, pero Vite solo expone variables con prefijo `VITE_` → hoy siempre cae al fallback `http://localhost:8000`. Es un residuo del plan Next.js.
+- El backend usa **`uv`** (no `venv`+`pip` como dice el README).
+- **Supabase (ADR-0004):** los repos ya hacen CRUD real con fallback in-memory; la persistencia se activa al aplicar `supabase/migrations` + rellenar `apps/api/.env`. Mientras esos secretos sean placeholders, todo corre en memoria.
 
-Cuando algo aquí contradiga un ADR futuro, **decláralo explícitamente** en tu output en vez de sobrescribirlo en silencio.
+Cuando algo aquí contradiga un ADR, **decláralo explícitamente** en tu output en vez de sobrescribirlo en silencio.
 
 ---
 
@@ -101,4 +109,5 @@ Cuando algo aquí contradiga un ADR futuro, **decláralo explícitamente** en tu
 - `docs/prd/` — requisitos de producto (PRD).
 - `docs/adr/` — registro de decisiones de arquitectura (ADRs).
 - `docs/arquitectura/` — documento de arquitectura consolidado.
+- `supabase/` — schema versionado (CLI): `migrations/` + `seed.sql` (persistencia · ADR-0004).
 - `docs/agents/` — issue tracker, triage y convención de dominio.

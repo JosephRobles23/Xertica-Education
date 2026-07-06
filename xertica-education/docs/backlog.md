@@ -187,3 +187,20 @@ This backlog organizes the 5-day sprint tasks into prioritized vertical slices (
     - [ ] All 4 asset previews display generated outputs.
     - [ ] Approving assets transitions module state to `Ready for Classroom` automatically.
 *   **Blocked by:** Issue 11, Issue 12, Issue 13, Issue 14.
+
+---
+
+# Sprint actual — tareas adicionales por dev (#16+)
+
+> Las tareas del sprint actual viven como **issue-files por dev** (fuente única de verdad):
+> [`docs/issues/pending/<dev>/`](issues/pending/). Los kickoffs de cómo abordarlas con las skills están en [`docs/dev/`](dev/); los cruces de arquitectura en [`architecture.md`](arquitectura/architecture.md) §14.
+
+| # | Tarea | Owner | Issue |
+| :-- | :-- | :-- | :-- |
+| 16 | Contexto del Cliente (formulario previo a la ruta) | Arantza | [issue-16](issues/pending/arantza/issue-16-customer-context-route.md) |
+| 17 | Google Drive — ingesta de fuentes (Vía 2) | Joseph | [issue-17](issues/pending/joseph/issue-17-google-drive-source-ingestion.md) |
+| 18 | Google Drive — export de assets | Joseph | [issue-18](issues/pending/joseph/issue-18-export-assets-google-drive.md) |
+| 19 | Reutilización de videos existentes (timestamps) | Sebas | [issue-19](issues/pending/sebas/issue-19-existing-video-reuse.md) |
+| 20 | Descarga de assets por módulo (zip) | Joseph | [issue-20](issues/pending/joseph/issue-20-module-download-zip.md) |
+| 21 | Spike — límites/cuotas de Deep Research | shared | [issue-21](issues/pending/shared/issue-21-research-spike-quotas.md) |
+| 22 | Spike — procesamiento de video de larga duración | Sebas | [issue-22](issues/pending/sebas/issue-22-long-video-processing-spike.md) |

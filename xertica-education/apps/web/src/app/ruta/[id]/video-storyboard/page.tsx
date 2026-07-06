@@ -1,1 +1,1 @@
-export { default } from '@/screens/Storyboard'
+export { default } from '@/modules/video'
