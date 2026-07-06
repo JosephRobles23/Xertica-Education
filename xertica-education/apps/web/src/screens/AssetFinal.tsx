@@ -1,4 +1,7 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+'use client'
+
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowRight, CircleCheck, FileImage, FlaskConical, ListChecks, RefreshCcw, ShieldCheck, Video as VideoIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -13,8 +16,8 @@ import { LabView } from '@/components/content/LabView'
 import { getRoute } from '@/data/routes'
 
 export default function AssetFinal() {
-  const { id } = useParams()
-  const nav = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const route = getRoute(id)
 
   if (!route) {
@@ -22,7 +25,7 @@ export default function AssetFinal() {
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>
         <Button asChild className="mt-6">
-          <Link to="/">Volver a las rutas</Link>
+          <Link href="/">Volver a las rutas</Link>
         </Button>
       </div>
     )
@@ -30,7 +33,7 @@ export default function AssetFinal() {
 
   const approve = () => {
     toast.success('Asset aprobado', { description: 'Publicando a Google Classroom…' })
-    nav(`/ruta/${route.id}/publicado`)
+    router.push(`/ruta/${route.id}/publicado`)
   }
 
   return (

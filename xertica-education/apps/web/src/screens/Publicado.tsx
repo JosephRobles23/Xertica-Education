@@ -1,4 +1,7 @@
-import { Link, useParams } from 'react-router-dom'
+'use client'
+
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { Check, CircleCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -6,7 +9,7 @@ import { PageTitle } from '@/components/PageHeader'
 import { getRoute } from '@/data/routes'
 
 export default function Publicado() {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const route = getRoute(id)
 
   if (!route) {
@@ -14,7 +17,7 @@ export default function Publicado() {
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>
         <Button asChild className="mt-6">
-          <Link to="/">Volver a las rutas</Link>
+          <Link href="/">Volver a las rutas</Link>
         </Button>
       </div>
     )
@@ -70,10 +73,10 @@ export default function Publicado() {
 
       <div className="flex justify-center gap-3">
         <Button asChild>
-          <Link to={`/ruta/${route.id}`}>Volver a la ruta</Link>
+          <Link href={`/ruta/${route.id}`}>Volver a la ruta</Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link to="/">Ver todas las rutas</Link>
+          <Link href="/">Ver todas las rutas</Link>
         </Button>
       </div>
     </div>

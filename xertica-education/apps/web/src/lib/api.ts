@@ -1,6 +1,6 @@
 // Centralized API client for Xertica Education backend
 
-const BASE_URL = import.meta.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface JobState {
   id: string;

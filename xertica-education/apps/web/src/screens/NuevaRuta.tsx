@@ -1,5 +1,7 @@
+'use client'
+
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useRouter } from 'next/navigation'
 import { ArrowRight, CheckCircle2, FileText, MonitorPlay, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -14,7 +16,7 @@ import { useStore } from '@/store'
 import { api } from '@/lib/api'
 
 export default function NuevaRuta() {
-  const nav = useNavigate()
+  const router = useRouter()
   const {
     briefText, setBriefText,
     deepResearch, setDeepResearch,
@@ -60,7 +62,7 @@ export default function NuevaRuta() {
         id: toastId,
         description: 'Revisa, reordena y cura los módulos antes de aprobar.',
       })
-      nav('/estructura-propuesta')
+      router.push('/estructura-propuesta')
     } catch (err) {
       console.error(err)
       toast.error('Error al generar la estructura', {

@@ -1,5 +1,8 @@
+'use client'
+
 import { Fragment, type ReactNode } from 'react'
-import { Link, matchPath, useLocation } from 'react-router-dom'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getRoute } from '@/data/routes'
@@ -13,27 +16,23 @@ interface Crumb {
 
 function crumbsFor(pathname: string): Crumb[] {
   const rutas: Crumb = { label: 'Rutas', to: '/' }
+  const seg = pathname.split('/').filter(Boolean)
 
-  const m = (pattern: string) => matchPath(pattern, pathname)
-
-  if (m('/')) return [{ label: 'Rutas', accent: 'ink' }]
-  if (m('/nueva-ruta')) return [rutas, { label: 'Nueva ruta', accent: 'ink' }]
-  if (m('/estructura-propuesta'))
+  if (pathname === '/') return [{ label: 'Rutas', accent: 'ink' }]
+  if (pathname === '/nueva-ruta') return [rutas, { label: 'Nueva ruta', accent: 'ink' }]
+  if (pathname === '/estructura-propuesta')
     return [rutas, { label: 'Nueva ruta', to: '/nueva-ruta' }, { label: 'Estructura propuesta', accent: 'ink' }]
-  if (m('/biblioteca')) return [{ label: 'Biblioteca', accent: 'ink' }]
+  if (pathname === '/biblioteca') return [{ label: 'Biblioteca', accent: 'ink' }]
 
-  const routeMatch =
-    m('/ruta/:id/video-storyboard') ?? m('/ruta/:id/lab-guia') ?? m('/ruta/:id/asset-final') ?? m('/ruta/:id/publicado') ?? m('/ruta/:id')
-  if (routeMatch) {
-    const id = routeMatch.params.id
+  if (seg[0] === 'ruta' && seg[1]) {
+    const id = seg[1]
+    const sub = seg[2]
     const route = getRoute(id)
-    const base: Crumb = { label: `Ruta ${id ?? ''}`, to: `/ruta/${id ?? ''}` }
-    if (m('/ruta/:id/video-storyboard'))
-      return [rutas, base, { label: 'Guion y storyboard', accent: 'ink' }]
-    if (m('/ruta/:id/lab-guia'))
-      return [rutas, base, { label: 'Guía del laboratorio', accent: 'ink' }]
-    if (m('/ruta/:id/asset-final')) return [rutas, base, { label: 'Asset final', accent: 'ink' }]
-    if (m('/ruta/:id/publicado')) return [rutas, base, { label: 'Publicado', accent: 'success' }]
+    const base: Crumb = { label: `Ruta ${id}`, to: `/ruta/${id}` }
+    if (sub === 'video-storyboard') return [rutas, base, { label: 'Guion y storyboard', accent: 'ink' }]
+    if (sub === 'lab-guia') return [rutas, base, { label: 'Guía del laboratorio', accent: 'ink' }]
+    if (sub === 'asset-final') return [rutas, base, { label: 'Asset final', accent: 'ink' }]
+    if (sub === 'publicado') return [rutas, base, { label: 'Publicado', accent: 'success' }]
     return [rutas, { label: route ? `Ruta ${route.id}` : 'Ruta', accent: 'ink' }]
   }
   return [{ label: 'Rutas', accent: 'ink' }]
@@ -46,14 +45,14 @@ const NAV = [
 ] as const
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation()
+  const pathname = usePathname()
   const crumbs = crumbsFor(pathname)
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* TOPBAR */}
       <header className="sticky top-0 z-20 flex h-[62px] flex-none items-center gap-5 border-b-[1.5px] bg-card px-6">
-        <Link to="/" className="flex items-center gap-2.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 rounded-lg">
+        <Link href="/" className="flex items-center gap-2.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 rounded-lg">
           <span className="flex size-[30px] items-center justify-center rounded-lg bg-gradient-to-br from-primary to-fuchsia-500 font-display text-[17px] font-bold text-white shadow-[0_3px_10px_rgba(124,58,237,.35)]">
             X
           </span>
@@ -67,7 +66,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <Fragment key={`${c.label}-${i}`}>
               {i > 0 && <ChevronRight className="size-3 text-input" />}
               {c.to ? (
-                <Link to={c.to} className="text-muted-foreground transition-colors hover:text-ink">
+                <Link href={c.to} className="text-muted-foreground transition-colors hover:text-ink">
                   {c.label}
                 </Link>
               ) : (
@@ -102,7 +101,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             const item = (
               <Link
                 key={n.label}
-                to={n.to}
+                href={n.to}
                 aria-disabled={!n.enabled}
                 className={cn(
                   'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
