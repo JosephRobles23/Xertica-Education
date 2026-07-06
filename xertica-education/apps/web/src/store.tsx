@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { ContentKind, ContentStatus, ProposalModule } from '@/lib/types'
 import { INITIAL_PROPOSAL } from '@/data/routes'
+import { api, type JobState } from '@/lib/api'
 
 /** Clave estable para el estado de un contenido concreto. */
 const contentKey = (routeId: string, moduleId: string, kind: ContentKind) =>
@@ -59,6 +60,10 @@ interface AppStore {
 
   isGenerated: (routeId: string) => boolean
   markGenerated: (routeId: string) => void
+
+  /* Jobs */
+  activeJobs: Record<string, JobState>
+  trackJob: (jobId: string) => Promise<JobState>
 }
 
 const Ctx = createContext<AppStore | null>(null)
@@ -81,6 +86,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [storyboardOk, setStoryboardOk] = useState<Record<string, boolean>>({})
   const [labGuideOk, setLabGuideOk] = useState<Record<string, boolean>>({})
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
+
+  const [activeJobs, setActiveJobs] = useState<Record<string, JobState>>({})
+
+  const trackJob = useCallback(async (jobId: string) => {
+    try {
+      const initialJob = await api.getJob(jobId)
+      setActiveJobs((prev) => ({ ...prev, [jobId]: initialJob }))
+    } catch (e) {
+      console.error("Failed to fetch initial job state", e)
+    }
+
+    return api.pollJob(jobId, (job) => {
+      setActiveJobs((prev) => ({ ...prev, [jobId]: job }))
+    })
+  }, [])
 
   /* ── Proposal ─────────────────────────────────────────────── */
   const reorderProposal = useCallback((activeId: string, overId: string) => {
@@ -191,6 +211,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
+      activeJobs, trackJob,
     }),
     [
       briefText, deepResearch, uploadedStructure, proposal,
@@ -200,6 +221,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
+      activeJobs, trackJob,
     ],
   )
 
