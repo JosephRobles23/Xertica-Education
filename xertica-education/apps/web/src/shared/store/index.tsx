@@ -7,13 +7,57 @@ import {
   useEffect,
   type ReactNode,
 } from 'react'
-import type { ContentKind, ContentStatus, ProposalModule, LearningRoute, RouteModule } from '@/shared/lib/types'
+import type {
+  ContentKind,
+  ContentStatus,
+  CustomerContext,
+  LearningRoute,
+  ProposalModule,
+  RouteModule,
+  Source,
+} from '@/shared/lib/types'
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
 
 /** Clave estable para el estado de un contenido concreto. */
 const contentKey = (routeId: string, moduleId: string, kind: ContentKind) =>
   `${routeId}:${moduleId}:${kind}` as const
+
+type ApiLearningRoute = Omit<LearningRoute, 'id'> & { id: string }
+
+const hasContentfulModules = (route: ApiLearningRoute) =>
+  Array.isArray(route.modules) &&
+  route.modules.length > 0 &&
+  route.modules.some((module) => Array.isArray(module.contents) && module.contents.length > 0)
+
+const hydrateRoute = (route: ApiLearningRoute): LearningRoute => {
+  const mockRoute = ROUTES.find((item) => item.id === route.id)
+
+  if (!mockRoute) {
+    return route as LearningRoute
+  }
+
+  return {
+    ...mockRoute,
+    name: route.name || mockRoute.name,
+    status: route.status || mockRoute.status,
+    objective: route.objective || mockRoute.objective,
+    sources: route.sources?.length ? route.sources : mockRoute.sources,
+    pack: route.pack || mockRoute.pack,
+    modules: hasContentfulModules(route) ? route.modules : mockRoute.modules,
+  }
+}
+
+const hydrateRoutes = (apiRoutes: readonly ApiLearningRoute[]): readonly LearningRoute[] => {
+  const apiById = new Map(apiRoutes.map((route) => [route.id, route]))
+  const hydratedMocks = ROUTES.map((route) => {
+    const apiRoute = apiById.get(route.id)
+    return apiRoute ? hydrateRoute(apiRoute) : route
+  })
+  const newRoutes = apiRoutes.filter((route) => !ROUTES.some((mockRoute) => mockRoute.id === route.id))
+
+  return [...hydratedMocks, ...newRoutes.map(hydrateRoute)]
+}
 
 export interface UploadedStructure {
   name: string
@@ -26,6 +70,8 @@ interface AppStore {
   setBriefText: (v: string) => void
   deepResearch: boolean
   setDeepResearch: (v: boolean) => void
+  customerContext: CustomerContext
+  setCustomerContext: (v: CustomerContext) => void
   uploadedStructure: UploadedStructure | null
   setUploadedStructure: (v: UploadedStructure | null) => void
 
@@ -70,6 +116,7 @@ interface AppStore {
   routes: readonly LearningRoute[]
   fetchRoutes: () => Promise<void>
   updateRoute: (id: string, data: Partial<LearningRoute>) => Promise<void>
+  replaceRouteSources: (id: string, sources: readonly Source[]) => void
   activeRouteId: string | null
   setActiveRouteId: (id: string | null) => void
 
@@ -88,6 +135,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     'Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio — del concepto al laboratorio, cerrando con una evaluación de dominio. Público: equipos técnicos y de negocio.',
   )
   const [deepResearch, setDeepResearch] = useState(false)
+  const [customerContext, setCustomerContext] = useState<CustomerContext>({})
   const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
 
   const [proposal, setProposal] = useState<readonly ProposalModule[]>(INITIAL_PROPOSAL)
@@ -104,8 +152,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const fetchRoutes = useCallback(async () => {
     try {
-      const data = await api.request<LearningRoute[]>('/learning-paths/')
-      setRoutes(data)
+      const data = await api.request<ApiLearningRoute[]>('/learning-paths/')
+      setRoutes(hydrateRoutes(data))
     } catch (e) {
       console.error('Failed to fetch routes', e)
     }
@@ -113,14 +161,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const updateRoute = useCallback(async (id: string, data: Partial<LearningRoute>) => {
     try {
-      const updated = await api.request<LearningRoute>(`/learning-paths/${id}`, {
+      const updated = await api.request<ApiLearningRoute>(`/learning-paths/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data)
       })
-      setRoutes((prev) => prev.map((r) => (r.id === id ? updated : r)))
+      setRoutes((prev) => prev.map((r) => (r.id === id ? hydrateRoute(updated) : r)))
     } catch (e) {
       console.error('Failed to update route', e)
     }
+  }, [])
+
+  const replaceRouteSources = useCallback((id: string, sources: readonly Source[]) => {
+    setRoutes((prev) => prev.map((route) => (route.id === id ? { ...route, sources } : route)))
+    setDiscarded((prev) => ({ ...prev, [id]: [] }))
+    setCorpusApproved((prev) => ({ ...prev, [id]: false }))
   }, [])
 
   useEffect(() => {
@@ -295,6 +349,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => ({
       briefText, setBriefText,
       deepResearch, setDeepResearch,
+      customerContext, setCustomerContext,
       uploadedStructure, setUploadedStructure,
       proposal, reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
@@ -302,19 +357,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute,
+      routes, fetchRoutes, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     }),
     [
-      briefText, deepResearch, uploadedStructure, proposal,
+      briefText, deepResearch, customerContext, uploadedStructure, proposal,
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute,
+      routes, fetchRoutes, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     ],

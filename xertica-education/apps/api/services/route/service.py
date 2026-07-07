@@ -3,6 +3,15 @@ from typing import Dict, Any, List, Optional
 from models.domain.learning_path import LearningPath
 from repositories.learning_path.interface import LearningPathRepositoryInterface
 
+def _empty_pack() -> Dict[str, Any]:
+    return {
+        "lesson": { "sections": [], "terms": [] },
+        "video": { "duration": "00:00", "caption": "", "gradient": "", "emoji": "", "segments": [] },
+        "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
+        "quiz": { "questions": [] },
+        "lab": { "steps": [], "console": [] }
+    }
+
 class RouteService:
     def __init__(self, repository: LearningPathRepositoryInterface):
         self.repository = repository
@@ -14,6 +23,7 @@ class RouteService:
         
         self._details[id1] = {
             "objective": "Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio.",
+            "customerContext": {},
             "sources": [
                 { "title": "Cómo razonan los modelos de última generación", "plat": "YouTube", "verified": True, "quote": "El razonamiento en cadena permite..." },
                 { "title": "Gemini para educadores", "plat": "Google Docs", "verified": True, "quote": "..." }
@@ -32,6 +42,7 @@ class RouteService:
         
         self._details[id2] = {
             "objective": "Explorar la generación creativa con criterio.",
+            "customerContext": {},
             "sources": [],
             "pack": {
                 "lesson": { "sections": [], "terms": [] },
@@ -71,14 +82,9 @@ class RouteService:
             short_id = self._get_short_id(u_id)
             det = self._details.get(u_id, {
                 "objective": f"Aprender sobre {path.tema}",
+                "customerContext": {},
                 "sources": [],
-                "pack": {
-                    "lesson": { "sections": [], "terms": [] },
-                    "video": { "duration": "00:00", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                    "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                    "quiz": { "questions": [] },
-                    "lab": { "steps": [], "console": [] }
-                },
+                "pack": _empty_pack(),
                 "modules": []
             })
             routes.append({
@@ -89,22 +95,24 @@ class RouteService:
             })
         return routes
 
-    async def create_route(self, title: str, tema: str, brief: str) -> Dict[str, Any]:
+    async def create_route(
+        self,
+        title: str,
+        tema: str,
+        brief: str,
+        customer_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         path = LearningPath(titulo=title, tema=tema, estado="borrador")
         created_path = await self.repository.create(path)
         u_id = created_path.id
         short_id = self._get_short_id(u_id)
+        context = customer_context or {}
         
         self._details[u_id] = {
             "objective": brief or f"Aprender sobre {tema}",
+            "customerContext": context,
             "sources": [],
-            "pack": {
-                "lesson": { "sections": [], "terms": [] },
-                "video": { "duration": "00:00", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                "quiz": { "questions": [] },
-                "lab": { "steps": [], "console": [] }
-            },
+            "pack": _empty_pack(),
             "modules": []
         }
         
@@ -124,14 +132,9 @@ class RouteService:
         short_id = self._get_short_id(u_id)
         det = self._details.get(u_id, {
             "objective": f"Aprender sobre {path.tema}",
+            "customerContext": {},
             "sources": [],
-            "pack": {
-                "lesson": { "sections": [], "terms": [] },
-                "video": { "duration": "00:00", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                "quiz": { "questions": [] },
-                "lab": { "steps": [], "console": [] }
-            },
+            "pack": _empty_pack(),
             "modules": []
         })
         
@@ -160,14 +163,9 @@ class RouteService:
         if u_id not in self._details:
             self._details[u_id] = {
                 "objective": f"Aprender sobre {path.tema}",
+                "customerContext": {},
                 "sources": [],
-                "pack": {
-                    "lesson": { "sections": [], "terms": [] },
-                    "video": { "duration": "00:00", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                    "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                    "quiz": { "questions": [] },
-                    "lab": { "steps": [], "console": [] }
-                },
+                "pack": _empty_pack(),
                 "modules": []
             }
             

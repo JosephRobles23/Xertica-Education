@@ -11,9 +11,12 @@ import {
   ChevronRight,
   CircleCheck,
   Clapperboard,
+  ExternalLink,
+  FileText,
   FlaskConical,
   Info,
   Loader2,
+  Search,
   ShieldCheck,
   Sparkles,
   Wand2,
@@ -50,11 +53,34 @@ function SourceCard({
   onDiscard: () => void
 }) {
   const [videoOpen, setVideoOpen] = useState(false)
+  const requiresReview = source.status === 'requires-review' || !source.verified
 
   return (
     <Card className="gap-3 p-4.5">
       <div className="flex items-start gap-3.5">
         <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {source.toolName && (
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                {source.toolName}
+              </span>
+            )}
+            {source.kind && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.kind === 'youtube' ? (
+                  <Clapperboard className="size-3" />
+                ) : (
+                  <FileText className="size-3" />
+                )}
+                {source.kind === 'youtube' ? 'video' : 'documentación'}
+              </span>
+            )}
+            {source.relevanceScore !== undefined && (
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.relevanceScore}% match
+              </span>
+            )}
+          </div>
           <h3 className="mb-2 font-display text-[15.5px] font-medium leading-snug text-ink">
             {source.title}
           </h3>
@@ -64,12 +90,17 @@ function SourceCard({
             </span>
             {source.verified ? (
               <Badge variant="success">
-                <ShieldCheck className="size-3" /> Verificada Google
+                <ShieldCheck className="size-3" /> Verificada
               </Badge>
             ) : (
               <Badge variant="destructive">
-                <AlertTriangle className="size-3" /> Sin verificar
+                <AlertTriangle className="size-3" /> Requiere revisión
               </Badge>
+            )}
+            {source.suggestedUse && (
+              <span className="rounded-md bg-accent px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                uso: {source.suggestedUse}
+              </span>
             )}
           </div>
         </div>
@@ -82,6 +113,29 @@ function SourceCard({
       <blockquote className="border-l-[3px] border-accent pl-3.5 text-[13.5px] italic leading-relaxed">
         {source.quote}
       </blockquote>
+      {source.verificationReason && (
+        <div
+          className={cn(
+            'flex items-start gap-2 rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed',
+            requiresReview ? 'bg-destructive/8' : 'bg-success/10',
+          )}
+        >
+          {requiresReview ? (
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+          ) : (
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+          )}
+          <span>{source.verificationReason}</span>
+        </div>
+      )}
+      {source.url && (
+        <Button asChild variant="ghost" size="sm" className="w-fit px-0">
+          <a href={source.url} target="_blank" rel="noreferrer">
+            {requiresReview && source.kind === 'youtube' ? 'Abrir canal candidato' : 'Abrir fuente concreta'}
+            <ExternalLink className="size-3.5" />
+          </a>
+        </Button>
+      )}
       {source.videoPreview && (
         <SourceVideoPreview
           preview={source.videoPreview}
@@ -100,12 +154,18 @@ function CorpusSection({ route }: { route: LearningRoute }) {
   const discarded = discardedSources(route.id)
   const sources = route.sources.filter((_, i) => !discarded.includes(i))
   const verified = sources.filter((s) => s.verified).length
+  const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
+    const key = source.toolName || 'Fuentes generales'
+    groups[key] = [...(groups[key] ?? []), { source, index: route.sources.indexOf(source) }]
+    return groups
+  }, {})
+  const detectedTools = Object.keys(groupedSources)
 
   return (
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <h2 className="font-display text-xl font-medium text-ink">Revisar corpus de fuentes</h2>
+          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
           {approved && (
             <Badge variant="success">
               <Check className="size-3" /> aprobado
@@ -119,29 +179,44 @@ function CorpusSection({ route }: { route: LearningRoute }) {
 
       {!approved && (
         <div className="mb-4 flex items-start gap-3 rounded-xl bg-secondary px-4.5 py-3.5">
-          <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <Search className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="text-[13px] leading-relaxed">
-            Aprueba las fuentes antes de que aterricen en el contenido. Solo se admiten fuentes
-            verificables de Google. Descarta cualquier fuente sin verificar antes de continuar.
+            Aprueba las fuentes antes de que aterricen en el contenido. El agente prioriza canales
+            y dominios verificados por herramienta/vendor; deja en revisión lo que no pase la
+            política.
           </p>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        {route.sources.map((f, i) => {
-          if (discarded.includes(i)) return null
-          return (
-            <SourceCard
-              key={f.title}
-              source={f}
-              approved={approved}
-              onDiscard={() => {
-                discardSource(route.id, i)
-                toast.info('Fuente descartada', { description: f.title })
-              }}
-            />
-          )
-        })}
+        {detectedTools.map((tool) => (
+          <div key={tool} className="rounded-xl border-[1.5px] border-secondary p-3">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <h3 className="font-display text-[15px] font-medium text-ink">{tool}</h3>
+                <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+                  {groupedSources[tool]?.length ?? 0} fuentes candidatas
+                </p>
+              </div>
+              <Badge variant="outline">
+                {groupedSources[tool]?.filter((item) => item.source.verified).length ?? 0} verificadas
+              </Badge>
+            </div>
+            <div className="flex flex-col gap-3">
+              {groupedSources[tool]?.map(({ source, index }) => (
+                <SourceCard
+                  key={`${source.title}-${index}`}
+                  source={source}
+                  approved={approved}
+                  onDiscard={() => {
+                    discardSource(route.id, index)
+                    toast.info('Fuente descartada', { description: source.title })
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {!approved && (
@@ -149,12 +224,12 @@ function CorpusSection({ route }: { route: LearningRoute }) {
           <Button
             onClick={() => {
               approveCorpus(route.id)
-              toast.success('Corpus aprobado', {
+              toast.success('Fuentes aprobadas', {
                 description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
               })
             }}
           >
-            Aprobar corpus <ArrowRight />
+            Aprobar fuentes <ArrowRight />
           </Button>
         </div>
       )}
@@ -182,14 +257,14 @@ function ContentRow({
   const isLab = content.kind === 'lab'
   const storyboardOk = isStoryboardApproved(route.id)
   const labGuideOk = isLabGuideApproved(route.id)
-  const videoBlocked = isVideo && status !== 'aprobado' && !storyboardOk
-  const labBlocked = isLab && status !== 'aprobado' && !labGuideOk
+  const videoNeedsReview = isVideo && status !== 'aprobado' && !storyboardOk
+  const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
 
   const approveButton = (
     <Button
       variant={status === 'aprobado' ? 'outline' : 'success'}
       size="sm"
-      disabled={status === 'aprobado' || videoBlocked || labBlocked}
+      disabled={status === 'aprobado'}
       onClick={() => {
         approveContent(route.id, module.id, content.kind)
         toast.success(`${label} aprobado`, { description: `${module.name} · ${route.name}` })
@@ -229,7 +304,7 @@ function ContentRow({
             {content.summary}
           </p>
 
-          {videoBlocked && (
+          {videoNeedsReview && (
             <button
               type="button"
               onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
@@ -241,7 +316,7 @@ function ContentRow({
                   Revisar guion y storyboard
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El video requiere aprobar guion y storyboard antes de generarse.
+                  Recomendado para validar el guion. También puedes aprobar el video directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -255,7 +330,7 @@ function ContentRow({
             </div>
           )}
 
-          {labBlocked && (
+          {labNeedsReview && (
             <button
               type="button"
               onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
@@ -267,7 +342,7 @@ function ContentRow({
                   Personalizar guía del laboratorio
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El laboratorio requiere aprobar la guía paso a paso antes de generarse.
+                  Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -287,20 +362,7 @@ function ContentRow({
           </div>
 
           <div className="flex gap-2.5">
-            {videoBlocked || labBlocked ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>{approveButton}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {videoBlocked
-                    ? 'Primero aprueba el guion y storyboard'
-                    : 'Primero aprueba la guía del laboratorio'}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              approveButton
-            )}
+            {approveButton}
             <RefinePopover
               label={label}
               onRefine={() => refineContent(route.id, module.id, content.kind)}
@@ -474,7 +536,7 @@ export default function Ruta() {
               </>
             ) : (
               <>
-                <b className="text-ink">Aprueba el corpus</b> para habilitar la generación de
+                <b className="text-ink">Aprueba las fuentes</b> para habilitar la generación de
                 contenido.
               </>
             )}
@@ -486,7 +548,7 @@ export default function Ruta() {
               <TooltipTrigger asChild>
                 <span>{generateButton}</span>
               </TooltipTrigger>
-              <TooltipContent>Primero aprueba el corpus de fuentes</TooltipContent>
+              <TooltipContent>Primero aprueba las fuentes</TooltipContent>
             </Tooltip>
           )}
         </div>

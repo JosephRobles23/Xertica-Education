@@ -120,7 +120,32 @@ export interface Source {
   plat: string
   verified: boolean
   quote: string
+  url?: string
+  kind?: 'youtube' | 'documentation' | 'article'
+  toolName?: string
+  vendor?: string
+  verificationReason?: string
+  relevanceScore?: number
+  suggestedUse?: 'lesson' | 'video' | 'lab' | 'quiz' | 'general'
+  status?: 'approved' | 'requires-review' | 'rejected'
   videoPreview?: SourceVideoPreview
+}
+
+export type CustomerArea = 'RRHH' | 'Finanzas' | 'TI' | 'Educacion' | 'Salud' | 'General'
+export type GoogleWorkspaceUsage = 'yes' | 'no' | 'unknown'
+
+export interface CustomerContext {
+  url?: string
+  industry?: string
+  area?: CustomerArea
+  usesGoogleWorkspace?: GoogleWorkspaceUsage
+  audienceLevel?: string
+  baseMaterialFile?: {
+    name: string
+    type: string
+    sizeKb: number
+  }
+  inferredFrom?: readonly ('url' | 'brief' | 'material')[]
 }
 
 export type RouteId = '01' | '02' | '03' | '04' | '05' | '06' | '07'
@@ -130,6 +155,7 @@ export interface LearningRoute {
   name: string
   status: ContentStatus
   objective: string
+  customerContext?: CustomerContext
   sources: readonly Source[]
   pack: ContentPack
   modules: readonly RouteModule[]

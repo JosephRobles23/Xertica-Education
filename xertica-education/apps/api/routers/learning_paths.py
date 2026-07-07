@@ -9,9 +9,10 @@
 # - services/jobs/service.py: Creates background generation jobs.
 
 from fastapi import APIRouter, Depends, HTTPException
-from config.dependencies import get_route_service, get_jobs_service
+from config.dependencies import get_route_service, get_jobs_service, get_research_service
 from services.route.service import RouteService
 from services.jobs.service import JobsService
+from services.research.service import ResearchService
 from typing import Dict, Any, List
 
 # Define the router namespace under `/learning-paths`.
@@ -42,7 +43,8 @@ async def create_learning_path(
     title = payload.get("titulo", "")
     tema = payload.get("tema", "")
     brief = payload.get("brief", "")
-    return await route_service.create_route(title, tema, brief)
+    customer_context = payload.get("customerContext") or payload.get("customer_context") or {}
+    return await route_service.create_route(title, tema, brief, customer_context)
 
 @router.get("/{route_id}", response_model=Dict[str, Any])
 async def get_learning_path(
@@ -78,6 +80,7 @@ async def update_learning_path(
 @router.post("/{route_id}/generate-structure", response_model=Dict[str, Any])
 async def generate_structure(
     route_id: str,
+    payload: Dict[str, Any] | None = None,
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service)
 ):
@@ -94,38 +97,85 @@ async def generate_structure(
         
     job_id = await jobs_service.create_job("structure_generation")
     
+    customer_context = (payload or {}).get("customerContext") or route.get("customerContext", {}) or {}
+    area = customer_context.get("area") or "General"
+    industry = customer_context.get("industry") or "contexto del cliente"
+    audience = customer_context.get("audienceLevel") or "la audiencia objetivo"
+    workspace_note = (
+        " con Google Workspace"
+        if customer_context.get("usesGoogleWorkspace") == "yes"
+        else ""
+    )
+
     mock_modules = [
         {
             "id": "r1m1",
             "num": "01",
-            "name": "Introducción a la IA avanzada (Generado)",
+            "name": f"Fundamentos aplicados para {area} ({industry})",
             "type": "intro",
             "status": "borrador",
             "contents": [
-                { "kind": "lesson", "status": "borrador", "summary": "Texto base introductorio." },
-                { "kind": "video", "status": "borrador", "summary": "Cápsula de video explicativa." },
-                { "kind": "quiz", "status": "borrador", "summary": "Evaluación breve." }
+                { "kind": "lesson", "status": "borrador", "summary": f"Conceptos base adaptados a {industry} y {audience}." },
+                { "kind": "video", "status": "borrador", "summary": f"Cápsula con ejemplos del área {area}{workspace_note}." },
+                { "kind": "quiz", "status": "borrador", "summary": "Evaluación breve con situaciones del cliente." }
             ]
         },
         {
             "id": "r1m2",
             "num": "02",
-            "name": "Cápsulas de concepto (Generado)",
-            "type": "cápsulas",
+            "name": f"Laboratorio contextualizado para {area}",
+            "type": "laboratorio",
             "status": "borrador",
             "contents": [
-                { "kind": "lesson", "status": "borrador", "summary": "Temas de profundidad." },
-                { "kind": "infografia", "status": "borrador", "summary": "Infografía resumen." }
+                { "kind": "lesson", "status": "borrador", "summary": "Buenas prácticas y criterios de adopción." },
+                { "kind": "infografia", "status": "borrador", "summary": f"Mapa visual de casos de uso en {industry}." },
+                { "kind": "lab", "status": "borrador", "summary": f"Actividad práctica basada en propuesta, temario o notas del cliente{workspace_note}." }
             ]
         }
     ]
     
     await route_service.update_route(route_id, {
         "status": "borrador",
-        "modules": mock_modules
+        "modules": mock_modules,
+        "customerContext": customer_context,
     })
     
     return {"job_id": job_id}
+
+@router.post("/{route_id}/deep-research", response_model=Dict[str, Any])
+async def run_deep_research(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    research_service: ResearchService = Depends(get_research_service)
+):
+    """
+    Runs a tool-aware deep research pass for a learning path.
+
+    The current implementation is deterministic and mock-backed so the full UX can
+    be tested before wiring real YouTube/search providers. It detects tools from
+    the brief/modules, applies vendor-specific allowlists, and persists the source
+    candidates on the route details.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    research = research_service.run({
+        "route_name": route.get("name", ""),
+        "brief": payload.get("brief", route.get("objective", "")),
+        "modules": route.get("modules", []),
+        "customer_context": payload.get("customerContext") or route.get("customerContext", {}),
+    })
+    updated = await route_service.update_route(route_id, {
+        "sources": research["sources"]
+    })
+
+    return {
+        "detected_tools": research["detected_tools"],
+        "sources": research["sources"],
+        "route": updated,
+    }
 
 @router.post("/{route_id}/approve", response_model=Dict[str, Any])
 async def approve_learning_path(
@@ -162,4 +212,3 @@ async def approve_sourcing(
         "status": "generado"
     })
     return updated
-
