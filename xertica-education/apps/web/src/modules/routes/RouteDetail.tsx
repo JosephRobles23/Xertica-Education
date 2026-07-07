@@ -105,7 +105,7 @@ function CorpusSection({ route }: { route: LearningRoute }) {
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <h2 className="font-display text-xl font-medium text-ink">Revisar corpus de fuentes</h2>
+          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
           {approved && (
             <Badge variant="success">
               <Check className="size-3" /> aprobado
@@ -149,12 +149,12 @@ function CorpusSection({ route }: { route: LearningRoute }) {
           <Button
             onClick={() => {
               approveCorpus(route.id)
-              toast.success('Corpus aprobado', {
+              toast.success('Fuentes aprobadas', {
                 description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
               })
             }}
           >
-            Aprobar corpus <ArrowRight />
+            Aprobar fuentes <ArrowRight />
           </Button>
         </div>
       )}
@@ -182,14 +182,14 @@ function ContentRow({
   const isLab = content.kind === 'lab'
   const storyboardOk = isStoryboardApproved(route.id)
   const labGuideOk = isLabGuideApproved(route.id)
-  const videoBlocked = isVideo && status !== 'aprobado' && !storyboardOk
-  const labBlocked = isLab && status !== 'aprobado' && !labGuideOk
+  const videoNeedsReview = isVideo && status !== 'aprobado' && !storyboardOk
+  const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
 
   const approveButton = (
     <Button
       variant={status === 'aprobado' ? 'outline' : 'success'}
       size="sm"
-      disabled={status === 'aprobado' || videoBlocked || labBlocked}
+      disabled={status === 'aprobado'}
       onClick={() => {
         approveContent(route.id, module.id, content.kind)
         toast.success(`${label} aprobado`, { description: `${module.name} · ${route.name}` })
@@ -229,7 +229,7 @@ function ContentRow({
             {content.summary}
           </p>
 
-          {videoBlocked && (
+          {videoNeedsReview && (
             <button
               type="button"
               onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
@@ -241,7 +241,7 @@ function ContentRow({
                   Revisar guion y storyboard
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El video requiere aprobar guion y storyboard antes de generarse.
+                  Recomendado para validar el guion. También puedes aprobar el video directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -255,7 +255,7 @@ function ContentRow({
             </div>
           )}
 
-          {labBlocked && (
+          {labNeedsReview && (
             <button
               type="button"
               onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
@@ -267,7 +267,7 @@ function ContentRow({
                   Personalizar guía del laboratorio
                 </span>
                 <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  El laboratorio requiere aprobar la guía paso a paso antes de generarse.
+                  Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
                 </span>
               </span>
               <ArrowRight className="size-4 text-primary" />
@@ -287,20 +287,7 @@ function ContentRow({
           </div>
 
           <div className="flex gap-2.5">
-            {videoBlocked || labBlocked ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>{approveButton}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {videoBlocked
-                    ? 'Primero aprueba el guion y storyboard'
-                    : 'Primero aprueba la guía del laboratorio'}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              approveButton
-            )}
+            {approveButton}
             <RefinePopover
               label={label}
               onRefine={() => refineContent(route.id, module.id, content.kind)}
@@ -474,7 +461,7 @@ export default function Ruta() {
               </>
             ) : (
               <>
-                <b className="text-ink">Aprueba el corpus</b> para habilitar la generación de
+                <b className="text-ink">Aprueba las fuentes</b> para habilitar la generación de
                 contenido.
               </>
             )}
@@ -486,7 +473,7 @@ export default function Ruta() {
               <TooltipTrigger asChild>
                 <span>{generateButton}</span>
               </TooltipTrigger>
-              <TooltipContent>Primero aprueba el corpus de fuentes</TooltipContent>
+              <TooltipContent>Primero aprueba las fuentes</TooltipContent>
             </Tooltip>
           )}
         </div>

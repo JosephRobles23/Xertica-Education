@@ -15,6 +15,40 @@ import { api, type JobState } from '@/shared/lib/api'
 const contentKey = (routeId: string, moduleId: string, kind: ContentKind) =>
   `${routeId}:${moduleId}:${kind}` as const
 
+type ApiLearningRoute = Omit<LearningRoute, 'id'> & { id: string }
+
+const hasContentfulModules = (route: ApiLearningRoute) =>
+  Array.isArray(route.modules) &&
+  route.modules.length > 0 &&
+  route.modules.some((module) => Array.isArray(module.contents) && module.contents.length > 0)
+
+const hydrateRoute = (route: ApiLearningRoute): LearningRoute => {
+  const mockRoute = ROUTES.find((item) => item.id === route.id)
+
+  if (!mockRoute) {
+    return route as LearningRoute
+  }
+
+  return {
+    ...mockRoute,
+    name: route.name || mockRoute.name,
+    status: route.status || mockRoute.status,
+    objective: route.objective || mockRoute.objective,
+    modules: hasContentfulModules(route) ? route.modules : mockRoute.modules,
+  }
+}
+
+const hydrateRoutes = (apiRoutes: readonly ApiLearningRoute[]): readonly LearningRoute[] => {
+  const apiById = new Map(apiRoutes.map((route) => [route.id, route]))
+  const hydratedMocks = ROUTES.map((route) => {
+    const apiRoute = apiById.get(route.id)
+    return apiRoute ? hydrateRoute(apiRoute) : route
+  })
+  const newRoutes = apiRoutes.filter((route) => !ROUTES.some((mockRoute) => mockRoute.id === route.id))
+
+  return [...hydratedMocks, ...newRoutes.map(hydrateRoute)]
+}
+
 export interface UploadedStructure {
   name: string
   kind: 'archivo' | 'texto'
@@ -104,8 +138,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const fetchRoutes = useCallback(async () => {
     try {
-      const data = await api.request<LearningRoute[]>('/learning-paths/')
-      setRoutes(data)
+      const data = await api.request<ApiLearningRoute[]>('/learning-paths/')
+      setRoutes(hydrateRoutes(data))
     } catch (e) {
       console.error('Failed to fetch routes', e)
     }
@@ -113,11 +147,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const updateRoute = useCallback(async (id: string, data: Partial<LearningRoute>) => {
     try {
-      const updated = await api.request<LearningRoute>(`/learning-paths/${id}`, {
+      const updated = await api.request<ApiLearningRoute>(`/learning-paths/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data)
       })
-      setRoutes((prev) => prev.map((r) => (r.id === id ? updated : r)))
+      setRoutes((prev) => prev.map((r) => (r.id === id ? hydrateRoute(updated) : r)))
     } catch (e) {
       console.error('Failed to update route', e)
     }
