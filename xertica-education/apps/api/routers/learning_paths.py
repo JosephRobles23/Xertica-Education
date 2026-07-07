@@ -8,12 +8,27 @@
 # - services/route/service.py: Performs business logic and DB edits for learning paths.
 # - services/jobs/service.py: Creates background generation jobs.
 
-from fastapi import APIRouter, Depends, HTTPException
-from config.dependencies import get_route_service, get_jobs_service, get_research_service
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from config.dependencies import (
+    get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
+)
 from services.route.service import RouteService
 from services.jobs.service import JobsService
 from services.research.service import ResearchService
+from services.kb.interface import KnowledgeBaseInterface
+from services.kb.ingestion import KbIngestionCoordinator, MockDocumentProvider
+from models.common import JobStatus
 from typing import Dict, Any, List
+
+
+async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, route_sources):
+    """Corre la ingesta RAG en background. Best-effort: si falla (infra no lista),
+    marca el job y NO propaga — Gate 1 no se bloquea (regla de oro · CONTEXT §5)."""
+    try:
+        await coordinator.ingest_route(learning_path_id, route_sources)
+        await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
+    except Exception:
+        await jobs_service.update_job_status(job_id, JobStatus.FAILED)
 
 # Define the router namespace under `/learning-paths`.
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
@@ -197,18 +212,30 @@ async def approve_learning_path(
 @router.post("/{route_id}/sourcing/approve", response_model=Dict[str, Any])
 async def approve_sourcing(
     route_id: str,
-    route_service: RouteService = Depends(get_route_service)
+    background_tasks: BackgroundTasks,
+    route_service: RouteService = Depends(get_route_service),
+    jobs_service: JobsService = Depends(get_jobs_service),
+    knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
 ):
     """
     Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
-    
-    Represents the completion of RAG/source document indexing for the learning path.
+
+    Gate 1: dispara la ingesta RAG (parse → chunk → embed → upsert de las fuentes
+    verificadas) como Job en background, sin bloquear la aprobación (ADR-0006 §3).
     """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
-        
-    updated = await route_service.update_route(route_id, {
-        "status": "generado"
-    })
+
+    job_id = await jobs_service.create_job("kb_ingestion")
+    coordinator = KbIngestionCoordinator(knowledge_base, MockDocumentProvider())
+    background_tasks.add_task(
+        _run_kb_ingestion_job, coordinator, jobs_service, job_id,
+        route_id, route.get("sources", []),
+    )
+
+    updated = await route_service.update_route(route_id, {"status": "generado"})
+    # Aditivo (no rompe el contrato existente): permite sondear el job de ingesta.
+    if isinstance(updated, dict):
+        updated["ingestionJobId"] = str(job_id)
     return updated
