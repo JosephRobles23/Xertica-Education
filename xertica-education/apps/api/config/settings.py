@@ -24,8 +24,13 @@ class Settings(BaseSettings):
     supabase_url: str = "https://placeholder-project.supabase.co"
     supabase_key: str = "placeholder-key"
     openrouter_key: str = "placeholder-key"
+    openai_key: str = "placeholder-key"
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
+
+    # Embeddings de la KB (ADR-0006). Con openai_key placeholder → MockEmbedder.
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimension: int = 1536
 
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.

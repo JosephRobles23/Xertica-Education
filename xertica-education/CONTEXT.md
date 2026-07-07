@@ -27,7 +27,11 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 | **Asset** | `models/domain/asset.py`, `assets` | Artefacto materializado de un componente, con `estado` de aprobación, `storage_path`, `word_budget`, `provenance`. |
 | **AssetVersion** | `models/domain/asset_version.py`, `asset_versions` | Versión histórica de un asset. |
 | **Source / Fuente** | `models/domain/source.py`, `sources` | Material de referencia (con `verificada_google`) que cita un asset y alimenta la KB. |
-| **KB (Knowledge Base)** | `services/kb/` | Base de conocimiento RAG construida a partir de las fuentes; alimenta la generación de contenido. |
+| **KB (Knowledge Base)** | `services/kb/`, puerto `KnowledgeBase` | Base de conocimiento RAG construida a partir de las fuentes; alimenta la generación de contenido. Puerto intercambiable ([[docs/adr/0006-kb-rag-ingestion-embeddings]]). |
+| **Chunk** | `kb_chunks`, `chunk` | Fragmento de una fuente (parseada a Markdown) que se embebe e indexa en pgvector. Chunking **estructural** ~500 tokens / ~64 solape. |
+| **Embedding** | `Embedder`, `text-embedding-3-small` | Vector de **1536 dim** (OpenAI) que representa un chunk; métrica **coseno** (HNSW). Adapter real + `MockEmbedder`. |
+| **Grounding / Cita** | `KnowledgeBase.query`, `GroundedChunk` | Resultado de búsqueda con su fuente (`source_id`, título, url, snippet, score, `verificada_google`) que ancla la generación. |
+| **Ingesta RAG** | `KnowledgeBase.ingest`, Job | parse → chunk → embed → upsert en `kb_chunks`, como **Job asíncrono** disparado tras Gate 1. |
 | **Job** | `JobsService`, `/jobs` | Unidad de trabajo asíncrona con estado y progreso. Toda generación pesada corre como job y se consulta por *polling*. |
 | **Gate (Compuerta)** | ver §3 | Punto de aprobación humana que transiciona el estado de la ruta y desbloquea la siguiente fase. |
 | **Storyboard** | `/ruta/:id/video-storyboard` | Guion visual del video antes de renderizar. |
@@ -94,6 +98,7 @@ El `README.md` y el doc de arquitectura describen partes **aspiracionales** que 
 - Los servicios reales presentes son `route`, `jobs`, `video`, `workflow` (no todos los del README todavía).
 - El backend usa **`uv`** (no `venv`+`pip` como dice el README).
 - **Supabase (ADR-0004):** los repos ya hacen CRUD real con fallback in-memory; la persistencia se activa al aplicar `supabase/migrations` + rellenar `apps/api/.env`. Mientras esos secretos sean placeholders, todo corre en memoria.
+- **Embeddings (ADR-0006):** `architecture.md` proyecta `embeddings: text-embedding-google` vía un gateway `models.yaml` que **aún no existe**. El MVP de la KB usa **OpenAI `text-embedding-3-small` (1536 dim)** con `MockEmbedder` por defecto; lo real se activa con `OPENAI_API_KEY`. Conflicto declarado y resuelto en [[docs/adr/0006-kb-rag-ingestion-embeddings]].
 
 Cuando algo aquí contradiga un ADR, **decláralo explícitamente** en tu output en vez de sobrescribirlo en silencio.
 
