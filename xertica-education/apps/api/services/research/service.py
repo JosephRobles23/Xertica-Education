@@ -99,8 +99,18 @@ class ResearchService:
         brief = payload.get("brief", "")
         modules = payload.get("modules", [])
         route_name = payload.get("route_name", "")
-        text = " ".join([route_name, brief, " ".join(str(module) for module in modules)])
+        customer_context = payload.get("customer_context", {}) or {}
+        context_text = " ".join(str(value) for value in customer_context.values())
+        text = " ".join([route_name, brief, context_text, " ".join(str(module) for module in modules)])
         tools = self.detect_tools(text)
+        industry = customer_context.get("industry") or "el contexto del cliente"
+        area = customer_context.get("area") or "General"
+        audience = customer_context.get("audienceLevel") or "la audiencia definida"
+        workspace_suffix = (
+            " y flujos de Google Workspace"
+            if customer_context.get("usesGoogleWorkspace") == "yes"
+            else ""
+        )
 
         sources = []
         for index, tool in enumerate(tools):
@@ -130,7 +140,7 @@ class ResearchService:
                         "relevanceScore": 94 - index if has_specific_video else 78 - index,
                         "suggestedUse": "video",
                         "quote": (
-                            f"Video específico recomendado para introducir {tool_name} desde un canal oficial."
+                            f"Video específico recomendado para introducir {tool_name} con ejemplos de {area} en {industry}."
                             if has_specific_video
                             else f"Candidato para búsqueda manual: elegir un video concreto de {official_video['channel']} antes de aprobar."
                         ),
@@ -155,7 +165,7 @@ class ResearchService:
                         "verificationReason": f"Dominio oficial permitido para {vendor}: {primary_domain}",
                         "relevanceScore": 91 - index,
                         "suggestedUse": "lesson",
-                        "quote": f"Referencia oficial para aterrizar conceptos, restricciones y buenas prácticas de {tool_name}.",
+                        "quote": f"Referencia oficial para aterrizar conceptos, restricciones y buenas prácticas de {tool_name} para {audience}{workspace_suffix}.",
                     },
                     {
                         "title": f"{tool_name}: referencia oficial del producto",
@@ -169,7 +179,7 @@ class ResearchService:
                         "verificationReason": f"Página oficial permitida para {vendor}: {primary_domain}",
                         "relevanceScore": 87 - index,
                         "suggestedUse": "general",
-                        "quote": f"Fuente oficial concreta para contextualizar qué es {tool_name} y cuándo usarlo.",
+                        "quote": f"Fuente oficial concreta para contextualizar qué es {tool_name} y cuándo usarlo en {industry}.",
                     },
                     {
                         "title": f"{tool_name}: ejemplo comunitario para inspiración",
