@@ -7,7 +7,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react'
-import type { ContentKind, ContentStatus, ProposalModule, LearningRoute, RouteModule } from '@/shared/lib/types'
+import type { ContentKind, ContentStatus, ProposalModule, LearningRoute, RouteModule, Source } from '@/shared/lib/types'
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
 
@@ -34,6 +34,8 @@ const hydrateRoute = (route: ApiLearningRoute): LearningRoute => {
     name: route.name || mockRoute.name,
     status: route.status || mockRoute.status,
     objective: route.objective || mockRoute.objective,
+    sources: route.sources?.length ? route.sources : mockRoute.sources,
+    pack: route.pack || mockRoute.pack,
     modules: hasContentfulModules(route) ? route.modules : mockRoute.modules,
   }
 }
@@ -104,6 +106,7 @@ interface AppStore {
   routes: readonly LearningRoute[]
   fetchRoutes: () => Promise<void>
   updateRoute: (id: string, data: Partial<LearningRoute>) => Promise<void>
+  replaceRouteSources: (id: string, sources: readonly Source[]) => void
   activeRouteId: string | null
   setActiveRouteId: (id: string | null) => void
 
@@ -155,6 +158,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Failed to update route', e)
     }
+  }, [])
+
+  const replaceRouteSources = useCallback((id: string, sources: readonly Source[]) => {
+    setRoutes((prev) => prev.map((route) => (route.id === id ? { ...route, sources } : route)))
+    setDiscarded((prev) => ({ ...prev, [id]: [] }))
+    setCorpusApproved((prev) => ({ ...prev, [id]: false }))
   }, [])
 
   useEffect(() => {
@@ -336,7 +345,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute,
+      routes, fetchRoutes, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     }),
@@ -348,7 +357,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute,
+      routes, fetchRoutes, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     ],

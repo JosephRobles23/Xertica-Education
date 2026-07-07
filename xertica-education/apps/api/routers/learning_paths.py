@@ -9,9 +9,10 @@
 # - services/jobs/service.py: Creates background generation jobs.
 
 from fastapi import APIRouter, Depends, HTTPException
-from config.dependencies import get_route_service, get_jobs_service
+from config.dependencies import get_route_service, get_jobs_service, get_research_service
 from services.route.service import RouteService
 from services.jobs.service import JobsService
+from services.research.service import ResearchService
 from typing import Dict, Any, List
 
 # Define the router namespace under `/learning-paths`.
@@ -127,6 +128,40 @@ async def generate_structure(
     
     return {"job_id": job_id}
 
+@router.post("/{route_id}/deep-research", response_model=Dict[str, Any])
+async def run_deep_research(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    research_service: ResearchService = Depends(get_research_service)
+):
+    """
+    Runs a tool-aware deep research pass for a learning path.
+
+    The current implementation is deterministic and mock-backed so the full UX can
+    be tested before wiring real YouTube/search providers. It detects tools from
+    the brief/modules, applies vendor-specific allowlists, and persists the source
+    candidates on the route details.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    research = research_service.run({
+        "route_name": route.get("name", ""),
+        "brief": payload.get("brief", route.get("objective", "")),
+        "modules": route.get("modules", []),
+    })
+    updated = await route_service.update_route(route_id, {
+        "sources": research["sources"]
+    })
+
+    return {
+        "detected_tools": research["detected_tools"],
+        "sources": research["sources"],
+        "route": updated,
+    }
+
 @router.post("/{route_id}/approve", response_model=Dict[str, Any])
 async def approve_learning_path(
     route_id: str,
@@ -162,4 +197,3 @@ async def approve_sourcing(
         "status": "generado"
     })
     return updated
-

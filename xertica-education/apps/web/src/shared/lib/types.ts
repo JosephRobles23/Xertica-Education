@@ -120,6 +120,14 @@ export interface Source {
   plat: string
   verified: boolean
   quote: string
+  url?: string
+  kind?: 'youtube' | 'documentation' | 'article'
+  toolName?: string
+  vendor?: string
+  verificationReason?: string
+  relevanceScore?: number
+  suggestedUse?: 'lesson' | 'video' | 'lab' | 'quiz' | 'general'
+  status?: 'approved' | 'requires-review' | 'rejected'
   videoPreview?: SourceVideoPreview
 }
 
