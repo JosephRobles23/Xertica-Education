@@ -7,7 +7,15 @@ import {
   useEffect,
   type ReactNode,
 } from 'react'
-import type { ContentKind, ContentStatus, ProposalModule, LearningRoute, RouteModule, Source } from '@/shared/lib/types'
+import type {
+  ContentKind,
+  ContentStatus,
+  CustomerContext,
+  LearningRoute,
+  ProposalModule,
+  RouteModule,
+  Source,
+} from '@/shared/lib/types'
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
 
@@ -62,6 +70,8 @@ interface AppStore {
   setBriefText: (v: string) => void
   deepResearch: boolean
   setDeepResearch: (v: boolean) => void
+  customerContext: CustomerContext
+  setCustomerContext: (v: CustomerContext) => void
   uploadedStructure: UploadedStructure | null
   setUploadedStructure: (v: UploadedStructure | null) => void
 
@@ -125,6 +135,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     'Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio — del concepto al laboratorio, cerrando con una evaluación de dominio. Público: equipos técnicos y de negocio.',
   )
   const [deepResearch, setDeepResearch] = useState(false)
+  const [customerContext, setCustomerContext] = useState<CustomerContext>({})
   const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
 
   const [proposal, setProposal] = useState<readonly ProposalModule[]>(INITIAL_PROPOSAL)
@@ -338,6 +349,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => ({
       briefText, setBriefText,
       deepResearch, setDeepResearch,
+      customerContext, setCustomerContext,
       uploadedStructure, setUploadedStructure,
       proposal, reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
@@ -350,7 +362,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       activeJobs, trackJob,
     }),
     [
-      briefText, deepResearch, uploadedStructure, proposal,
+      briefText, deepResearch, customerContext, uploadedStructure, proposal,
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
