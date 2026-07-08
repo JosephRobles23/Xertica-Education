@@ -26,7 +26,8 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 | **Componente** | `models/domain/component.py`, `components` | Pieza de contenido de un módulo: `lesson`/`video`/`lab`/`infografia`/`quiz`. |
 | **Asset** | `models/domain/asset.py`, `assets` | Artefacto materializado de un componente, con `estado` de aprobación, `storage_path`, `word_budget`, `provenance`. |
 | **AssetVersion** | `models/domain/asset_version.py`, `asset_versions` | Versión histórica de un asset. |
-| **Source / Fuente** | `models/domain/source.py`, `sources` | Material de referencia (con `verificada_google`) que cita un asset y alimenta la KB. |
+| **Source / Fuente** | `models/domain/source.py`, `sources` | Material de referencia (con `verificada_google` y `estado`) que pertenece a una **Ruta** desde Gate 1 y alimenta la KB. La citación a assets concretos es M:N vía `asset_sources` ([[docs/adr/0007-source-route-centrica-sourcing]]). |
+| **asset_sources** | `asset_sources` | Tabla puente M:N entre `assets` y `sources` para la citación (Fase 5-6). Corrige el 1:N de ADR-0005. |
 | **KB (Knowledge Base)** | `services/kb/`, puerto `KnowledgeBase` | Base de conocimiento RAG construida a partir de las fuentes; alimenta la generación de contenido. Puerto intercambiable ([[docs/adr/0006-kb-rag-ingestion-embeddings]]). |
 | **Chunk** | `kb_chunks`, `chunk` | Fragmento de una fuente (parseada a Markdown) que se embebe e indexa en pgvector. Chunking **estructural** ~500 tokens / ~64 solape. |
 | **Embedding** | `Embedder`, `text-embedding-3-small` | Vector de **1536 dim** (OpenAI) que representa un chunk; métrica **coseno** (HNSW). Adapter real + `MockEmbedder`. |
@@ -98,6 +99,7 @@ El `README.md` y el doc de arquitectura describen partes **aspiracionales** que 
 - Los servicios reales presentes son `route`, `jobs`, `video`, `workflow` (no todos los del README todavía).
 - El backend usa **`uv`** (no `venv`+`pip` como dice el README).
 - **Supabase (ADR-0004):** los repos ya hacen CRUD real con fallback in-memory; la persistencia se activa al aplicar `supabase/migrations` + rellenar `apps/api/.env`. Mientras esos secretos sean placeholders, todo corre en memoria.
+- **Sourcing route-céntrico (ADR-0007):** el Spine (ADR-0005) modeló `sources` como asset-céntrico (`asset_id NOT NULL`), pero el user-flow real las aprueba **por Ruta en Gate 1, antes de que existan assets**. ADR-0007 corrige: `sources` gana `learning_path_id`, se quita `asset_id`, y la citación asset↔source pasa a la tabla puente `asset_sources` (M:N). Esto cierra el FK de `kb_chunks.source_id`.
 - **Embeddings (ADR-0006):** `architecture.md` proyecta `embeddings: text-embedding-google` vía un gateway `models.yaml` que **aún no existe**. El MVP de la KB usa **`text-embedding-3-small` (1536 dim) servido vía OpenRouter** (OpenAI-compatible) con la `OPENROUTER_KEY` existente; `MockEmbedder` si la clave es placeholder. Conflicto declarado y resuelto en [[docs/adr/0006-kb-rag-ingestion-embeddings]].
 
 Cuando algo aquí contradiga un ADR, **decláralo explícitamente** en tu output en vez de sobrescribirlo en silencio.
