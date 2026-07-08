@@ -248,6 +248,8 @@ async def link_sources(
     links = await linker.link(route_id, modules, sources)
     persisted = await source_link_repo.upsert_links(links)
     why_by_key = {(str(l.source_id), l.module_id): l.why for l in links}
+    # url/title de cada fuente: el frontend casa el link contra route.sources por url.
+    src_by_id = {str(s.id): s for s in sources if s.id is not None}
 
     return {
         "links": [
@@ -257,6 +259,8 @@ async def link_sources(
                 "score": l.score,
                 "origin": l.origin,
                 "why": why_by_key.get((str(l.source_id), l.module_id)),
+                "url": getattr(src_by_id.get(str(l.source_id)), "url", None),
+                "title": getattr(src_by_id.get(str(l.source_id)), "title", None),
             }
             for l in persisted
         ]
@@ -268,17 +272,23 @@ async def list_source_links(
     route_id: str,
     route_service: RouteService = Depends(get_route_service),
     source_link_repo=Depends(get_source_link_repository),
+    sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
 ):
     """Devuelve la vinculación Source↔Módulo persistida de la ruta (ADR-0012). El
-    frontend la lee y, si un módulo no tiene fila, cae a la heurística client-side."""
+    frontend la lee y, si un módulo no tiene fila, cae a la heurística client-side.
+    Incluye url/title de la fuente para casarla contra route.sources."""
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
     links = await source_link_repo.list_by_learning_path(as_uuid(route_id))
+    sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
+    src_by_id = {str(s.id): s for s in sources if s.id is not None}
     return {
         "links": [
             {"source_id": str(l.source_id), "module_id": l.module_id,
-             "score": l.score, "origin": l.origin}
+             "score": l.score, "origin": l.origin,
+             "url": getattr(src_by_id.get(str(l.source_id)), "url", None),
+             "title": getattr(src_by_id.get(str(l.source_id)), "title", None)}
             for l in links
         ]
     }

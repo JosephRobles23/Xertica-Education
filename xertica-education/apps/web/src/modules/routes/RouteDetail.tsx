@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FlaskConical,
   Info,
+  Link2,
   Loader2,
   Search,
   Sparkles,
@@ -117,6 +118,9 @@ function VideoRecommendationPanel({
   onFindAnother,
   findingAnother,
   onUseAiVideo,
+  onRelink,
+  relinking,
+  linkOrigin,
   storyboardVideoUrl,
 }: {
   route: LearningRoute
@@ -126,6 +130,9 @@ function VideoRecommendationPanel({
   onFindAnother: () => void
   findingAnother: boolean
   onUseAiVideo: () => void
+  onRelink: () => void
+  relinking: boolean
+  linkOrigin?: 'llm' | 'heuristic' | null
   storyboardVideoUrl?: string
 }) {
   const [videoOpen, setVideoOpen] = useState(Boolean(recommendedSource?.videoPreview?.youtubeId))
@@ -150,11 +157,18 @@ function VideoRecommendationPanel({
               : 'No encontramos un YouTube verificado; puedes usar el video IA, buscar otro o subir el tuyo.'}
           </p>
         </div>
-        {selectedMode && (
-          <Badge variant="success">
-            <Check className="size-3" /> seleccionado
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {linkOrigin === 'llm' && (
+            <Badge variant="outline">
+              <Link2 className="size-3" /> vinculado por IA
+            </Badge>
+          )}
+          {selectedMode && (
+            <Badge variant="success">
+              <Check className="size-3" /> seleccionado
+            </Badge>
+          )}
+        </div>
       </div>
 
       {recommendedSource?.videoPreview ? (
@@ -228,6 +242,16 @@ function VideoRecommendationPanel({
           type="button"
           size="sm"
           variant="outline"
+          disabled={relinking}
+          onClick={onRelink}
+        >
+          {relinking ? <Loader2 className="animate-spin" /> : <Link2 />}
+          Re-vincular con IA
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
           disabled={findingAnother}
           onClick={onFindAnother}
         >
@@ -285,6 +309,10 @@ function ContentReviewPanel({
     replaceRouteSources,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
+  const [relinking, setRelinking] = useState(false)
+  // Vinculación Source↔Módulo persistida (ADR-0012): si existe, prevalece sobre la heurística.
+  const [linkedUrl, setLinkedUrl] = useState<string | null>(null)
+  const [linkOrigin, setLinkOrigin] = useState<'llm' | 'heuristic' | null>(null)
 
   const status = contentStatusOf(route.id, module.id, content.kind, content.status)
   const label = KIND_LABEL[content.kind]
@@ -293,7 +321,33 @@ function ContentReviewPanel({
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
   const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
-  const recommendedVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
+
+  // Carga la vinculación persistida de este módulo (si la hay).
+  useEffect(() => {
+    if (!isVideo) return
+    let active = true
+    api
+      .request<{ links: { module_id: string; url: string | null; origin: string }[] }>(
+        `/learning-paths/${route.id}/source-links`,
+      )
+      .then((res) => {
+        if (!active) return
+        const link = res.links.find((l) => l.module_id === module.id)
+        if (link?.url) {
+          setLinkedUrl(link.url)
+          setLinkOrigin(link.origin === 'heuristic' ? 'heuristic' : 'llm')
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [isVideo, route.id, module.id])
+
+  const heuristicVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
+  const linkedVideo =
+    isVideo && linkedUrl ? route.sources.find((s) => s.url === linkedUrl) : undefined
+  const recommendedVideo = linkedVideo ?? heuristicVideo
   const secondaryYoutubeVideo =
     isVideo && !recommendedVideo ? findSecondaryYoutubeSource(route, module, content) : undefined
 
@@ -329,6 +383,40 @@ function ContentReviewPanel({
       })
     } finally {
       setFindingAnotherVideo(false)
+    }
+  }
+
+  const relinkWithAI = async () => {
+    setRelinking(true)
+    const toastId = toast.loading('Vinculando el mejor video con IA…', {
+      description: 'Re-rankeando las fuentes ya recolectadas para este módulo.',
+    })
+    try {
+      const res = await api.request<{
+        links: { module_id: string; url: string | null; origin: string; why?: string | null }[]
+      }>(`/learning-paths/${route.id}/link-sources`, {
+        method: 'POST',
+        body: JSON.stringify({ module_id: module.id }),
+      })
+      const link = res.links.find((l) => l.module_id === module.id)
+      if (link?.url) {
+        setLinkedUrl(link.url)
+        setLinkOrigin(link.origin === 'heuristic' ? 'heuristic' : 'llm')
+        toast.success('Video re-vinculado', { id: toastId, description: link.why ?? undefined })
+      } else {
+        toast.info('No hay una fuente para vincular todavía', {
+          id: toastId,
+          description: 'Usa “Buscar otro” para traer candidatos con Deep Research.',
+        })
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('No se pudo re-vincular', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setRelinking(false)
     }
   }
 
@@ -388,6 +476,9 @@ function ContentReviewPanel({
           findingAnother={findingAnotherVideo}
           storyboardVideoUrl={storyboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
+          onRelink={relinkWithAI}
+          relinking={relinking}
+          linkOrigin={linkOrigin}
           onUseAiVideo={() => {
             toast.info('Flujo de video AI', {
               description: 'Continúa con la revisión de guion y storyboard.',
