@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {
-        "route_structurer": "gemini-2.5-pro",
+        "route_structurer": "claude-haiku-4.5",  # Estructura Propuesta (ADR-0014)
         "scriptwriter": "gemini-2.5-pro",
         "infographic_design": "claude-sonnet",
         "researcher": "gemini-2.5-flash",

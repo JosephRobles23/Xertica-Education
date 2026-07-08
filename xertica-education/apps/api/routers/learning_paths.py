@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
     get_sourcing_repository, get_storage_adapter, get_documents_repository,
-    get_source_link_repository, get_linker,
+    get_source_link_repository, get_linker, get_route_structurer,
 )
 from config.settings import settings
 from services.route.service import RouteService
@@ -25,6 +25,25 @@ from repositories.sourcing.mapping import route_sources_to_domain
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
 from typing import Dict, Any, List
+
+
+async def _run_structure_job(
+    structurer, route_service, jobs_service, job_id, route_id,
+    brief, customer_context, parsed_docs,
+):
+    """Genera la Estructura Propuesta con el LLM (ADR-0014) y la persiste en la ruta.
+    Si el LLM falla o el JSON no valida, marca el Job failed (el frontend ofrece
+    'Regenerar') — en prod NO cae al mock (decisión del grill)."""
+    try:
+        modules = await structurer.generate(brief, customer_context, parsed_docs)
+        await route_service.update_route(route_id, {
+            "status": "borrador",
+            "modules": modules,
+            "customerContext": customer_context,
+        })
+        await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
+    except Exception:
+        await jobs_service.update_job_status(job_id, JobStatus.FAILED)
 
 
 async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, sources):
@@ -102,78 +121,37 @@ async def update_learning_path(
 @router.post("/{route_id}/generate-structure", response_model=Dict[str, Any])
 async def generate_structure(
     route_id: str,
+    background_tasks: BackgroundTasks,
     payload: Dict[str, Any] | None = None,
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service),
     documents_repo=Depends(get_documents_repository),
+    structurer=Depends(get_route_structurer),
 ):
     """
-    Triggers the generation of modules and contents for a learning path.
+    Genera la Estructura Propuesta (módulos + componentes) con el LLM `route_structurer`
+    (Haiku 4.5 · ADR-0014) como Job en background, sin bloquear el request.
 
-    Spawns an asynchronous structure generation background job and inserts a pre-defined
-    mock structure (two modules with lessons/videos/quizzes) in draft status ('borrador')
-    for preview. Returns the job ID to allow the client to track background progress.
-
-    ADR-0013: el contenido de los documentos subidos (Vía 2) se pasa como `parsed_docs`
-    para informar la estructura. El generador mock hoy solo cuenta cuántos hay (regla de
-    oro 3: la IA real que redacta módulos a partir del texto va al final); el CONTRATO ya
-    queda cableado — `parsed_docs` reutiliza `documents.parsed_md` (sin re-parsear).
+    Material-first: consolida `parsed_docs` (documents.parsed_md · ADR-0013) como esqueleto,
+    con brief + customerContext para encuadre/personalización. El frontend hace polling del
+    Job: skeleton mientras genera; al completar lee route.modules; si falla, 'Regenerar'.
     """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
-
-    job_id = await jobs_service.create_job("structure_generation")
 
     # Contexto de documentos del cliente (ADR-0013): parsed_md de cada doc de la ruta.
     documents = await documents_repo.list_by_learning_path(as_uuid(route_id))
     parsed_docs = [d.parsed_md for d in documents if d.parsed_md]
 
     customer_context = (payload or {}).get("customerContext") or route.get("customerContext", {}) or {}
-    area = customer_context.get("area") or "General"
-    industry = customer_context.get("industry") or "contexto del cliente"
-    audience = customer_context.get("audienceLevel") or "la audiencia objetivo"
-    workspace_note = (
-        " con Google Workspace"
-        if customer_context.get("usesGoogleWorkspace") == "yes"
-        else ""
+    brief = (payload or {}).get("brief") or route.get("objective", "") or ""
+
+    job_id = await jobs_service.create_job("structure_generation")
+    background_tasks.add_task(
+        _run_structure_job, structurer, route_service, jobs_service, job_id, route_id,
+        brief, customer_context, parsed_docs,
     )
-    # El generador real consumirá `parsed_docs`; el mock solo lo referencia.
-    docs_note = f" · {len(parsed_docs)} doc(s) de referencia" if parsed_docs else ""
-
-    mock_modules = [
-        {
-            "id": "r1m1",
-            "num": "01",
-            "name": f"Fundamentos aplicados para {area} ({industry})",
-            "type": "intro",
-            "status": "borrador",
-            "contents": [
-                { "kind": "lesson", "status": "borrador", "summary": f"Conceptos base adaptados a {industry} y {audience}{docs_note}." },
-                { "kind": "video", "status": "borrador", "summary": f"Cápsula con ejemplos del área {area}{workspace_note}." },
-                { "kind": "quiz", "status": "borrador", "summary": "Evaluación breve con situaciones del cliente." }
-            ]
-        },
-        {
-            "id": "r1m2",
-            "num": "02",
-            "name": f"Laboratorio contextualizado para {area}",
-            "type": "laboratorio",
-            "status": "borrador",
-            "contents": [
-                { "kind": "lesson", "status": "borrador", "summary": "Buenas prácticas y criterios de adopción." },
-                { "kind": "infografia", "status": "borrador", "summary": f"Mapa visual de casos de uso en {industry}." },
-                { "kind": "lab", "status": "borrador", "summary": f"Actividad práctica basada en propuesta, temario o notas del cliente{workspace_note}." }
-            ]
-        }
-    ]
-    
-    await route_service.update_route(route_id, {
-        "status": "borrador",
-        "modules": mock_modules,
-        "customerContext": customer_context,
-    })
-
     return {"job_id": job_id, "context_docs": len(parsed_docs)}
 
 @router.post("/{route_id}/deep-research", response_model=Dict[str, Any])

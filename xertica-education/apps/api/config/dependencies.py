@@ -10,6 +10,7 @@ from repositories.kb import get_kb_chunk_repository
 from repositories.sourcing import get_sourcing_repository as _build_sourcing_repository
 from repositories.documents import get_documents_repository as _build_documents_repository
 from repositories.source_links import get_source_link_repository as _build_source_link_repository
+from services.route_structurer import get_route_structurer as _build_route_structurer
 from adapters.embeddings import get_embedder
 from adapters.linker import get_linker as _build_linker
 from adapters.storage import get_storage_adapter as _build_storage_adapter
@@ -37,6 +38,9 @@ _storage_adapter = _build_storage_adapter()
 _source_link_repository = _build_source_link_repository()
 _linker = _build_linker()
 
+# Estructura Propuesta (ADR-0014): generador route_structurer (mock ↔ LLM Haiku 4.5).
+_route_structurer = _build_route_structurer()
+
 def get_jobs_service() -> JobsService:
     return _jobs_service
 
@@ -63,6 +67,9 @@ def get_source_link_repository():
 
 def get_linker():
     return _linker
+
+def get_route_structurer():
+    return _route_structurer
 
 def get_video_service() -> VideoService:
     return _video_service

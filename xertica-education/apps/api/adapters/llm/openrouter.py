@@ -54,6 +54,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
             "gemini-2.5-pro": "google/gemini-2.5-pro",
             "gemini-2.5-flash": "google/gemini-2.5-flash",
             "claude-sonnet": "anthropic/claude-3-sonnet",
+            "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
         }
         return mapping.get(model, model)
 
