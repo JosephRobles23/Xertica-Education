@@ -28,6 +28,7 @@ def test_upload_creates_document_and_source_when_use_as_source():
         assert body["document_id"]
         assert body["use_as_source"] is True
         assert body["source_id"]  # se creó el Source Vía 2
+        assert body["parsed"] is True  # parse-at-upload (ADR-0013)
     finally:
         main.app.dependency_overrides.clear()
 

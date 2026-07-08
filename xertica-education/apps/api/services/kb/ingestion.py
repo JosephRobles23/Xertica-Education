@@ -43,8 +43,9 @@ class MockDocumentProvider(DocumentProvider):
 
 
 class RealDocumentProvider(DocumentProvider):
-    """Vía 2 (upload): lee el binario del Storage y lo parsea a Markdown verbatim
-    (ADR-0008). Vía 1 (url): mock hasta cablear el fetch real de crawlers."""
+    """Solo Vía 2 (upload · ADR-0011): entrega el Markdown del documento. Prefiere el
+    `parsed_md` cacheado en la subida (parse-at-upload · ADR-0013); si falta, cae al
+    fetch+parse del binario. Las fuentes de Vía 1 (url) NO se ingestan — devuelve ""."""
 
     def __init__(self, storage, documents_repo, parser, bucket: str):
         self._storage = storage
@@ -57,9 +58,11 @@ class RealDocumentProvider(DocumentProvider):
             doc = await self._documents.get(source.document_id)
             if doc is None:
                 return ""
+            if doc.parsed_md:  # parse-at-upload (ADR-0013): reutiliza sin re-parsear
+                return doc.parsed_md
             data = await self._storage.download_file(self._bucket, doc.storage_path)
             return await self._parser.parse_document(data, doc.filename)
-        return _mock_markdown(source)
+        return ""  # Vía 1 no alimenta la KB (ADR-0011)
 
 
 class KbIngestionCoordinator:

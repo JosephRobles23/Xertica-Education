@@ -40,9 +40,24 @@ def test_real_provider_parses_uploaded_file():
     assert "Kubernetes" in md  # texto verbatim del archivo, no mock
 
 
-def test_real_provider_falls_back_to_mock_for_url_source():
+def test_real_provider_ignores_via1_url_source():
+    # ADR-0011: las fuentes de Vía 1 (url de YouTube) no se ingestan → "".
     provider = RealDocumentProvider(
         InMemoryStorageAdapter(), InMemoryDocumentRepository(), SimpleParserAdapter(), "bucket")
     src = Source(learning_path_id=uuid4(), origin="deep_research", url="https://x.dev/a", title="Doc oficial")
     md = asyncio.run(provider.fetch(src))
-    assert "Doc oficial" in md  # markdown mock para la Vía 1
+    assert md == ""
+
+
+def test_real_provider_prefers_parsed_md_cache():
+    # ADR-0013: si el doc trae parsed_md (parse-at-upload), se reutiliza sin tocar Storage.
+    lp = uuid4()
+    repo = InMemoryDocumentRepository()
+    doc = asyncio.run(repo.create(Document(
+        learning_path_id=lp, storage_path="lp/x.pdf", filename="x.pdf",
+        use_as_source=True, parsed_md="## Página 1\n\nContenido cacheado.")))
+    # Storage vacío a propósito: si intentara descargar, no habría binario.
+    provider = RealDocumentProvider(InMemoryStorageAdapter(), repo, SimpleParserAdapter(), "bucket")
+    src = Source(learning_path_id=lp, origin="upload", document_id=doc.id, title="x.pdf")
+    md = asyncio.run(provider.fetch(src))
+    assert md == "## Página 1\n\nContenido cacheado."

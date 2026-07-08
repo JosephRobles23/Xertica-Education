@@ -1,8 +1,9 @@
 # routers/documents.py
 #
-# Subida de documentos del usuario (Vía 2 · ADR-0008). El endpoint valida tipo/tamaño
-# y SOLO almacena: binario en Storage + fila `documents` (+ `Source` Vía 2 si use_as_source).
-# El parseo pesado corre luego en el Job de ingesta de Gate 1.
+# Subida de documentos del usuario (Vía 2 · ADR-0008 + ADR-0013). El endpoint valida
+# tipo/tamaño, almacena el binario en Storage, lo PARSEA a Markdown verbatim en el acto
+# (parse-at-upload · ADR-0013 → documents.parsed_md) y registra la fila `documents` + el
+# `Source` Vía 2. Todo upload entra a la KB por default (use_as_source deprecado).
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from typing import Dict, Any
@@ -14,6 +15,7 @@ from config.settings import settings
 from models.common import as_uuid
 from models.domain.document import Document
 from models.domain.source import Source
+from adapters.parser.simple import SimpleParserAdapter
 
 router = APIRouter(prefix="/learning-paths", tags=["documents"])
 
@@ -26,13 +28,15 @@ _MAX_BYTES = 20 * 1024 * 1024  # 20 MB
 async def upload_document(
     route_id: str,
     file: UploadFile = File(...),
-    use_as_source: bool = Form(False),
+    use_as_source: bool = Form(True),
     storage=Depends(get_storage_adapter),
     documents_repo=Depends(get_documents_repository),
     sourcing_repo=Depends(get_sourcing_repository),
 ):
-    """Sube un documento de la Vía 2. Con `use_as_source=true` se registra como fuente
-    de la KB (se parseará e ingestará en Gate 1); si no, queda solo como contexto."""
+    """Sube un documento de la Vía 2. Lo almacena, lo parsea a Markdown en el acto
+    (parse-at-upload · ADR-0013) y por default lo registra como fuente de la KB
+    (`use_as_source` deprecado, siempre true). El `parsed_md` lo reutilizan tanto
+    generate-structure (contexto) como la ingesta de Gate 1 (sin re-parsear)."""
     name = (file.filename or "").lower()
     ext = name.rsplit(".", 1)[-1] if "." in name else ""
     if ext in _LEGACY:
@@ -47,9 +51,19 @@ async def upload_document(
     lp = as_uuid(route_id)
     storage_path = f"{lp}/{file.filename}"
     await storage.upload_file(settings.storage_bucket, storage_path, data)
+
+    # Parse-at-upload (ADR-0013): verbatim → parsed_md. Best-effort: si falla, parsed_md
+    # queda None y la ingesta de Gate 1 lo reintenta desde el binario (regla de oro 1).
+    parsed_md = None
+    try:
+        parsed_md = await SimpleParserAdapter().parse_document(data, file.filename)
+    except Exception:
+        parsed_md = None
+
     doc = await documents_repo.create(Document(
         learning_path_id=lp, storage_path=storage_path,
-        filename=file.filename, mime=file.content_type, use_as_source=use_as_source,
+        filename=file.filename, mime=file.content_type,
+        use_as_source=use_as_source, parsed_md=parsed_md,
     ))
 
     source_id = None
@@ -64,5 +78,6 @@ async def upload_document(
         "document_id": str(doc.id),
         "filename": doc.filename,
         "use_as_source": doc.use_as_source,
+        "parsed": parsed_md is not None,
         "source_id": source_id,
     }

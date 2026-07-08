@@ -6,7 +6,7 @@ from config.settings import settings
 from models.domain.document import Document
 from .interface import DocumentRepositoryInterface
 
-_COLS = "id,learning_path_id,storage_path,filename,mime,use_as_source"
+_COLS = "id,learning_path_id,storage_path,filename,mime,use_as_source,parsed_md"
 
 
 class SupabaseDocumentRepository(DocumentRepositoryInterface):
@@ -22,6 +22,7 @@ class SupabaseDocumentRepository(DocumentRepositoryInterface):
             "filename": document.filename,
             "mime": document.mime,
             "use_as_source": document.use_as_source,
+            "parsed_md": document.parsed_md,
         }).execute()
         return _to_domain(resp.data[0])
 
@@ -45,4 +46,5 @@ def _to_domain(row: dict) -> Document:
         id=row["id"], learning_path_id=row["learning_path_id"],
         storage_path=row["storage_path"], filename=row["filename"],
         mime=row.get("mime"), use_as_source=bool(row.get("use_as_source")),
+        parsed_md=row.get("parsed_md"),
     )

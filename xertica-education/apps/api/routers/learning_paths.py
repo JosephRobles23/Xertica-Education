@@ -103,7 +103,8 @@ async def generate_structure(
     route_id: str,
     payload: Dict[str, Any] | None = None,
     route_service: RouteService = Depends(get_route_service),
-    jobs_service: JobsService = Depends(get_jobs_service)
+    jobs_service: JobsService = Depends(get_jobs_service),
+    documents_repo=Depends(get_documents_repository),
 ):
     """
     Triggers the generation of modules and contents for a learning path.
@@ -111,13 +112,22 @@ async def generate_structure(
     Spawns an asynchronous structure generation background job and inserts a pre-defined
     mock structure (two modules with lessons/videos/quizzes) in draft status ('borrador')
     for preview. Returns the job ID to allow the client to track background progress.
+
+    ADR-0013: el contenido de los documentos subidos (Vía 2) se pasa como `parsed_docs`
+    para informar la estructura. El generador mock hoy solo cuenta cuántos hay (regla de
+    oro 3: la IA real que redacta módulos a partir del texto va al final); el CONTRATO ya
+    queda cableado — `parsed_docs` reutiliza `documents.parsed_md` (sin re-parsear).
     """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
-        
+
     job_id = await jobs_service.create_job("structure_generation")
-    
+
+    # Contexto de documentos del cliente (ADR-0013): parsed_md de cada doc de la ruta.
+    documents = await documents_repo.list_by_learning_path(as_uuid(route_id))
+    parsed_docs = [d.parsed_md for d in documents if d.parsed_md]
+
     customer_context = (payload or {}).get("customerContext") or route.get("customerContext", {}) or {}
     area = customer_context.get("area") or "General"
     industry = customer_context.get("industry") or "contexto del cliente"
@@ -127,6 +137,8 @@ async def generate_structure(
         if customer_context.get("usesGoogleWorkspace") == "yes"
         else ""
     )
+    # El generador real consumirá `parsed_docs`; el mock solo lo referencia.
+    docs_note = f" · {len(parsed_docs)} doc(s) de referencia" if parsed_docs else ""
 
     mock_modules = [
         {
@@ -136,7 +148,7 @@ async def generate_structure(
             "type": "intro",
             "status": "borrador",
             "contents": [
-                { "kind": "lesson", "status": "borrador", "summary": f"Conceptos base adaptados a {industry} y {audience}." },
+                { "kind": "lesson", "status": "borrador", "summary": f"Conceptos base adaptados a {industry} y {audience}{docs_note}." },
                 { "kind": "video", "status": "borrador", "summary": f"Cápsula con ejemplos del área {area}{workspace_note}." },
                 { "kind": "quiz", "status": "borrador", "summary": "Evaluación breve con situaciones del cliente." }
             ]
@@ -160,8 +172,8 @@ async def generate_structure(
         "modules": mock_modules,
         "customerContext": customer_context,
     })
-    
-    return {"job_id": job_id}
+
+    return {"job_id": job_id, "context_docs": len(parsed_docs)}
 
 @router.post("/{route_id}/deep-research", response_model=Dict[str, Any])
 async def run_deep_research(
@@ -230,8 +242,8 @@ async def approve_sourcing(
     Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
 
     Gate 1: persiste (UPSERT) las fuentes de deep-research (ADR-0007) y dispara la ingesta RAG
-    del corpus aprobado — verificadas Google (Vía 1) + documentos subidos (Vía 2, ADR-0008) —
-    como Job en background, sin bloquear la aprobación (ADR-0006 §3).
+    del corpus aprobado — solo documentos subidos (Vía 2, ADR-0011) — como Job en background,
+    sin bloquear la aprobación (ADR-0006 §3). Las fuentes de Vía 1 no se ingestan.
     """
     route = await route_service.get_route(route_id)
     if not route:
@@ -240,11 +252,12 @@ async def approve_sourcing(
     # 1) UPSERT de las fuentes de deep-research (Vía 1); las de Vía 2 ya se persistieron al subir.
     await sourcing_repo.upsert_sources(route_sources_to_domain(route.get("sources", []), route_id))
 
-    # 2) Corpus a ingestar = verificadas Google OR uploads (ADR-0008 §6).
+    # 2) Corpus a ingestar = solo uploads de Vía 2 (ADR-0011, revisa ADR-0008 §6).
+    #    Las de Vía 1 (URLs de YouTube) no se ingestan; se vinculan por módulo (ADR-0012).
     all_sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
-    corpus = [s for s in all_sources if s.verificada_google or s.origin == "upload"]
+    corpus = [s for s in all_sources if s.origin == "upload"]
 
-    # 3) Ingesta RAG en background (parsea los uploads con el parser real).
+    # 3) Ingesta RAG en background (reutiliza documents.parsed_md; parser como fallback).
     job_id = await jobs_service.create_job("kb_ingestion")
     provider = RealDocumentProvider(storage, documents_repo, SimpleParserAdapter(), settings.storage_bucket)
     coordinator = KbIngestionCoordinator(knowledge_base, provider)
