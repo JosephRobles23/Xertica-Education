@@ -8,13 +8,35 @@ import type { VideoContent } from '@/shared/lib/types'
  */
 export function VideoFrame({
   video,
+  videoUrl,
   compact = false,
   className,
 }: {
   video: VideoContent
+  videoUrl?: string
   compact?: boolean
   className?: string
 }) {
+  if (videoUrl) {
+    return (
+      <div className={className}>
+        <div className={cn('overflow-hidden rounded-xl bg-black shadow-(--shadow-soft)', compact ? 'aspect-video max-w-md' : 'aspect-video')}>
+          <video src={videoUrl} controls className="h-full w-full object-cover" />
+        </div>
+        {!compact && (
+          <div className="mt-4">
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              Video generado
+            </div>
+            <p className="text-[13.5px] leading-relaxed text-muted-foreground">
+              Este asset ya usa URL real del render, no placeholder.
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={className}>
       <div

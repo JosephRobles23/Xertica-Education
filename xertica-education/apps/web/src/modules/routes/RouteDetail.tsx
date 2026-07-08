@@ -15,6 +15,7 @@ import {
   FlaskConical,
   Info,
   Loader2,
+  Play,
   Search,
   ShieldCheck,
   Sparkles,
@@ -248,7 +249,16 @@ function ContentReviewPanel({
   content: ModuleContentRef
 }) {
   const router = useRouter()
-  const { contentStatusOf, approveContent, refineContent, isStoryboardApproved, isLabGuideApproved } = useStore()
+  const {
+    contentStatusOf,
+    approveContent,
+    refineContent,
+    isStoryboardApproved,
+    isLabGuideApproved,
+    storyboardVideoUrlOf,
+  } = useStore()
+
+
 
   const status = contentStatusOf(route.id, module.id, content.kind, content.status)
   const label = KIND_LABEL[content.kind]
@@ -258,6 +268,8 @@ function ContentReviewPanel({
   const labGuideOk = isLabGuideApproved(route.id)
   const videoNeedsReview = isVideo && status !== 'aprobado' && !storyboardOk
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
+  const showVideoPreview = !isVideo || storyboardOk || status === 'aprobado'
+  const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
 
   const approveButton = (
     <Button
@@ -358,7 +370,35 @@ function ContentReviewPanel({
         </div>
       )}
 
-      <ContentPreview kind={content.kind} pack={route.pack} />
+      {/* Preview real del contenido */}
+      <div className="mb-4">
+        {isVideo && !showVideoPreview ? (
+          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-secondary bg-secondary/40 px-6 py-10 text-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-background text-primary shadow-sm">
+              <Play className="size-5" />
+            </div>
+            <div className="max-w-sm">
+              <p className="font-display text-[15px] font-medium text-ink">
+                Vista previa vacía
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                El video se muestra después de generar o aprobar el storyboard. Por ahora, esta
+                tarjeta queda en blanco para no mezclar placeholder con material real.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
+            >
+              Ir a storyboard
+            </Button>
+          </div>
+        ) : (
+          <ContentPreview kind={content.kind} pack={route.pack} videoUrl={storyboardVideoUrl} />
+        )}
+      </div>
+
     </div>
   )
 }

@@ -7,6 +7,7 @@ web_packages/
 .env
 .env.*
 !.env.example
+apps/api/*.json
 
 # Build outputs
 dist/
@@ -30,6 +31,15 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Build/cache files
+*.tsbuildinfo
+package-lock.json
+
 # Agent local identity
 .agents/identity.json
 
+# Generated/runtime files
+apps/api/public/
+apps/api/static/videos/*.mp4
+apps/api/scratch_test_image.png
+apps/api/static/bg_music.mp3
