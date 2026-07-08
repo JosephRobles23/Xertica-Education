@@ -19,3 +19,4 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0003](0003-domain-naming-in-english.md) | Nomenclatura del dominio en inglés | Aceptado |
 | [0004](0004-supabase-postgres-persistence.md) | Supabase Postgres como persistencia primaria | Aceptado |
 | [0005](0005-full-spine-schema.md) | Schema del Spine completo desde el día 1 | Aceptado |
+| [0011](0011-deep-research-without-pre-generation-gate.md) | Deep Research sin gate previo a la generación | Aceptado |
