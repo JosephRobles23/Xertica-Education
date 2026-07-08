@@ -223,9 +223,9 @@ export default function NuevaRuta() {
         replaceRouteSources(newPath.id, research.sources)
 
         const toolNames = research.detected_tools.map((tool) => tool.tool).join(', ')
-        toast.loading('Fuentes candidatas listas para revisión', {
+        toast.loading('Deep Research listo para enriquecer los assets', {
           id: toastId,
-          description: `${research.sources.length} fuentes para ${toolNames || 'la ruta'}.`,
+          description: `${research.sources.length} recomendaciones para ${toolNames || 'la ruta'}.`,
         })
       }
 
@@ -234,7 +234,7 @@ export default function NuevaRuta() {
       toast.success('Estructura generada con éxito', {
         id: toastId,
         description: deepResearch
-          ? 'Revisa la estructura y las fuentes verificadas antes de aprobar.'
+          ? 'Revisa la estructura; las recomendaciones aparecerán dentro de cada asset relevante.'
           : 'Revisa, reordena y cura los módulos antes de aprobar.',
       })
       router.push('/estructura-propuesta')
@@ -259,17 +259,6 @@ export default function NuevaRuta() {
       </PageDescription>
 
       <Card className="gap-5 p-6">
-        {/* Brief */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="brief">Describe la ruta o pega tu estructura</Label>
-          <Textarea
-            id="brief"
-            rows={3}
-            value={briefText}
-            onChange={(e) => setBriefText(e.target.value)}
-          />
-        </div>
-
         {/* Contexto del cliente */}
         <div className="rounded-xl border-[1.5px] border-input bg-background/70 p-4">
           <button
@@ -464,6 +453,18 @@ export default function NuevaRuta() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Brief */}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="brief">Describe el objetivo de aprendizaje</Label>
+          <Textarea
+            id="brief"
+            rows={4}
+            value={briefText}
+            placeholder={'Objetivo de aprendizaje: ¿qué quieres enseñar y por qué?\n\nIncluye, si lo tienes: nombre de la ruta, herramientas o habilidades a enseñar, puntos importantes a tratar y casos de uso.'}
+            onChange={(e) => setBriefText(e.target.value)}
+          />
         </div>
 
         {/* Upload estructura */}

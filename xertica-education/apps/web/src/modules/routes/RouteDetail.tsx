@@ -4,21 +4,17 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
-  ChevronRight,
   CircleCheck,
-  Clapperboard,
   ExternalLink,
-  FileText,
   FlaskConical,
   Info,
   Loader2,
   Search,
-  ShieldCheck,
   Sparkles,
+  Upload as UploadIcon,
   Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,12 +22,13 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Separator } from '@/shared/ui/separator'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/tooltip'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
 import { ContentPreview } from '@/shared/content/ContentPreview'
 import { SourceVideoPreview } from '@/shared/content/SourceVideoPreview'
 import { RefinePopover } from '@/modules/routes/components/RefinePopover'
+import { api } from '@/shared/lib/api'
 import {
   KIND_LABEL,
   type LearningRoute,
@@ -42,203 +39,234 @@ import {
 import { useStore } from '@/shared/store'
 import { cn } from '@/shared/lib/utils'
 
-/* ── Fuente individual (con preview de video colapsable) ───────── */
-function SourceCard({
-  source,
-  approved,
-  onDiscard,
-}: {
-  source: Source
-  approved: boolean
-  onDiscard: () => void
-}) {
-  const [videoOpen, setVideoOpen] = useState(false)
-  const requiresReview = source.status === 'requires-review' || !source.verified
+const sourceText = (source: Source) =>
+  [source.title, source.toolName, source.vendor, source.quote].filter(Boolean).join(' ').toLowerCase()
 
-  return (
-    <Card className="gap-3 p-4.5">
-      <div className="flex items-start gap-3.5">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            {source.toolName && (
-              <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[10.5px] text-primary">
-                {source.toolName}
-              </span>
-            )}
-            {source.kind && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-                {source.kind === 'youtube' ? (
-                  <Clapperboard className="size-3" />
-                ) : (
-                  <FileText className="size-3" />
-                )}
-                {source.kind === 'youtube' ? 'video' : 'documentación'}
-              </span>
-            )}
-            {source.relevanceScore !== undefined && (
-              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-                {source.relevanceScore}% match
-              </span>
-            )}
-          </div>
-          <h3 className="mb-2 font-display text-[15.5px] font-medium leading-snug text-ink">
-            {source.title}
-          </h3>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-              {source.plat}
-            </span>
-            {source.verified ? (
-              <Badge variant="success">
-                <ShieldCheck className="size-3" /> Verificada
-              </Badge>
-            ) : (
-              <Badge variant="destructive">
-                <AlertTriangle className="size-3" /> Requiere revisión
-              </Badge>
-            )}
-            {source.suggestedUse && (
-              <span className="rounded-md bg-accent px-2 py-0.5 font-mono text-[10.5px] text-primary">
-                uso: {source.suggestedUse}
-              </span>
-            )}
-          </div>
-        </div>
-        {!approved && (
-          <Button variant="outline-destructive" size="sm" onClick={onDiscard}>
-            Descartar
-          </Button>
-        )}
-      </div>
-      <blockquote className="border-l-[3px] border-accent pl-3.5 text-[13.5px] italic leading-relaxed">
-        {source.quote}
-      </blockquote>
-      {source.verificationReason && (
-        <div
-          className={cn(
-            'flex items-start gap-2 rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed',
-            requiresReview ? 'bg-destructive/8' : 'bg-success/10',
-          )}
-        >
-          {requiresReview ? (
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-          ) : (
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
-          )}
-          <span>{source.verificationReason}</span>
-        </div>
-      )}
-      {source.url && (
-        <Button asChild variant="ghost" size="sm" className="w-fit px-0">
-          <a href={source.url} target="_blank" rel="noreferrer">
-            {requiresReview && source.kind === 'youtube' ? 'Abrir canal candidato' : 'Abrir fuente concreta'}
-            <ExternalLink className="size-3.5" />
-          </a>
-        </Button>
-      )}
-      {source.videoPreview && (
-        <SourceVideoPreview
-          preview={source.videoPreview}
-          open={videoOpen}
-          onOpenChange={setVideoOpen}
-        />
-      )}
-    </Card>
-  )
+const isYoutubeSource = (source: Source) =>
+  source.kind === 'youtube' || source.plat.toLowerCase() === 'youtube' || Boolean(source.videoPreview?.youtubeId)
+
+const hasSpecificYoutubeVideo = (source: Source) =>
+  Boolean(source.videoPreview?.youtubeId) || Boolean(source.url?.includes('youtube.com/watch'))
+
+const moduleText = (module: RouteModule, content?: ModuleContentRef) =>
+  [module.name, module.type, content?.summary].filter(Boolean).join(' ').toLowerCase()
+
+function findRecommendedYoutubeSource(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
+  const targetText = moduleText(module, content)
+  const candidates = route.sources
+    .filter(
+      (source) =>
+        isYoutubeSource(source) &&
+        source.verified &&
+        hasSpecificYoutubeVideo(source),
+    )
+    .map((source) => {
+      const text = sourceText(source)
+      const relevance = source.relevanceScore ?? 0
+      const contextualMatch =
+        targetText && [source.toolName, source.vendor, source.title].some((value) =>
+          value ? targetText.includes(value.toLowerCase()) || text.includes(targetText) : false,
+        )
+
+      return {
+        source,
+        score:
+          relevance +
+          (source.suggestedUse === 'video' ? 45 : 0) +
+          (source.videoPreview?.youtubeId ? 100 : 0) +
+          (source.verified ? 35 : 0) +
+          (contextualMatch ? 20 : 0),
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  return candidates[0]?.source
 }
 
-/* ── Corpus de fuentes (encima de Módulos) ─────────────────────── */
-function CorpusSection({ route }: { route: LearningRoute }) {
-  const { isCorpusApproved, approveCorpus, discardedSources, discardSource } = useStore()
-  const approved = isCorpusApproved(route.id)
-  const discarded = discardedSources(route.id)
-  const sources = route.sources.filter((_, i) => !discarded.includes(i))
-  const verified = sources.filter((s) => s.verified).length
-  const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
-    const key = source.toolName || 'Fuentes generales'
-    groups[key] = [...(groups[key] ?? []), { source, index: route.sources.indexOf(source) }]
-    return groups
-  }, {})
-  const detectedTools = Object.keys(groupedSources)
+function findSecondaryYoutubeSource(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
+  const targetText = moduleText(module, content)
+  const candidates = route.sources
+    .filter((source) => isYoutubeSource(source) && !source.verified && hasSpecificYoutubeVideo(source))
+    .map((source) => {
+      const text = sourceText(source)
+      const relevance = source.relevanceScore ?? 0
+      const contextualMatch =
+        targetText && [source.toolName, source.vendor, source.title].some((value) =>
+          value ? targetText.includes(value.toLowerCase()) || text.includes(targetText) : false,
+        )
+
+      return {
+        source,
+        score:
+          relevance +
+          (source.suggestedUse === 'video' ? 45 : 0) +
+          (source.videoPreview ? 20 : 0) +
+          (contextualMatch ? 20 : 0),
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  return candidates[0]?.source
+}
+
+function VideoRecommendationPanel({
+  route,
+  content,
+  recommendedSource,
+  secondarySource,
+  onFindAnother,
+  findingAnother,
+  onUseAiVideo,
+  storyboardVideoUrl,
+}: {
+  route: LearningRoute
+  content: ModuleContentRef
+  recommendedSource?: Source
+  secondarySource?: Source
+  onFindAnother: () => void
+  findingAnother: boolean
+  onUseAiVideo: () => void
+  storyboardVideoUrl?: string
+}) {
+  const [videoOpen, setVideoOpen] = useState(Boolean(recommendedSource?.videoPreview?.youtubeId))
+  const [selectedMode, setSelectedMode] = useState<'youtube' | 'ai' | 'own' | null>(null)
+  const [ownVideoName, setOwnVideoName] = useState<string | null>(null)
+  const ownAssetName =
+    ownVideoName ??
+    (route.customerContext?.baseMaterialFile?.type?.toLowerCase().startsWith('video')
+      ? route.customerContext.baseMaterialFile.name
+      : null)
 
   return (
-    <section className="mb-8">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
-          {approved && (
-            <Badge variant="success">
-              <Check className="size-3" /> aprobado
-            </Badge>
-          )}
-        </div>
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {sources.length} candidatas · {verified} verificadas
-        </span>
-      </div>
-
-      {!approved && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl bg-secondary px-4.5 py-3.5">
-          <Search className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <p className="text-[13px] leading-relaxed">
-            Aprueba las fuentes antes de que aterricen en el contenido. El agente prioriza canales
-            y dominios verificados por herramienta/vendor; deja en revisión lo que no pase la
-            política.
+    <div className="mb-4 rounded-lg border-[1.5px] border-accent bg-primary/6 p-3.5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[13px] font-semibold text-ink">
+            {recommendedSource ? 'Video recomendado por IA' : 'Opciones de video'}
+          </div>
+          <p className="mt-0.5 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
+            {recommendedSource
+              ? 'Elige la fuente de video para este asset durante la revisión del módulo.'
+              : 'No encontramos un YouTube verificado; puedes usar el video IA, buscar otro o subir el tuyo.'}
           </p>
         </div>
-      )}
-
-      <div className="flex flex-col gap-3">
-        {detectedTools.map((tool) => (
-          <div key={tool} className="rounded-xl border-[1.5px] border-secondary p-3">
-            <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div>
-                <h3 className="font-display text-[15px] font-medium text-ink">{tool}</h3>
-                <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
-                  {groupedSources[tool]?.length ?? 0} fuentes candidatas
-                </p>
-              </div>
-              <Badge variant="outline">
-                {groupedSources[tool]?.filter((item) => item.source.verified).length ?? 0} verificadas
-              </Badge>
-            </div>
-            <div className="flex flex-col gap-3">
-              {groupedSources[tool]?.map(({ source, index }) => (
-                <SourceCard
-                  key={`${source.title}-${index}`}
-                  source={source}
-                  approved={approved}
-                  onDiscard={() => {
-                    discardSource(route.id, index)
-                    toast.info('Fuente descartada', { description: source.title })
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        {selectedMode && (
+          <Badge variant="success">
+            <Check className="size-3" /> seleccionado
+          </Badge>
+        )}
       </div>
 
-      {!approved && (
-        <div className="mt-4 flex justify-end">
-          <Button
-            onClick={() => {
-              approveCorpus(route.id)
-              toast.success('Fuentes aprobadas', {
-                description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
-              })
-            }}
-          >
-            Aprobar fuentes <ArrowRight />
-          </Button>
+      {recommendedSource?.videoPreview ? (
+        <div className="mb-3 rounded-lg bg-background/80 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="font-display text-[14px] font-medium text-ink">
+              {recommendedSource.title}
+            </span>
+            {recommendedSource.relevanceScore !== undefined && (
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {recommendedSource.relevanceScore}% match
+              </span>
+            )}
+          </div>
+          <SourceVideoPreview
+            preview={recommendedSource.videoPreview}
+            open={videoOpen}
+            onOpenChange={setVideoOpen}
+          />
+        </div>
+      ) : (
+        <div className="mb-3 rounded-lg bg-background/80 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="font-display text-[14px] font-medium text-ink">Video generado con IA</span>
+            <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">Veo 3</span>
+          </div>
+          <ContentPreview kind="video" pack={route.pack} videoUrl={storyboardVideoUrl} />
+          <div className="mt-3 rounded-lg border-[1.5px] border-dashed border-input px-3 py-2 text-[12.5px] text-muted-foreground">
+            {secondarySource ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Candidato de YouTube sin verificación final: <span className="font-medium text-ink">{secondarySource.title}</span>
+                </span>
+                {secondarySource.url && (
+                  <Button asChild variant="ghost" size="sm" className="h-7 px-0 text-primary">
+                    <a href={secondarySource.url} target="_blank" rel="noreferrer">
+                      Abrir candidato <ExternalLink className="size-3.5" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <span>No hay un video específico de YouTube todavía. Usa “Buscar otro” para correr Deep Research sobre este módulo.</span>
+            )}
+          </div>
         </div>
       )}
-    </section>
+
+      {ownAssetName && selectedMode === 'own' && (
+        <div className="mb-3 rounded-lg bg-background/80 px-3 py-2 text-[12.5px] text-foreground">
+          Video propio seleccionado: <span className="font-medium text-ink">{ownAssetName}</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={selectedMode === 'youtube' ? 'success' : 'outline-primary'}
+          disabled={!recommendedSource?.videoPreview}
+          onClick={() => {
+            setSelectedMode('youtube')
+            toast.success('Video de YouTube seleccionado', {
+              description: recommendedSource?.title ?? content.summary,
+            })
+          }}
+        >
+          <Check /> Usar YouTube verificado
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={findingAnother}
+          onClick={onFindAnother}
+        >
+          {findingAnother ? <Loader2 className="animate-spin" /> : <Search />}
+          Buscar otro
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setSelectedMode('ai')
+            onUseAiVideo()
+          }}
+        >
+          <Wand2 /> Generar AI video
+        </Button>
+        <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border-[1.5px] border-input bg-card px-3 text-[12px] font-medium transition-colors hover:border-primary">
+          <UploadIcon /> Video propio
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (!file) return
+              setOwnVideoName(file.name)
+              setSelectedMode('own')
+              toast.success('Video propio seleccionado', { description: file.name })
+            }}
+          />
+        </label>
+      </div>
+    </div>
   )
 }
 
-/* ── Fila de contenido (colapsable + aprobar/refinar) ──────────── */
-function ContentRow({
+/* ── Panel de asset (tab visible) ──────────────────────────────── */
+function ContentReviewPanel({
   route,
   module,
   content,
@@ -248,17 +276,61 @@ function ContentRow({
   content: ModuleContentRef
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const { contentStatusOf, approveContent, refineContent, isStoryboardApproved, isLabGuideApproved } = useStore()
+  const {
+    contentStatusOf,
+    approveContent,
+    refineContent,
+    isLabGuideApproved,
+    storyboardVideoUrlOf,
+    replaceRouteSources,
+  } = useStore()
+  const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
 
   const status = contentStatusOf(route.id, module.id, content.kind, content.status)
   const label = KIND_LABEL[content.kind]
   const isVideo = content.kind === 'video'
   const isLab = content.kind === 'lab'
-  const storyboardOk = isStoryboardApproved(route.id)
   const labGuideOk = isLabGuideApproved(route.id)
-  const videoNeedsReview = isVideo && status !== 'aprobado' && !storyboardOk
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
+  const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
+  const recommendedVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
+  const secondaryYoutubeVideo =
+    isVideo && !recommendedVideo ? findSecondaryYoutubeSource(route, module, content) : undefined
+
+  const findAnotherYoutubeVideo = async () => {
+    setFindingAnotherVideo(true)
+    const toastId = toast.loading('Buscando otro video de YouTube...', {
+      description: 'Reutilizando Deep Research con el contexto del módulo.',
+    })
+
+    try {
+      const research = await api.request<{
+        detected_tools: readonly { tool: string; vendor: string }[]
+        sources: readonly Source[]
+      }>(`/learning-paths/${route.id}/deep-research`, {
+        method: 'POST',
+        body: JSON.stringify({
+          brief: `${route.objective}\n${module.name}\n${content.summary}`,
+          customerContext: route.customerContext ?? {},
+        }),
+      })
+
+      replaceRouteSources(route.id, research.sources)
+      const toolNames = research.detected_tools.map((tool) => tool.tool).join(', ')
+      toast.success('Nueva recomendación lista', {
+        id: toastId,
+        description: toolNames ? `Deep Research actualizó opciones para ${toolNames}.` : undefined,
+      })
+    } catch (err) {
+      console.error(err)
+      toast.error('No se pudo buscar otro video', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setFindingAnotherVideo(false)
+    }
+  }
 
   const approveButton = (
     <Button
@@ -283,95 +355,77 @@ function ContentRow({
   )
 
   return (
-    <div className="mb-2 rounded-lg border-[1.5px] border-secondary">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3.5 py-2.75 text-left outline-none transition-colors hover:bg-background/70 focus-visible:ring-[3px] focus-visible:ring-ring/30"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 text-input" />
-        ) : (
-          <ChevronRight className="size-3.5 text-input" />
-        )}
-        <span className="flex-1 text-[13.5px]">{label}</span>
-        <StatusBadge status={status} />
-      </button>
-
-      {open && (
-        <div className="border-t border-secondary px-4 pt-3.5 pb-4 pl-9.5">
-          <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">
+    <div className="rounded-xl border-[1.5px] border-secondary bg-background/70 p-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="font-display text-lg font-medium text-ink">{label}</span>
+            <StatusBadge status={status} />
+          </div>
+          <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
             {content.summary}
           </p>
+        </div>
+        <div className="flex gap-2.5">
+          {approveButton}
+          <RefinePopover
+            label={label}
+            onRefine={() => refineContent(route.id, module.id, content.kind)}
+          >
+            <Button variant="outline-primary" size="sm">
+              <Sparkles /> Refinar
+            </Button>
+          </RefinePopover>
+        </div>
+      </div>
 
-          {videoNeedsReview && (
-            <button
-              type="button"
-              onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
-              className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <Clapperboard className="size-4.5 text-primary" />
-              <span className="flex-1">
-                <span className="block text-[13px] font-semibold text-ink">
-                  Revisar guion y storyboard
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  Recomendado para validar el guion. También puedes aprobar el video directamente.
-                </span>
-              </span>
-              <ArrowRight className="size-4 text-primary" />
-            </button>
-          )}
+      {isVideo && (
+        <VideoRecommendationPanel
+          route={route}
+          content={content}
+          recommendedSource={recommendedVideo}
+          secondarySource={secondaryYoutubeVideo}
+          findingAnother={findingAnotherVideo}
+          storyboardVideoUrl={storyboardVideoUrl}
+          onFindAnother={findAnotherYoutubeVideo}
+          onUseAiVideo={() => {
+            toast.info('Flujo de video AI', {
+              description: 'Continúa con la revisión de guion y storyboard.',
+            })
+            router.push(`/ruta/${route.id}/video-storyboard`)
+          }}
+        />
+      )}
 
-          {isVideo && storyboardOk && status !== 'aprobado' && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
-              <CircleCheck className="size-4 text-success" />
-              Guion y storyboard aprobados — el video está listo para tu aprobación.
-            </div>
-          )}
+      {labNeedsReview && (
+        <button
+          type="button"
+          onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
+          className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+        >
+          <FlaskConical className="size-4.5 text-primary" />
+          <span className="flex-1">
+            <span className="block text-[13px] font-semibold text-ink">
+              Personalizar guía del laboratorio
+            </span>
+            <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+              Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
+            </span>
+          </span>
+          <ArrowRight className="size-4 text-primary" />
+        </button>
+      )}
 
-          {labNeedsReview && (
-            <button
-              type="button"
-              onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
-              className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <FlaskConical className="size-4.5 text-primary" />
-              <span className="flex-1">
-                <span className="block text-[13px] font-semibold text-ink">
-                  Personalizar guía del laboratorio
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
-                </span>
-              </span>
-              <ArrowRight className="size-4 text-primary" />
-            </button>
-          )}
+      {isLab && labGuideOk && status !== 'aprobado' && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
+          <CircleCheck className="size-4 text-success" />
+          Guía del laboratorio aprobada — el laboratorio está listo para tu aprobación.
+        </div>
+      )}
 
-          {isLab && labGuideOk && status !== 'aprobado' && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
-              <CircleCheck className="size-4 text-success" />
-              Guía del laboratorio aprobada — el laboratorio está listo para tu aprobación.
-            </div>
-          )}
-
-          {/* Preview real del contenido */}
-          <div className="mb-4">
-            <ContentPreview kind={content.kind} pack={route.pack} />
-          </div>
-
-          <div className="flex gap-2.5">
-            {approveButton}
-            <RefinePopover
-              label={label}
-              onRefine={() => refineContent(route.id, module.id, content.kind)}
-            >
-              <Button variant="outline-primary" size="sm">
-                <Sparkles /> Refinar
-              </Button>
-            </RefinePopover>
-          </div>
+      {!isVideo && (
+        <div className="mb-4">
+          <ContentPreview kind={content.kind} pack={route.pack} />
         </div>
       )}
     </div>
@@ -382,9 +436,17 @@ function ContentRow({
 export default function Ruta() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { routes, isCorpusApproved, markGenerated, moduleStatusOf, approveModule, routeProgressOf } = useStore()
+  const {
+    routes,
+    markGenerated,
+    contentStatusOf,
+    moduleStatusOf,
+    approveModule,
+    routeProgressOf,
+  } = useStore()
   const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
-  const [openModule, setOpenModule] = useState<string | null>(null)
+  const [selectedModuleIndex, setSelectedModuleIndex] = useState(0)
+  const [selectedContentKind, setSelectedContentKind] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
 
   const progress = useMemo(
@@ -403,9 +465,28 @@ export default function Ruta() {
     )
   }
 
-  const corpusOk = isCorpusApproved(route.id)
-  const activeModule = route.modules.find((m) => moduleStatusOf(route.id, m) === 'en-revision')
-  const effectiveOpen = openModule ?? activeModule?.id ?? route.modules[0]?.id ?? null
+  const selectedModule = route.modules[selectedModuleIndex] ?? route.modules[0]
+  const selectedModuleStatus = selectedModule ? moduleStatusOf(route.id, selectedModule) : 'borrador'
+  const selectedModuleContents = selectedModule?.contents ?? []
+  const selectedContent =
+    selectedModuleContents.find((content) => content.kind === selectedContentKind) ?? selectedModuleContents[0]
+  const selectedTab = selectedContent?.kind ?? ''
+  const approvedAssets = selectedModule
+    ? selectedModuleContents.filter(
+        (content) => contentStatusOf(route.id, selectedModule.id, content.kind, content.status) === 'aprobado',
+      ).length
+    : 0
+  const allAssetsApproved =
+    selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
+  const isFirstModule = selectedModuleIndex === 0
+  const isLastModule = selectedModuleIndex >= route.modules.length - 1
+
+  const goToModule = (nextIndex: number) => {
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
+    const nextModule = route.modules[boundedIndex]
+    setSelectedModuleIndex(boundedIndex)
+    setSelectedContentKind(nextModule?.contents[0]?.kind ?? null)
+  }
 
   const generate = () => {
     setGenerating(true)
@@ -421,14 +502,14 @@ export default function Ruta() {
   }
 
   const generateButton = (
-    <Button disabled={!corpusOk || generating} onClick={generate}>
+    <Button disabled={generating} onClick={generate}>
       {generating ? (
         <>
-          <Loader2 className="animate-spin" /> Generando…
+          <Loader2 className="animate-spin" /> Preparando…
         </>
       ) : (
         <>
-          <Wand2 /> Generar contenido
+          <Wand2 /> Preparar asset final
         </>
       )}
     </Button>
@@ -450,10 +531,7 @@ export default function Ruta() {
           <p className="text-[14.5px] leading-relaxed">{route.objective}</p>
         </Card>
 
-        {/* Corpus encima de Módulos */}
-        <CorpusSection route={route} />
-
-        {/* Módulos */}
+        {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">
           <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
           <span className="font-mono text-[11px] text-muted-foreground">
@@ -461,96 +539,140 @@ export default function Ruta() {
           </span>
         </div>
 
-        <div className="flex flex-col gap-3">
-          {route.modules.map((m) => {
-            const isOpen = effectiveOpen === m.id
-            const moduleStatus = moduleStatusOf(route.id, m)
-            return (
-              <Card
-                key={m.id}
-                className={cn('gap-0 overflow-hidden p-0', moduleStatus === 'en-revision' && 'border-primary')}
-              >
-                <button
-                  type="button"
-                  onClick={() => setOpenModule(isOpen ? '' : m.id)}
-                  className="flex w-full cursor-pointer items-center gap-3.5 px-4.5 py-4 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                >
-                  {isOpen ? (
-                    <ChevronDown className="size-3.5 text-input" />
-                  ) : (
-                    <ChevronRight className="size-3.5 text-input" />
-                  )}
-                  <span className="font-mono text-[13px] font-semibold text-primary">{m.num}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-base text-ink">{m.name}</span>
-                    <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
-                      {m.type}
-                    </span>
+        {selectedModule && (
+          <Card className={cn('gap-5 p-5', selectedModuleStatus === 'en-revision' && 'border-primary')}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-mono text-[13px] font-semibold text-primary">
+                  {selectedModule.num}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-display text-xl font-medium leading-tight text-ink">
+                    {selectedModule.name}
                   </span>
-                  <StatusBadge status={moduleStatus} />
-                </button>
-                {isOpen && (
-                  <div className="border-t-[1.5px] border-secondary px-4.5 pt-3 pb-4 pl-11">
-                    {m.contents.map((c) => (
-                      <ContentRow key={c.kind} route={route} module={m} content={c} />
-                    ))}
-                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-secondary px-3.5 py-3">
-                      <span className="text-[12.5px] text-muted-foreground">
-                        Aprueba todos los assets de este módulo en una sola acción.
-                      </span>
-                      <Button
-                        variant={moduleStatus === 'aprobado' ? 'outline' : 'success'}
-                        size="sm"
-                        disabled={moduleStatus === 'aprobado'}
-                        onClick={() => {
-                          approveModule(route.id, m)
-                          toast.success('Módulo aprobado', { description: `${m.name} · ${route.name}` })
-                        }}
-                      >
-                        {moduleStatus === 'aprobado' ? (
-                          <>
-                            <CircleCheck /> Aprobado
-                          </>
-                        ) : (
-                          <>
-                            <Check /> Aprobar módulo completo
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )
-          })}
-        </div>
+                  <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
+                    {selectedModule.type} · módulo {selectedModuleIndex + 1} de {route.modules.length}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={selectedModuleStatus} />
+                <Badge variant={allAssetsApproved ? 'success' : 'muted'}>
+                  {approvedAssets}/{selectedModuleContents.length} assets
+                </Badge>
+              </div>
+            </div>
 
-        {/* Generar contenido */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary px-3.5 py-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isFirstModule}
+                onClick={() => goToModule(selectedModuleIndex - 1)}
+              >
+                <ArrowLeft /> Módulo anterior
+              </Button>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {route.modules.map((module, index) => {
+                  const status = moduleStatusOf(route.id, module)
+                  return (
+                    <button
+                      type="button"
+                      key={module.id}
+                      onClick={() => goToModule(index)}
+                      className={cn(
+                        'size-8 rounded-lg border-[1.5px] font-mono text-[11px] font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+                        index === selectedModuleIndex
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : status === 'aprobado'
+                            ? 'border-success bg-success/10 text-success'
+                            : 'border-input bg-card text-muted-foreground hover:border-primary',
+                      )}
+                      aria-label={`Ver módulo ${module.num}`}
+                    >
+                      {status === 'aprobado' ? <Check className="mx-auto size-3.5" /> : module.num}
+                    </button>
+                  )
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLastModule}
+                onClick={() => goToModule(selectedModuleIndex + 1)}
+              >
+                Siguiente módulo <ArrowRight />
+              </Button>
+            </div>
+
+            {selectedModuleContents.length > 0 ? (
+              <Tabs value={selectedTab} onValueChange={setSelectedContentKind}>
+                <TabsList className="w-full overflow-x-auto border-b-[1.5px]">
+                  {selectedModuleContents.map((content) => {
+                    const status = contentStatusOf(route.id, selectedModule.id, content.kind, content.status)
+                    return (
+                      <TabsTrigger key={content.kind} value={content.kind} className="px-3">
+                        {status === 'aprobado' && <CircleCheck className="size-3.5 text-success" />}
+                        {KIND_LABEL[content.kind]}
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+
+                {selectedModuleContents.map((content) => (
+                  <TabsContent key={content.kind} value={content.kind} className="mt-3">
+                    <ContentReviewPanel route={route} module={selectedModule} content={content} />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            ) : (
+              <div className="rounded-xl border-[1.5px] border-dashed border-input p-6 text-center text-[13px] text-muted-foreground">
+                Este módulo todavía no tiene assets generados.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary px-3.5 py-3">
+              <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+                {allAssetsApproved
+                  ? 'Todos los assets de este módulo están aprobados.'
+                  : 'Revisa y aprueba cada asset antes de cerrar este módulo.'}
+              </span>
+              {allAssetsApproved ? (
+                <Button
+                  variant={isLastModule ? 'success' : 'outline-primary'}
+                  size="sm"
+                  onClick={() => {
+                    approveModule(route.id, selectedModule)
+                    toast.success('Módulo aprobado', { description: `${selectedModule.name} · ${route.name}` })
+                    if (!isLastModule) goToModule(selectedModuleIndex + 1)
+                  }}
+                >
+                  {isLastModule ? (
+                    <>
+                      <CircleCheck /> Módulo aprobado
+                    </>
+                  ) : (
+                    <>
+                      Continuar al siguiente módulo <ArrowRight />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Badge variant="outline">
+                  {approvedAssets} de {selectedModuleContents.length} aprobados
+                </Badge>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Asset final */}
         <Separator className="mt-6 mb-5" />
         <div className="flex items-center justify-between gap-4">
           <span className="text-[12.5px] leading-relaxed text-muted-foreground">
-            {corpusOk ? (
-              <>
-                Genera el material de <b className="text-ink">todos los módulos</b> de la ruta en
-                una sola pasada.
-              </>
-            ) : (
-              <>
-                <b className="text-ink">Aprueba las fuentes</b> para habilitar la generación de
-                contenido.
-              </>
-            )}
+            Revisa los assets del módulo y prepara la versión final cuando esté lista.
           </span>
-          {corpusOk ? (
-            generateButton
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{generateButton}</span>
-              </TooltipTrigger>
-              <TooltipContent>Primero aprueba las fuentes</TooltipContent>
-            </Tooltip>
-          )}
+          {generateButton}
         </div>
       </div>
 

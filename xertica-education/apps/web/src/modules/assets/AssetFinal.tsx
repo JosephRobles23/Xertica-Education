@@ -14,11 +14,14 @@ import { InfografiaView } from '@/shared/content/InfografiaView'
 import { QuizView } from '@/shared/content/QuizView'
 import { LabView } from '@/shared/content/LabView'
 import { getRoute } from '@/shared/data/routes'
+import { useStore } from '@/shared/store'
 
 export default function AssetFinal() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const route = getRoute(id)
+  const { routes, storyboardVideoUrlOf } = useStore()
+  const route = routes.find((item) => item.id === id) ?? getRoute(id)
+  const videoUrl = route ? storyboardVideoUrlOf(route.id) : ''
 
   if (!route) {
     return (
@@ -65,7 +68,7 @@ export default function AssetFinal() {
           </TabsList>
 
           <TabsContent value="video">
-            <VideoFrame video={route.pack.video} />
+            <VideoFrame video={route.pack.video} videoUrl={videoUrl} />
           </TabsContent>
           <TabsContent value="infografia">
             <InfografiaView info={route.pack.infografia} />
