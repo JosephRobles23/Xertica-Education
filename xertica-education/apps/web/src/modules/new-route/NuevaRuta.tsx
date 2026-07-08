@@ -119,6 +119,7 @@ export default function NuevaRuta() {
   } = useStore()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [useAsSource, setUseAsSource] = useState(true)
+  const [baseMaterialRaw, setBaseMaterialRaw] = useState<File | null>(null)
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
@@ -158,6 +159,7 @@ export default function NuevaRuta() {
   const attachBaseMaterial = (file: File | null) => {
     if (!file) return
 
+    setBaseMaterialRaw(file)
     updateCustomerContext({
       baseMaterialFile: {
         name: file.name,
@@ -191,6 +193,22 @@ export default function NuevaRuta() {
       })
 
       setActiveRouteId(newPath.id)
+
+      // Vía 2 (ADR-0008): sube el documento del cliente a la ruta recién creada.
+      // Se almacena siempre; con "usar como fuente" entra a la KB en Gate 1.
+      if (baseMaterialRaw) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, baseMaterialRaw, useAsSource)
+          toast.loading(
+            useAsSource ? 'Documento subido · se añadirá a la base de conocimiento' : 'Documento subido como contexto',
+            { id: toastId, description: uploaded.filename },
+          )
+        } catch (uploadErr) {
+          toast.error('No se pudo subir el documento', {
+            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          })
+        }
+      }
 
       toast.loading('Generando módulos y componentes con IA...', {
         id: toastId,
@@ -398,7 +416,7 @@ export default function NuevaRuta() {
                     <input
                       ref={baseMaterialInputRef}
                       type="file"
-                      accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt,.md"
+                      accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
                       className="hidden"
                       onChange={(e) => attachBaseMaterial(e.target.files?.[0] ?? null)}
                     />
@@ -429,7 +447,10 @@ export default function NuevaRuta() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          onClick={() => updateCustomerContext({ baseMaterialFile: undefined })}
+                          onClick={() => {
+                            setBaseMaterialRaw(null)
+                            updateCustomerContext({ baseMaterialFile: undefined })
+                          }}
                         >
                           <X className="size-3.5" />
                         </Button>
@@ -525,31 +546,45 @@ export default function NuevaRuta() {
           <Switch checked={deepResearch} className="pointer-events-none" tabIndex={-1} />
         </div>
 
-        {/* Material de referencia */}
+        {/* Material de referencia (Vía 2) — comparte el archivo de la propuesta */}
         <div className="flex flex-col gap-2">
           <Label>O sube material de referencia</Label>
-          <div className="rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center">
+          <button
+            type="button"
+            onClick={() => baseMaterialInputRef.current?.click()}
+            className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          >
             <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-            <div className="text-[13px]">Arrastra o selecciona archivos</div>
+            <div className="text-[13px]">Selecciona un archivo</div>
             <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-              DOCX · PDF · PPTX — se parsean con MinerU
+              DOCX · PDF · PPTX · XLSX · TXT
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-            <FileText className="size-4 text-primary" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] text-ink">temario-ia-avanzada.docx</div>
-              <div className="font-mono text-[10.5px] text-muted-foreground">214 KB · procesado</div>
+          </button>
+          {customerContext.baseMaterialFile ? (
+            <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
+              <FileText className="size-4 text-primary" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] text-ink">
+                  {customerContext.baseMaterialFile.name}
+                </div>
+                <div className="font-mono text-[10.5px] text-muted-foreground">
+                  {customerContext.baseMaterialFile.sizeKb} KB · se sube al crear la ruta
+                </div>
+              </div>
+              <Label htmlFor="use-source" className="cursor-pointer gap-2 font-normal text-foreground">
+                <Checkbox
+                  id="use-source"
+                  checked={useAsSource}
+                  onCheckedChange={(v) => setUseAsSource(v === true)}
+                />
+                <span className="text-xs">usar también como fuente</span>
+              </Label>
             </div>
-            <Label htmlFor="use-source" className="cursor-pointer gap-2 font-normal text-foreground">
-              <Checkbox
-                id="use-source"
-                checked={useAsSource}
-                onCheckedChange={(v) => setUseAsSource(v === true)}
-              />
-              <span className="text-xs">usar también como fuente</span>
-            </Label>
-          </div>
+          ) : (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Adjunta un archivo para usarlo como contexto y, opcionalmente, como fuente de la KB.
+            </span>
+          )}
         </div>
 
         <Button className="w-full" onClick={propose} disabled={generating}>
