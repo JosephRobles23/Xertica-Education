@@ -7,10 +7,12 @@ import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { PageTitle } from '@/shared/components/PageHeader'
 import { getRoute } from '@/shared/data/routes'
+import { useStore } from '@/shared/store'
 
 export default function Publicado() {
   const { id } = useParams<{ id: string }>()
-  const route = getRoute(id)
+  const { routes } = useStore()
+  const route = routes.find((item) => item.id === id) ?? getRoute(id)
 
   if (!route) {
     return (

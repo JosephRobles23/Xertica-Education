@@ -8,12 +8,20 @@
 # - routers/jobs.py: Handles background tasks and content generation queues.
 # - routers/learning_paths.py: Core logic for curating, building, and serving learning paths.
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file into os.environ
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from routers.jobs import router as jobs_router
 from routers.learning_paths import router as learning_paths_router
 from routers.kb import router as kb_router
 from routers.documents import router as documents_router
+from routers.video import router as video_router
 
 # Initialize the main FastAPI application instance.
 # This object acts as the central router and coordinator for all incoming HTTP requests.
@@ -43,6 +51,13 @@ app.include_router(jobs_router)
 app.include_router(learning_paths_router)
 app.include_router(kb_router)
 app.include_router(documents_router)
+app.include_router(video_router)
+
+# Mount static files directory to serve local fallback assets
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
 
 @app.get("/")
 async def root():

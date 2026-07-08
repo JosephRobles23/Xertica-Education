@@ -105,6 +105,11 @@ interface AppStore {
 
   isStoryboardApproved: (routeId: string) => boolean
   approveStoryboard: (routeId: string) => void
+  storyboardVideoUrlOf: (routeId: string) => string
+  setStoryboardVideoUrl: (routeId: string, videoUrl: string) => void
+  storyboardJobIdOf: (routeId: string) => string | undefined
+  setStoryboardJobId: (routeId: string, jobId: string) => void
+  clearStoryboardJobId: (routeId: string) => void
 
   isLabGuideApproved: (routeId: string) => boolean
   approveLabGuide: (routeId: string) => void
@@ -127,13 +132,33 @@ interface AppStore {
 
 const Ctx = createContext<AppStore | null>(null)
 
+const STORYBOARD_VIDEO_KEY = 'xertica.education.storyboard-video-url'
+const STORYBOARD_JOB_KEY = 'xertica.education.storyboard-job-id'
+
+const readJSON = <T,>(key: string, fallback: T): T => {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const writeJSON = <T,>(key: string, value: T) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Ignore storage failures. App still works in memory.
+  }
+}
+
 let idSeed = 100
 const nextId = () => `p${++idSeed}`
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const [briefText, setBriefText] = useState(
-    'Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio — del concepto al laboratorio, cerrando con una evaluación de dominio. Público: equipos técnicos y de negocio.',
-  )
+  const [briefText, setBriefText] = useState('')
   const [deepResearch, setDeepResearch] = useState(false)
   const [customerContext, setCustomerContext] = useState<CustomerContext>({})
   const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
@@ -144,6 +169,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [corpusApproved, setCorpusApproved] = useState<Record<string, boolean>>({})
   const [discarded, setDiscarded] = useState<Record<string, readonly number[]>>({})
   const [storyboardOk, setStoryboardOk] = useState<Record<string, boolean>>({})
+  const [storyboardVideoUrl, setStoryboardVideoUrlState] = useState<Record<string, string>>(
+    () => readJSON(STORYBOARD_VIDEO_KEY, {}),
+  )
+  const [storyboardJobId, setStoryboardJobIdState] = useState<Record<string, string>>(
+    () => readJSON(STORYBOARD_JOB_KEY, {}),
+  )
   const [labGuideOk, setLabGuideOk] = useState<Record<string, boolean>>({})
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
 
@@ -180,6 +211,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchRoutes()
   }, [fetchRoutes])
+
+  useEffect(() => {
+    writeJSON(STORYBOARD_VIDEO_KEY, storyboardVideoUrl)
+  }, [storyboardVideoUrl])
+
+  useEffect(() => {
+    writeJSON(STORYBOARD_JOB_KEY, storyboardJobId)
+  }, [storyboardJobId])
 
   const [activeJobs, setActiveJobs] = useState<Record<string, JobState>>({})
 
@@ -335,6 +374,30 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setStoryboardOk((prev) => ({ ...prev, [routeId]: true }))
   }, [])
 
+  const storyboardVideoUrlOf = useCallback(
+    (routeId: string) => storyboardVideoUrl[routeId] ?? '',
+    [storyboardVideoUrl],
+  )
+  const setStoryboardVideoUrl = useCallback((routeId: string, videoUrl: string) => {
+    setStoryboardVideoUrlState((prev) => ({ ...prev, [routeId]: videoUrl }))
+  }, [])
+
+  const storyboardJobIdOf = useCallback(
+    (routeId: string) => storyboardJobId[routeId],
+    [storyboardJobId],
+  )
+  const setStoryboardJobId = useCallback((routeId: string, jobId: string) => {
+    setStoryboardJobIdState((prev) => ({ ...prev, [routeId]: jobId }))
+  }, [])
+  const clearStoryboardJobId = useCallback((routeId: string) => {
+    setStoryboardJobIdState((prev) => {
+      if (!(routeId in prev)) return prev
+      const next = { ...prev }
+      delete next[routeId]
+      return next
+    })
+  }, [])
+
   const isLabGuideApproved = useCallback((routeId: string) => labGuideOk[routeId] ?? false, [labGuideOk])
   const approveLabGuide = useCallback((routeId: string) => {
     setLabGuideOk((prev) => ({ ...prev, [routeId]: true }))
@@ -354,7 +417,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       proposal, reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
-      isStoryboardApproved, approveStoryboard,
+      isStoryboardApproved, approveStoryboard, storyboardVideoUrlOf, setStoryboardVideoUrl, storyboardJobIdOf, setStoryboardJobId, clearStoryboardJobId,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
       routes, fetchRoutes, updateRoute, replaceRouteSources,
@@ -366,7 +429,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
-      isStoryboardApproved, approveStoryboard,
+      isStoryboardApproved, approveStoryboard, storyboardVideoUrlOf, setStoryboardVideoUrl, storyboardJobIdOf, setStoryboardJobId, clearStoryboardJobId,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
       routes, fetchRoutes, updateRoute, replaceRouteSources,

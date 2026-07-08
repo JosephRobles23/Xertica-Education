@@ -6,12 +6,12 @@ import { LabView } from './LabView'
 import { LessonView } from './LessonView'
 
 /** Renderiza el preview correcto según el tipo de contenido. */
-export function ContentPreview({ kind, pack }: { kind: ContentKind; pack: ContentPack }) {
+export function ContentPreview({ kind, pack, videoUrl }: { kind: ContentKind; pack: ContentPack; videoUrl?: string }) {
   switch (kind) {
     case 'lesson':
       return <LessonView lesson={pack.lesson} />
     case 'video':
-      return <VideoFrame video={pack.video} compact />
+      return <VideoFrame video={pack.video} videoUrl={videoUrl} compact />
     case 'infografia':
       return <InfografiaView info={pack.infografia} compact className="justify-start" />
     case 'quiz':

@@ -14,8 +14,8 @@ import { useStore } from '@/shared/store'
 export default function LabGuide() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const route = getRoute(id)
-  const { approveLabGuide } = useStore()
+  const { routes, approveLabGuide } = useStore()
+  const route = routes.find((item) => item.id === id) ?? getRoute(id)
 
   if (!route) {
     return (

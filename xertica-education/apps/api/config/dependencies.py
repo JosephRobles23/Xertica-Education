@@ -3,6 +3,7 @@ from services.research.service import ResearchService
 from services.route.service import RouteService
 from services.kb.interface import KnowledgeBaseInterface
 from services.kb.service import KBService
+from services.video.service import VideoService
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
@@ -18,6 +19,7 @@ _jobs_service = JobsService(_jobs_repository)
 _route_repository = SupabaseLearningPathRepository()
 _route_service = RouteService(_route_repository)
 _research_service = ResearchService()
+_video_service = VideoService()
 
 # KB / RAG (ADR-0006): embedder y store se auto-seleccionan (mock ↔ real).
 _knowledge_base = KBService(embedder=get_embedder(), repository=get_kb_chunk_repository())
@@ -49,3 +51,5 @@ def get_documents_repository():
 
 def get_storage_adapter():
     return _storage_adapter
+def get_video_service() -> VideoService:
+    return _video_service
