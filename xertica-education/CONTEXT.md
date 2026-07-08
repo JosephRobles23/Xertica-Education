@@ -26,11 +26,19 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 | **Componente** | `models/domain/component.py`, `components` | Pieza de contenido de un módulo: `lesson`/`video`/`lab`/`infografia`/`quiz`. |
 | **Asset** | `models/domain/asset.py`, `assets` | Artefacto materializado de un componente, con `estado` de aprobación, `storage_path`, `word_budget`, `provenance`. |
 | **AssetVersion** | `models/domain/asset_version.py`, `asset_versions` | Versión histórica de un asset. |
+| **Video Asset Renderizado** | `assets.tipo = video`, `storage_path` | Video final de un componente de tipo `video`. Su fuente de verdad es el Asset persistido en Supabase; el estado del navegador/localStorage solo puede actuar como caché temporal para reanudar o mostrar progreso. |
+| **Plan de Render / Render Plan** | `RenderPlan`, `render_plan` | Especificación declarativa de las operaciones y sus entradas/salidas necesarias para producir un Video Asset Renderizado a partir de un Storyboard. Separar el plan de su ejecución permite cambiar el orquestador (determinista hoy, grafo/agente mañana) sin reescribir la lógica de cada etapa. |
+| **Etapa de Render / Render Stage** | `RenderStage` | Operación atómica dentro de un Render Plan (por ejemplo: síntesis de narración, generación de visual, composición, mezcla de audio). |
+| **Ejecutor de Render / Render Executor** | `RenderExecutor` | Componente responsable de ejecutar un Render Plan etapa por etapa de forma determinista. Hoy es código propio; mañana podría ser un grafo de LangGraph/ADK sin cambiar el contrato del plan. |
 | **Source / Fuente** | `models/domain/source.py`, `sources` | Material de referencia (con `verificada_google`) que cita un asset y alimenta la KB. |
 | **KB (Knowledge Base)** | `services/kb/` | Base de conocimiento RAG construida a partir de las fuentes; alimenta la generación de contenido. |
 | **Job** | `JobsService`, `/jobs` | Unidad de trabajo asíncrona con estado y progreso. Toda generación pesada corre como job y se consulta por *polling*. |
 | **Gate (Compuerta)** | ver §3 | Punto de aprobación humana que transiciona el estado de la ruta y desbloquea la siguiente fase. |
 | **Storyboard** | `/ruta/:id/video-storyboard` | Guion visual del video antes de renderizar. |
+| **Render Target** | `route_id` + `module_id` + `component_kind` | Identidad de dominio que indica a qué Componente pertenece un render de video antes de resolver o crear el `component_id` persistido. |
+| **Tipo Visual / Visual Type** | `VideoScene.visual_type` (Literal con 14 valores) | Categoría de escena visual en un Storyboard. El vocabulario se expandió de 5 tipos heredados a 14 tipos alineados con los escenarios de Remotion (ver ADR-0009). Incluye `text_card`, `hero_title`, `stat_card`, `callout`, `comparison`, `bar_chart`, `line_chart`, `pie_chart`, `kpi_grid`, `progress_bar`, `terminal_scene`, `screenshot_scene`, `ai_video`, `ai_illustration`. |
+| **Subtítulos / Captions** | `edit_decisions.captions` | Palabra destacada con timing word-level, renderizada por Remotion CaptionOverlay. El timing se extrae de la respuesta de Google Cloud TTS (`timepoints`), no de un transcriber externo. |
+| **OpenMontage** | `openmontage/` (git submodule) | Repositorio externo (github.com/calesthio/OpenMontage) que provee herramientas Python de audio/música/composición y el proyecto Remotion `remotion-composer/`. Integrado como submódulo (ADR-0010), no como dependencia pip. Solo el equipo de video lo conoce. |
 | **Biblioteca** | `/biblioteca` | Catálogo de rutas/assets ya producidos. |
 
 ### Estados de un Job
