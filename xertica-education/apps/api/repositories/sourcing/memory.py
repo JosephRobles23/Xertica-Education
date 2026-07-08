@@ -12,7 +12,8 @@ class InMemorySourcingRepository(SourcingRepositoryInterface):
     async def upsert_sources(self, sources: list[Source]) -> list[Source]:
         result: list[Source] = []
         for src in sources:
-            key = (src.learning_path_id, src.url)
+            # dedup por url (Vía 1) o por document_id (Vía 2, sin url)
+            key = (src.learning_path_id, src.url or f"doc:{src.document_id}")
             existing = self._rows.get(key)
             if existing is not None:
                 # refresca metadata; PRESERVA estado + verificada_google (decisión #4)

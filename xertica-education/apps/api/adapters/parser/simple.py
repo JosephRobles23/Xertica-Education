@@ -18,6 +18,13 @@ class SimpleParserAdapter(BaseParserAdapter):
             return self._parse_docx(file_bytes)
         if name.endswith(".pptx"):
             return self._parse_pptx(file_bytes)
+        if name.endswith(".xlsx"):
+            return self._parse_xlsx(file_bytes)
+        if name.endswith((".doc", ".ppt", ".xls")):
+            raise ValueError(
+                f"Formato legacy no soportado: {file_name}. "
+                f"Conviértelo a .docx/.pptx/.xlsx (ADR-0008)."
+            )
         raise ValueError(f"Formato no soportado por SimpleParserAdapter: {file_name}")
 
     @staticmethod
@@ -50,6 +57,23 @@ class SimpleParserAdapter(BaseParserAdapter):
             else:
                 lines.append(text)
         return "\n\n".join(lines)
+
+    @staticmethod
+    def _parse_xlsx(file_bytes: bytes) -> str:
+        import io
+        from openpyxl import load_workbook
+
+        wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+        sheets = []
+        for ws in wb.worksheets:
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(c) for c in row if c is not None]
+                if cells:
+                    rows.append(" | ".join(cells))
+            if rows:
+                sheets.append(f"## {ws.title}\n\n" + "\n".join(rows))
+        return "\n\n".join(sheets)
 
     @staticmethod
     def _parse_pptx(file_bytes: bytes) -> str:

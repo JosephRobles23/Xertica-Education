@@ -7,7 +7,9 @@ from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
 from repositories.sourcing import get_sourcing_repository as _build_sourcing_repository
+from repositories.documents import get_documents_repository as _build_documents_repository
 from adapters.embeddings import get_embedder
+from adapters.storage import get_storage_adapter as _build_storage_adapter
 
 # Instantiate repositories and services
 _jobs_repository = SupabaseJobRepository()
@@ -23,6 +25,10 @@ _knowledge_base = KBService(embedder=get_embedder(), repository=get_kb_chunk_rep
 # Sourcing (ADR-0007): repo route-céntrico de fuentes.
 _sourcing_repository = _build_sourcing_repository()
 
+# Documentos del usuario (Vía 2 · ADR-0008): storage + repo.
+_documents_repository = _build_documents_repository()
+_storage_adapter = _build_storage_adapter()
+
 def get_jobs_service() -> JobsService:
     return _jobs_service
 
@@ -37,3 +43,9 @@ def get_knowledge_base() -> KnowledgeBaseInterface:
 
 def get_sourcing_repository():
     return _sourcing_repository
+
+def get_documents_repository():
+    return _documents_repository
+
+def get_storage_adapter():
+    return _storage_adapter

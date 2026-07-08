@@ -11,16 +11,18 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
-    get_sourcing_repository,
+    get_sourcing_repository, get_storage_adapter, get_documents_repository,
 )
+from config.settings import settings
 from services.route.service import RouteService
 from services.jobs.service import JobsService
 from services.research.service import ResearchService
 from services.kb.interface import KnowledgeBaseInterface
-from services.kb.ingestion import KbIngestionCoordinator, MockDocumentProvider
+from services.kb.ingestion import KbIngestionCoordinator, RealDocumentProvider
 from repositories.sourcing.interface import SourcingRepositoryInterface
 from repositories.sourcing.mapping import route_sources_to_domain
-from models.common import JobStatus
+from adapters.parser.simple import SimpleParserAdapter
+from models.common import JobStatus, as_uuid
 from typing import Dict, Any, List
 
 
@@ -221,33 +223,37 @@ async def approve_sourcing(
     jobs_service: JobsService = Depends(get_jobs_service),
     knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
     sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
+    storage=Depends(get_storage_adapter),
+    documents_repo=Depends(get_documents_repository),
 ):
     """
     Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
 
-    Gate 1 (ADR-0007): persiste (UPSERT) todas las fuentes de route["sources"] en la tabla
-    `sources` (route-céntrica) y luego dispara la ingesta RAG de las verificadas como Job en
-    background, sin bloquear la aprobación (ADR-0006 §3).
+    Gate 1: persiste (UPSERT) las fuentes de deep-research (ADR-0007) y dispara la ingesta RAG
+    del corpus aprobado — verificadas Google (Vía 1) + documentos subidos (Vía 2, ADR-0008) —
+    como Job en background, sin bloquear la aprobación (ADR-0006 §3).
     """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
-    # 1) UPSERT sincrónico de todas las candidatas → filas con id real (cierra el FK de kb_chunks).
-    domain_sources = route_sources_to_domain(route.get("sources", []), route_id)
-    persisted = await sourcing_repo.upsert_sources(domain_sources)
-    verified = [s for s in persisted if s.verificada_google]
+    # 1) UPSERT de las fuentes de deep-research (Vía 1); las de Vía 2 ya se persistieron al subir.
+    await sourcing_repo.upsert_sources(route_sources_to_domain(route.get("sources", []), route_id))
 
-    # 2) Ingesta RAG de las verificadas en background.
+    # 2) Corpus a ingestar = verificadas Google OR uploads (ADR-0008 §6).
+    all_sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
+    corpus = [s for s in all_sources if s.verificada_google or s.origin == "upload"]
+
+    # 3) Ingesta RAG en background (parsea los uploads con el parser real).
     job_id = await jobs_service.create_job("kb_ingestion")
-    coordinator = KbIngestionCoordinator(knowledge_base, MockDocumentProvider())
+    provider = RealDocumentProvider(storage, documents_repo, SimpleParserAdapter(), settings.storage_bucket)
+    coordinator = KbIngestionCoordinator(knowledge_base, provider)
     background_tasks.add_task(
-        _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, verified,
+        _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
     )
 
     updated = await route_service.update_route(route_id, {"status": "generado"})
-    # Aditivo (no rompe el contrato existente): permite sondear el job y ver el conteo.
     if isinstance(updated, dict):
         updated["ingestionJobId"] = str(job_id)
-        updated["sourcesPersisted"] = len(persisted)
+        updated["sourcesPersisted"] = len(all_sources)
     return updated
