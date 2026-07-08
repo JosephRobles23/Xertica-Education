@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
@@ -17,7 +17,6 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
-import { Checkbox } from '@/shared/ui/checkbox'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Switch } from '@/shared/ui/switch'
@@ -27,12 +26,8 @@ import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHea
 import { UploadStructureDialog } from '@/modules/new-route/components/UploadStructureDialog'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
-import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage, Source } from '@/shared/lib/types'
+import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage } from '@/shared/lib/types'
 
-interface DeepResearchResult {
-  detected_tools: readonly { tool: string; vendor: string }[]
-  sources: readonly Source[]
-}
 
 const AREA_OPTIONS: readonly CustomerArea[] = ['RRHH', 'Finanzas', 'TI', 'Educacion', 'Salud', 'General']
 const WORKSPACE_OPTIONS: readonly { value: GoogleWorkspaceUsage; label: string }[] = [
@@ -115,10 +110,22 @@ export default function NuevaRuta() {
     deepResearch, setDeepResearch,
     customerContext, setCustomerContext,
     uploadedStructure, setUploadedStructure,
-    trackJob, fetchRoutes, setActiveRouteId, replaceRouteSources,
+    fetchRoutes, setActiveRouteId,
+    setStructureJobId, setPendingDeepResearch,
+    setProposalLoadedRouteId, setProposal,
   } = useStore()
+
+  useEffect(() => {
+    // Reset any previous active route details and proposal on mount
+    setActiveRouteId(null)
+    setStructureJobId(null)
+    setPendingDeepResearch(false)
+    setProposalLoadedRouteId(null)
+    setProposal([])
+  }, [setActiveRouteId, setStructureJobId, setPendingDeepResearch, setProposalLoadedRouteId, setProposal])
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [useAsSource, setUseAsSource] = useState(true)
+  // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
+  const [materialFiles, setMaterialFiles] = useState<File[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
@@ -155,21 +162,44 @@ export default function NuevaRuta() {
     })
   }
 
-  const attachBaseMaterial = (file: File | null) => {
-    if (!file) return
-
+  // Metadata del primer doc → customerContext.baseMaterialFile (compat: inferencia +
+  // "video propio" en RouteDetail). El resto vive en la lista `materialFiles`.
+  const syncPrimaryMeta = (files: File[]) => {
+    const first = files[0]
     updateCustomerContext({
-      baseMaterialFile: {
-        name: file.name,
-        type: file.type || file.name.split('.').pop()?.toUpperCase() || 'archivo',
-        sizeKb: Math.max(1, Math.round(file.size / 1024)),
-      },
-      inferredFrom: Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material'])),
+      baseMaterialFile: first
+        ? {
+            name: first.name,
+            type: first.type || first.name.split('.').pop()?.toUpperCase() || 'archivo',
+            sizeKb: Math.max(1, Math.round(first.size / 1024)),
+          }
+        : undefined,
+      inferredFrom: first
+        ? Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material']))
+        : customerContext.inferredFrom,
     })
+  }
 
-    toast.success('Material base adjuntado', {
-      description: `${file.name} se usará como contexto de personalización.`,
-    })
+  const attachMaterial = (incoming: FileList | File[] | null) => {
+    const files = incoming ? Array.from(incoming) : []
+    if (!files.length) return
+    // dedup por nombre+tamaño para no subir el mismo archivo dos veces.
+    const merged = [...materialFiles]
+    for (const f of files) {
+      if (!merged.some((m) => m.name === f.name && m.size === f.size)) merged.push(f)
+    }
+    setMaterialFiles(merged)
+    syncPrimaryMeta(merged)
+    toast.success(
+      files.length > 1 ? `${files.length} documentos adjuntados` : 'Documento adjuntado',
+      { description: 'Se usará como contexto y se añadirá a la base de conocimiento.' },
+    )
+  }
+
+  const removeMaterial = (index: number) => {
+    const next = materialFiles.filter((_, i) => i !== index)
+    setMaterialFiles(next)
+    syncPrimaryMeta(next)
   }
 
   const propose = async () => {
@@ -192,9 +222,25 @@ export default function NuevaRuta() {
 
       setActiveRouteId(newPath.id)
 
-      toast.loading('Generando módulos y componentes con IA...', {
+      // Vía 2 (ADR-0013): sube cada documento del cliente a la ruta recién creada.
+      // Todos se ingestan por default (contexto de estructura + fuente de la KB).
+      for (const file of materialFiles) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, file)
+          toast.loading('Documento subido · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          toast.error(`No se pudo subir ${file.name}`, {
+            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          })
+        }
+      }
+
+      toast.loading('Iniciando generación de estructura con IA...', {
         id: toastId,
-        description: 'Esto tomará unos segundos (simulando pipeline)...',
+        description: 'Preparando Job en background...',
       })
       
       const genResult = await api.request<{ job_id: string }>(
@@ -205,37 +251,14 @@ export default function NuevaRuta() {
         }
       )
 
-      await trackJob(genResult.job_id)
-
-      if (deepResearch) {
-        toast.loading('Investigando fuentes verificadas...', {
-          id: toastId,
-          description: 'Detectando herramientas, canales oficiales y documentación relevante.',
-        })
-
-        const research = await api.request<DeepResearchResult>(
-          `/learning-paths/${newPath.id}/deep-research`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ brief: briefText, customerContext: routeCustomerContext }),
-          },
-        )
-        replaceRouteSources(newPath.id, research.sources)
-
-        const toolNames = research.detected_tools.map((tool) => tool.tool).join(', ')
-        toast.loading('Deep Research listo para enriquecer los assets', {
-          id: toastId,
-          description: `${research.sources.length} recomendaciones para ${toolNames || 'la ruta'}.`,
-        })
-      }
+      setStructureJobId(genResult.job_id)
+      setPendingDeepResearch(deepResearch)
 
       await fetchRoutes()
 
-      toast.success('Estructura generada con éxito', {
+      toast.success('Generación curricular en curso', {
         id: toastId,
-        description: deepResearch
-          ? 'Revisa la estructura; las recomendaciones aparecerán dentro de cada asset relevante.'
-          : 'Revisa, reordena y cura los módulos antes de aprobar.',
+        description: 'Serás redirigido para observar el progreso en tiempo real.',
       })
       router.push('/estructura-propuesta')
     } catch (err) {
@@ -384,13 +407,6 @@ export default function NuevaRuta() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label>Propuesta del cliente</Label>
-                    <input
-                      ref={baseMaterialInputRef}
-                      type="file"
-                      accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt,.md"
-                      className="hidden"
-                      onChange={(e) => attachBaseMaterial(e.target.files?.[0] ?? null)}
-                    />
                     <button
                       type="button"
                       onClick={() => baseMaterialInputRef.current?.click()}
@@ -418,7 +434,10 @@ export default function NuevaRuta() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          onClick={() => updateCustomerContext({ baseMaterialFile: undefined })}
+                          onClick={() => {
+                            setMaterialFiles([])
+                            updateCustomerContext({ baseMaterialFile: undefined })
+                          }}
                         >
                           <X className="size-3.5" />
                         </Button>
@@ -526,31 +545,62 @@ export default function NuevaRuta() {
           <Switch checked={deepResearch} className="pointer-events-none" tabIndex={-1} />
         </div>
 
-        {/* Material de referencia */}
+        {/* Material de referencia (Vía 2 · ADR-0013) — múltiples docs; todos a la KB por default */}
         <div className="flex flex-col gap-2">
           <Label>O sube material de referencia</Label>
-          <div className="rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center">
+          <input
+            ref={baseMaterialInputRef}
+            type="file"
+            multiple
+            accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
+            className="hidden"
+            onClick={(e) => {
+              ;(e.currentTarget as HTMLInputElement).value = ''
+            }}
+            onChange={(e) => attachMaterial(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => baseMaterialInputRef.current?.click()}
+            className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          >
             <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-            <div className="text-[13px]">Arrastra o selecciona archivos</div>
+            <div className="text-[13px]">Selecciona uno o varios archivos</div>
             <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-              DOCX · PDF · PPTX — se parsean con MinerU
+              DOCX · PDF · PPTX · XLSX · TXT
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-            <FileText className="size-4 text-primary" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] text-ink">temario-ia-avanzada.docx</div>
-              <div className="font-mono text-[10.5px] text-muted-foreground">214 KB · procesado</div>
+          </button>
+          {materialFiles.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {materialFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.size}`}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FileText className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      {Math.max(1, Math.round(file.size / 1024))} KB · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => removeMaterial(index)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
             </div>
-            <Label htmlFor="use-source" className="cursor-pointer gap-2 font-normal text-foreground">
-              <Checkbox
-                id="use-source"
-                checked={useAsSource}
-                onCheckedChange={(v) => setUseAsSource(v === true)}
-              />
-              <span className="text-xs">usar también como fuente</span>
-            </Label>
-          </div>
+          ) : (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Adjunta uno o varios archivos: informan la estructura y alimentan la base de conocimiento.
+            </span>
+          )}
         </div>
 
         <Button className="w-full" onClick={propose} disabled={generating}>

@@ -28,10 +28,18 @@ class Settings(BaseSettings):
     supabase_url: str = "https://placeholder-project.supabase.co"
     supabase_key: str = "placeholder-key"
     openrouter_key: str = "placeholder-key"
+    openai_key: str = "placeholder-key"
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
     youtube_api_key: str = "placeholder-key"
 
+    # Embeddings de la KB (ADR-0006). Se sirven vía OpenRouter (OpenAI-compatible)
+    # con openrouter_key; con placeholder → MockEmbedder.
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    embedding_model: str = "openai/text-embedding-3-small"
+    embedding_dimension: int = 1536
+    # Linker Source↔Módulo (ADR-0012). Chat vía OpenRouter; placeholder → MockLinker.
+    linker_model: str = "openai/gpt-4o-mini"
     # Google Cloud settings for Vertex AI (Imagen 3 + Veo 3.1)
     google_cloud_project: str = "placeholder-project"
     google_cloud_location: str = "us-central1"
@@ -46,7 +54,7 @@ class Settings(BaseSettings):
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {
-        "route_structurer": "gemini-2.5-pro",
+        "route_structurer": "gpt-4o-mini",  # Estructura Propuesta (ADR-0014)
         "scriptwriter": "gemini-2.5-pro",
         "infographic_design": "claude-sonnet",
         "researcher": "gemini-2.5-flash",

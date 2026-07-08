@@ -11,11 +11,27 @@ dependencies = [
     "pydantic-settings>=2.2.0",
     "supabase>=2.3.0",
     "httpx>=0.27.0",
+    "python-multipart>=0.0.9",
     "google-cloud-texttospeech>=2.37.0",
     "playwright>=1.61.0",
     "google-genai>=1.0.0",
     "Pillow>=10.0.0",
 ]
+
+# Extras para el camino RAG real (ADR-0006). Import perezoso: el MVP corre con
+# MockEmbedder + parser passthrough sin instalarlos. Actívalos con `uv sync --extra rag`.
+[project.optional-dependencies]
+rag = [
+    "openai>=1.0",
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+    "python-pptx>=0.6",
+    "openpyxl>=3.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
 
 # La API es una aplicación de layout plano (main.py, config/, models/…), no una
 # librería empaquetable. uv gestiona solo el entorno/dependencias, sin construir

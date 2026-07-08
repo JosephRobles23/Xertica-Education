@@ -19,4 +19,19 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0003](0003-domain-naming-in-english.md) | Nomenclatura del dominio en inglés | Aceptado |
 | [0004](0004-supabase-postgres-persistence.md) | Supabase Postgres como persistencia primaria | Aceptado |
 | [0005](0005-full-spine-schema.md) | Schema del Spine completo desde el día 1 | Aceptado |
-| [0011](0011-deep-research-without-pre-generation-gate.md) | Deep Research sin gate previo a la generación | Aceptado |
+| [0006](0006-kb-rag-ingestion-embeddings.md) · KB | Ingesta KB/RAG + embeddings vía OpenRouter | Aceptado |
+| [0006](0006-video-asset-source-of-truth.md) · Video ⚠️ | Video Asset como fuente de verdad | Aceptado |
+| [0007](0007-source-route-centrica-sourcing.md) · KB | Sourcing route-céntrico (`sources.learning_path_id`) | Aceptado |
+| [0007](0007-declarative-render-plan.md) · Video ⚠️ | Render Plan declarativo | Aceptado |
+| [0008](0008-document-parsing-via2-ingestion.md) · KB | Parsing e ingesta de documentos (Vía 2) | Aceptado · rev. por 0011/0013 |
+| [0008](0008-remotion-composition-engine.md) · Video ⚠️ | Remotion como motor de composición | Aceptado |
+| [0009](0009-expanded-visual-types.md) · Video | Tipos visuales expandidos (14) | Aceptado |
+| [0010](0010-openmontage-git-submodule.md) · Video | OpenMontage como git submodule | Aceptado |
+| [0011](0011-kb-solo-via2-linking-por-modulo.md) · KB | KB solo-Vía-2; Vía 1 se vincula por módulo | Aceptado |
+| [0011](0011-deep-research-without-pre-generation-gate.md) · Video ⚠️ | Deep Research sin gate previo a la generación | Aceptado |
+| [0012](0012-vinculacion-source-modulo-hibrida.md) · KB | Vinculación source↔módulo híbrida (`source_module_links`) | Aceptado |
+| [0012](0012-pacing-y-densidad-visual-de-guion.md) · Video ⚠️ | Pacing y densidad visual de guión | Aceptado |
+| [0013](0013-parse-at-upload-parsed-md.md) · KB | Parse-at-upload (`documents.parsed_md`) | Aceptado |
+| [0014](0014-structure-generation-llm.md) · KB | Estructura Propuesta vía LLM (Gate 0) | Aceptado |
+
+> ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.

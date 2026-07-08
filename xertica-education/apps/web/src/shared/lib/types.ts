@@ -170,4 +170,5 @@ export interface ProposalModule {
   min: number
   comps: Record<ContentKind, boolean>
   alt: { title: string; desc: string }
+  type?: string
 }

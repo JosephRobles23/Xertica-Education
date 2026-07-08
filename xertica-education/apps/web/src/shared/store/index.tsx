@@ -64,6 +64,77 @@ export interface UploadedStructure {
   kind: 'archivo' | 'texto'
 }
 
+export const mapRouteModulesToProposal = (modules: readonly RouteModule[]): ProposalModule[] => {
+  return (modules || []).map((m) => {
+    const comps: Record<ContentKind, boolean> = {
+      lesson: false,
+      video: false,
+      infografia: false,
+      quiz: false,
+      lab: false,
+    }
+    
+    if (Array.isArray(m.contents)) {
+      m.contents.forEach((c) => {
+        if (c.kind in comps) {
+          comps[c.kind as ContentKind] = true
+        }
+      })
+    }
+    
+    const desc = (m as any).description || (m as any).descripcion || (m.contents && m.contents[0]?.summary) || 'Módulo propuesto por IA.'
+    
+    const componentDurations: Record<ContentKind, number> = {
+      lesson: 5,
+      video: 3,
+      infografia: 2,
+      quiz: 4,
+      lab: 15,
+    }
+    const computedMin = Array.isArray(m.contents)
+      ? m.contents.reduce((sum, c) => sum + (componentDurations[c.kind as ContentKind] || 5), 0)
+      : 5
+    const min = (m as any).target_minutes || (m as any).duracion_objetivo_min || (m as any).min || computedMin
+
+    return {
+      id: m.id,
+      title: m.name,
+      desc,
+      min,
+      comps,
+      type: m.type,
+      alt: {
+        title: `Alternativa: ${m.name}`,
+        desc: `Enfoque alternativo para: ${desc}`,
+      },
+    }
+  })
+}
+
+export const mapProposalToRouteModules = (proposal: readonly ProposalModule[]): RouteModule[] => {
+  return (proposal || []).map((p, i) => {
+    const contents = Object.entries(p.comps)
+      .filter(([, enabled]) => enabled)
+      .map(([kind]) => ({
+        kind: kind as ContentKind,
+        status: 'borrador' as ContentStatus,
+        summary: p.desc || 'Contenido propuesto',
+      }))
+    return {
+      id: p.id,
+      num: String(i + 1).padStart(2, '0'),
+      name: p.title,
+      type: p.type || 'capsula',
+      status: 'borrador' as ContentStatus,
+      contents,
+      description: p.desc,
+      descripcion: p.desc,
+      target_minutes: p.min,
+      duracion_objetivo_min: p.min,
+    } as any
+  })
+}
+
 interface AppStore {
   /* Gate 0 · Nueva ruta */
   briefText: string
@@ -77,6 +148,13 @@ interface AppStore {
 
   /* Gate 0 · Estructura propuesta */
   proposal: readonly ProposalModule[]
+  setProposal: (v: readonly ProposalModule[]) => void
+  proposalLoadedRouteId: string | null
+  setProposalLoadedRouteId: (v: string | null) => void
+  structureJobId: string | null
+  setStructureJobId: (v: string | null) => void
+  pendingDeepResearch: boolean
+  setPendingDeepResearch: (v: boolean) => void
   reorderProposal: (activeId: string, overId: string) => void
   refineProposal: (id: string) => void
   editProposal: (id: string, title: string, desc: string) => void
@@ -134,6 +212,10 @@ const Ctx = createContext<AppStore | null>(null)
 
 const STORYBOARD_VIDEO_KEY = 'xertica.education.storyboard-video-url'
 const STORYBOARD_JOB_KEY = 'xertica.education.storyboard-job-id'
+const ACTIVE_ROUTE_ID_KEY = 'xertica.education.active-route-id'
+const STRUCTURE_JOB_KEY = 'xertica.education.structure-job-id'
+const PENDING_DEEP_RESEARCH_KEY = 'xertica.education.pending-deep-research'
+const PROPOSAL_LOADED_ROUTE_ID_KEY = 'xertica.education.proposal-loaded-route-id'
 
 const readJSON = <T,>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') return fallback
@@ -164,6 +246,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
 
   const [proposal, setProposal] = useState<readonly ProposalModule[]>(INITIAL_PROPOSAL)
+  const [proposalLoadedRouteId, setProposalLoadedRouteId] = useState<string | null>(
+    () => readJSON<string | null>(PROPOSAL_LOADED_ROUTE_ID_KEY, null),
+  )
+  const [structureJobId, setStructureJobId] = useState<string | null>(
+    () => readJSON<string | null>(STRUCTURE_JOB_KEY, null),
+  )
+  const [pendingDeepResearch, setPendingDeepResearch] = useState<boolean>(
+    () => readJSON<boolean>(PENDING_DEEP_RESEARCH_KEY, false),
+  )
 
   const [statusOverride, setStatusOverride] = useState<Record<string, ContentStatus>>({})
   const [corpusApproved, setCorpusApproved] = useState<Record<string, boolean>>({})
@@ -179,7 +270,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
 
   const [routes, setRoutes] = useState<readonly LearningRoute[]>(ROUTES)
-  const [activeRouteId, setActiveRouteId] = useState<string | null>(null)
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(
+    () => readJSON<string | null>(ACTIVE_ROUTE_ID_KEY, null),
+  )
 
   const fetchRoutes = useCallback(async () => {
     try {
@@ -219,6 +312,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeJSON(STORYBOARD_JOB_KEY, storyboardJobId)
   }, [storyboardJobId])
+
+  useEffect(() => {
+    writeJSON(ACTIVE_ROUTE_ID_KEY, activeRouteId)
+  }, [activeRouteId])
+
+  useEffect(() => {
+    writeJSON(STRUCTURE_JOB_KEY, structureJobId)
+  }, [structureJobId])
+
+  useEffect(() => {
+    writeJSON(PENDING_DEEP_RESEARCH_KEY, pendingDeepResearch)
+  }, [pendingDeepResearch])
+
+  useEffect(() => {
+    writeJSON(PROPOSAL_LOADED_ROUTE_ID_KEY, proposalLoadedRouteId)
+  }, [proposalLoadedRouteId])
 
   const [activeJobs, setActiveJobs] = useState<Record<string, JobState>>({})
 
@@ -414,7 +523,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       deepResearch, setDeepResearch,
       customerContext, setCustomerContext,
       uploadedStructure, setUploadedStructure,
-      proposal, reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
+      proposal, setProposal,
+      proposalLoadedRouteId, setProposalLoadedRouteId,
+      structureJobId, setStructureJobId,
+      pendingDeepResearch, setPendingDeepResearch,
+      reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,
       isStoryboardApproved, approveStoryboard, storyboardVideoUrlOf, setStoryboardVideoUrl, storyboardJobIdOf, setStoryboardJobId, clearStoryboardJobId,
@@ -426,6 +539,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       briefText, deepResearch, customerContext, uploadedStructure, proposal,
+      proposalLoadedRouteId, structureJobId, pendingDeepResearch,
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,
       isCorpusApproved, approveCorpus, discardedSources, discardSource,

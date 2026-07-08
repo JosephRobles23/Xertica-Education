@@ -38,6 +38,28 @@ export const api = {
   },
 
   /**
+   * Upload a Vía-2 document (multipart). No JSON Content-Type: el browser fija el boundary.
+   * Por default entra a la KB (ADR-0013); `useAsSource` queda como override opcional.
+   */
+  async uploadDocument(
+    routeId: string,
+    file: File,
+    useAsSource: boolean = true
+  ): Promise<{ document_id: string; filename: string; use_as_source: boolean; parsed: boolean; source_id: string | null }> {
+    const url = `${BASE_URL.replace(/\/$/, '')}/learning-paths/${routeId}/documents`;
+    const form = new FormData();
+    form.append('file', file);
+    form.append('use_as_source', String(useAsSource));
+
+    const res = await fetch(url, { method: 'POST', body: form });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`API Error [${res.status}]: ${errorText}`);
+    }
+    return res.json();
+  },
+
+  /**
    * Create a background task orchestration job
    */
   async createJob(type: string, payload: Record<string, any> = {}): Promise<string> {

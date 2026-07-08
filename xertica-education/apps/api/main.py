@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers.jobs import router as jobs_router
 from routers.learning_paths import router as learning_paths_router
+from routers.kb import router as kb_router
+from routers.documents import router as documents_router
 from routers.video import router as video_router
 
 # Initialize the main FastAPI application instance.
@@ -47,6 +49,8 @@ app.add_middleware(
 # This groups related endpoints together and prevents main.py from bloating.
 app.include_router(jobs_router)
 app.include_router(learning_paths_router)
+app.include_router(kb_router)
+app.include_router(documents_router)
 app.include_router(video_router)
 
 # Mount static files directory to serve local fallback assets
