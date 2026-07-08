@@ -6,6 +6,7 @@ from services.kb.service import KBService
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
+from repositories.sourcing import get_sourcing_repository as _build_sourcing_repository
 from adapters.embeddings import get_embedder
 
 # Instantiate repositories and services
@@ -19,6 +20,9 @@ _research_service = ResearchService()
 # KB / RAG (ADR-0006): embedder y store se auto-seleccionan (mock ↔ real).
 _knowledge_base = KBService(embedder=get_embedder(), repository=get_kb_chunk_repository())
 
+# Sourcing (ADR-0007): repo route-céntrico de fuentes.
+_sourcing_repository = _build_sourcing_repository()
+
 def get_jobs_service() -> JobsService:
     return _jobs_service
 
@@ -30,3 +34,6 @@ def get_research_service() -> ResearchService:
 
 def get_knowledge_base() -> KnowledgeBaseInterface:
     return _knowledge_base
+
+def get_sourcing_repository():
+    return _sourcing_repository

@@ -11,21 +11,25 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
+    get_sourcing_repository,
 )
 from services.route.service import RouteService
 from services.jobs.service import JobsService
 from services.research.service import ResearchService
 from services.kb.interface import KnowledgeBaseInterface
 from services.kb.ingestion import KbIngestionCoordinator, MockDocumentProvider
+from repositories.sourcing.interface import SourcingRepositoryInterface
+from repositories.sourcing.mapping import route_sources_to_domain
 from models.common import JobStatus
 from typing import Dict, Any, List
 
 
-async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, route_sources):
-    """Corre la ingesta RAG en background. Best-effort: si falla (infra no lista),
-    marca el job y NO propaga — Gate 1 no se bloquea (regla de oro · CONTEXT §5)."""
+async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, sources):
+    """Corre la ingesta RAG en background sobre las fuentes verificadas ya persistidas.
+    Best-effort: si falla (infra no lista), marca el job y NO propaga — Gate 1 no se
+    bloquea (regla de oro · CONTEXT §5)."""
     try:
-        await coordinator.ingest_route(learning_path_id, route_sources)
+        await coordinator.ingest_sources(learning_path_id, sources)
         await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
     except Exception:
         await jobs_service.update_job_status(job_id, JobStatus.FAILED)
@@ -216,26 +220,34 @@ async def approve_sourcing(
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service),
     knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
+    sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
 ):
     """
     Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
 
-    Gate 1: dispara la ingesta RAG (parse → chunk → embed → upsert de las fuentes
-    verificadas) como Job en background, sin bloquear la aprobación (ADR-0006 §3).
+    Gate 1 (ADR-0007): persiste (UPSERT) todas las fuentes de route["sources"] en la tabla
+    `sources` (route-céntrica) y luego dispara la ingesta RAG de las verificadas como Job en
+    background, sin bloquear la aprobación (ADR-0006 §3).
     """
     route = await route_service.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
+    # 1) UPSERT sincrónico de todas las candidatas → filas con id real (cierra el FK de kb_chunks).
+    domain_sources = route_sources_to_domain(route.get("sources", []), route_id)
+    persisted = await sourcing_repo.upsert_sources(domain_sources)
+    verified = [s for s in persisted if s.verificada_google]
+
+    # 2) Ingesta RAG de las verificadas en background.
     job_id = await jobs_service.create_job("kb_ingestion")
     coordinator = KbIngestionCoordinator(knowledge_base, MockDocumentProvider())
     background_tasks.add_task(
-        _run_kb_ingestion_job, coordinator, jobs_service, job_id,
-        route_id, route.get("sources", []),
+        _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, verified,
     )
 
     updated = await route_service.update_route(route_id, {"status": "generado"})
-    # Aditivo (no rompe el contrato existente): permite sondear el job de ingesta.
+    # Aditivo (no rompe el contrato existente): permite sondear el job y ver el conteo.
     if isinstance(updated, dict):
         updated["ingestionJobId"] = str(job_id)
+        updated["sourcesPersisted"] = len(persisted)
     return updated

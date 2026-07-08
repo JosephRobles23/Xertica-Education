@@ -13,7 +13,7 @@ def _service():
 
 
 def _source(lp_id, verificada=False):
-    return Source(id=uuid4(), asset_id=uuid4(), url="https://x.dev/a",
+    return Source(id=uuid4(), learning_path_id=lp_id, url="https://x.dev/a",
                   title="Fuente A", tipo="youtube", verificada_google=verificada)
 
 
