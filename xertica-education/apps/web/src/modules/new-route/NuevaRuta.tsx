@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
@@ -26,12 +26,8 @@ import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHea
 import { UploadStructureDialog } from '@/modules/new-route/components/UploadStructureDialog'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
-import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage, Source } from '@/shared/lib/types'
+import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage } from '@/shared/lib/types'
 
-interface DeepResearchResult {
-  detected_tools: readonly { tool: string; vendor: string }[]
-  sources: readonly Source[]
-}
 
 const AREA_OPTIONS: readonly CustomerArea[] = ['RRHH', 'Finanzas', 'TI', 'Educacion', 'Salud', 'General']
 const WORKSPACE_OPTIONS: readonly { value: GoogleWorkspaceUsage; label: string }[] = [
@@ -114,8 +110,19 @@ export default function NuevaRuta() {
     deepResearch, setDeepResearch,
     customerContext, setCustomerContext,
     uploadedStructure, setUploadedStructure,
-    trackJob, fetchRoutes, setActiveRouteId, replaceRouteSources,
+    fetchRoutes, setActiveRouteId,
+    setStructureJobId, setPendingDeepResearch,
+    setProposalLoadedRouteId, setProposal,
   } = useStore()
+
+  useEffect(() => {
+    // Reset any previous active route details and proposal on mount
+    setActiveRouteId(null)
+    setStructureJobId(null)
+    setPendingDeepResearch(false)
+    setProposalLoadedRouteId(null)
+    setProposal([])
+  }, [setActiveRouteId, setStructureJobId, setPendingDeepResearch, setProposalLoadedRouteId, setProposal])
   const [dialogOpen, setDialogOpen] = useState(false)
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
   const [materialFiles, setMaterialFiles] = useState<File[]>([])
@@ -231,9 +238,9 @@ export default function NuevaRuta() {
         }
       }
 
-      toast.loading('Generando módulos y componentes con IA...', {
+      toast.loading('Iniciando generación de estructura con IA...', {
         id: toastId,
-        description: 'Esto tomará unos segundos (simulando pipeline)...',
+        description: 'Preparando Job en background...',
       })
       
       const genResult = await api.request<{ job_id: string }>(
@@ -244,37 +251,14 @@ export default function NuevaRuta() {
         }
       )
 
-      await trackJob(genResult.job_id)
-
-      if (deepResearch) {
-        toast.loading('Investigando fuentes verificadas...', {
-          id: toastId,
-          description: 'Detectando herramientas, canales oficiales y documentación relevante.',
-        })
-
-        const research = await api.request<DeepResearchResult>(
-          `/learning-paths/${newPath.id}/deep-research`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ brief: briefText, customerContext: routeCustomerContext }),
-          },
-        )
-        replaceRouteSources(newPath.id, research.sources)
-
-        const toolNames = research.detected_tools.map((tool) => tool.tool).join(', ')
-        toast.loading('Deep Research listo para enriquecer los assets', {
-          id: toastId,
-          description: `${research.sources.length} recomendaciones para ${toolNames || 'la ruta'}.`,
-        })
-      }
+      setStructureJobId(genResult.job_id)
+      setPendingDeepResearch(deepResearch)
 
       await fetchRoutes()
 
-      toast.success('Estructura generada con éxito', {
+      toast.success('Generación curricular en curso', {
         id: toastId,
-        description: deepResearch
-          ? 'Revisa la estructura; las recomendaciones aparecerán dentro de cada asset relevante.'
-          : 'Revisa, reordena y cura los módulos antes de aprobar.',
+        description: 'Serás redirigido para observar el progreso en tiempo real.',
       })
       router.push('/estructura-propuesta')
     } catch (err) {

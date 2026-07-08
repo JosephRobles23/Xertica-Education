@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -30,7 +30,7 @@ import { Separator } from '@/shared/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/tooltip'
 import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHeader'
 import { CONTENT_KINDS, KIND_LABEL, type ProposalModule } from '@/shared/lib/types'
-import { useStore } from '@/shared/store'
+import { useStore, mapRouteModulesToProposal, mapProposalToRouteModules } from '@/shared/store'
 import { cn } from '@/shared/lib/utils'
 import { api } from '@/shared/lib/api'
 
@@ -176,10 +176,166 @@ function ModuleRow({ m, index }: { m: ProposalModule; index: number }) {
   )
 }
 
+function ModuleSkeleton() {
+  return (
+    <div className="rounded-xl border-[1.5px] bg-card p-4 animate-pulse">
+      <div className="mb-3 flex items-center gap-2.5">
+        <div className="h-4 w-4 rounded bg-secondary" />
+        <div className="h-4 w-8 rounded bg-secondary" />
+        <div className="h-4 flex-1 rounded bg-secondary" />
+        <div className="h-5 w-16 rounded bg-secondary" />
+      </div>
+      <div className="pl-[52px]">
+        <div className="mb-2 h-3 w-3/4 rounded bg-secondary" />
+        <div className="mb-4 h-3 w-1/2 rounded bg-secondary" />
+        <div className="flex gap-2">
+          <div className="h-6 w-16 rounded-full bg-secondary" />
+          <div className="h-6 w-20 rounded-full bg-secondary" />
+          <div className="h-6 w-24 rounded-full bg-secondary" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FailureState({ onRegenerate }: { onRegenerate: () => void }) {
+  return (
+    <Card className="p-6 text-center border-destructive bg-destructive/5 flex flex-col items-center gap-4">
+      <div className="size-12 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+        <X className="size-6" />
+      </div>
+      <div>
+        <h3 className="font-display text-base font-semibold text-ink">La generación falló</h3>
+        <p className="text-[13px] text-muted-foreground mt-1 max-w-[400px]">
+          Hubo un problema de conexión o el formato del LLM no pudo ser interpretado. 
+          Puedes reintentar la propuesta curricular con el mismo brief.
+        </p>
+      </div>
+      <Button onClick={onRegenerate} className="gap-2">
+        <Sparkles className="size-4" /> Regenerar estructura
+      </Button>
+    </Card>
+  )
+}
+
 export default function EstructuraPropuesta() {
   const router = useRouter()
-  const { proposal, reorderProposal, addProposal, activeRouteId, fetchRoutes } = useStore()
+  const {
+    proposal,
+    reorderProposal,
+    addProposal,
+    activeRouteId,
+    fetchRoutes,
+    routes,
+    activeJobs,
+    trackJob,
+    structureJobId,
+    setStructureJobId,
+    setProposal,
+    proposalLoadedRouteId,
+    setProposalLoadedRouteId,
+    pendingDeepResearch,
+    setPendingDeepResearch,
+    replaceRouteSources,
+  } = useStore()
   const [approving, setApproving] = useState(false)
+
+  const activeRoute = routes.find((r) => r.id === activeRouteId)
+  const currentJob = structureJobId ? activeJobs[structureJobId] : null
+  const isLoading = !!structureJobId && (!currentJob || currentJob.status === 'queued' || currentJob.status === 'running')
+  const isFailed = currentJob?.status === 'failed'
+
+  useEffect(() => {
+    if (!activeRouteId) return
+    const activeRoute = routes.find((r) => r.id === activeRouteId)
+    if (activeRoute && Array.isArray(activeRoute.modules) && activeRoute.modules.length > 0) {
+      if (proposalLoadedRouteId !== activeRouteId && !structureJobId) {
+        setProposal(mapRouteModulesToProposal(activeRoute.modules))
+        setProposalLoadedRouteId(activeRouteId)
+      }
+    }
+  }, [activeRouteId, routes, proposalLoadedRouteId, structureJobId, setProposal, setProposalLoadedRouteId])
+
+  useEffect(() => {
+    if (!structureJobId) return
+    let active = true
+
+    trackJob(structureJobId)
+      .then(async (job) => {
+        if (!active) return
+        if (job.status === 'completed') {
+          await fetchRoutes()
+          setProposalLoadedRouteId(null) // trigger reload
+
+          if (pendingDeepResearch && activeRouteId) {
+            try {
+              const toastId = toast.loading('Investigando fuentes verificadas...', {
+                description: 'Detectando herramientas, canales oficiales y documentación relevante.',
+              })
+              
+              // We need the brief and customer context to run deep research
+              const refreshedRoutes = await api.request<any[]>('/learning-paths/')
+              const activeRouteObj = refreshedRoutes.find((r) => r.id === activeRouteId)
+              const brief = activeRouteObj?.objective || ''
+              const customerContext = activeRouteObj?.customerContext || {}
+
+              const research = await api.request<any>(
+                `/learning-paths/${activeRouteId}/deep-research`,
+                {
+                  method: 'POST',
+                  body: JSON.stringify({ brief, customerContext }),
+                },
+              )
+              replaceRouteSources(activeRouteId, research.sources)
+              setPendingDeepResearch(false)
+              const toolNames = research.detected_tools.map((t: any) => t.tool).join(', ')
+              toast.success('Deep Research listo para enriquecer los assets', {
+                id: toastId,
+                description: `${research.sources.length} recomendaciones para ${toolNames || 'la ruta'}.`,
+              })
+            } catch (err) {
+              console.error('Deep research failed:', err)
+              toast.error('Error en deep research')
+            }
+          }
+
+          setStructureJobId(null)
+        }
+      })
+      .catch((err) => {
+        console.error('Job tracking failed:', err)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [structureJobId, trackJob, fetchRoutes, activeRouteId, pendingDeepResearch, replaceRouteSources, setPendingDeepResearch, setStructureJobId, setProposalLoadedRouteId])
+
+  const regenerate = async () => {
+    if (!activeRouteId) return
+    const toastId = toast.loading('Regenerando estructura con IA...')
+    try {
+      const activeRouteObj = routes.find(r => r.id === activeRouteId)
+      const brief = activeRouteObj?.objective || ''
+      const customerContext = activeRouteObj?.customerContext || {}
+
+      const genResult = await api.request<{ job_id: string }>(
+        `/learning-paths/${activeRouteId}/generate-structure`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ brief, customerContext }),
+        }
+      )
+      setStructureJobId(genResult.job_id)
+      toast.success('Nueva generación iniciada', { id: toastId })
+    } catch (err) {
+      console.error(err)
+      toast.error('Error al iniciar regeneración', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -195,8 +351,15 @@ export default function EstructuraPropuesta() {
   const approve = async () => {
     setApproving(true)
     const targetId = activeRouteId || '01'
-    const toastId = toast.loading('Aprobando estructura y configurando ruta...')
+    const toastId = toast.loading('Guardando y aprobando estructura...')
     try {
+      // Guardar cambios en el backend antes de aprobar
+      const backendModules = mapProposalToRouteModules(proposal)
+      await api.request(`/learning-paths/${targetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ modules: backendModules })
+      })
+
       await api.request(`/learning-paths/${targetId}/approve`, { method: 'POST' })
       await fetchRoutes()
       toast.success('Estructura aprobada', {
@@ -221,41 +384,56 @@ export default function EstructuraPropuesta() {
       <div className="flex items-baseline justify-between">
         <PageTitle>Estructura propuesta</PageTitle>
         <span className="font-mono text-[11px] text-muted-foreground">
-          {proposal.length} módulos
+          {isLoading ? 'generando...' : `${proposal.length} módulos`}
         </span>
       </div>
       <PageDescription className="mb-5 max-w-none">
-        <b className="text-foreground">Arrastra</b> los módulos para reordenarlos. Renombra con ✨
-        IA, activa o desactiva componentes, o elimina un módulo — sin tocar el resto.
+        {isLoading 
+          ? 'El modelo de lenguaje está estructurando el currículo basado en el material y brief. Esto tomará unos segundos.'
+          : 'Arrastra los módulos para reordenarlos. Renombra con ✨ IA, activa o desactiva componentes, o elimina un módulo — sin tocar el resto.'}
       </PageDescription>
 
       <Card className="gap-0 p-4.5">
         <div className="flex items-center gap-2.5 px-1 pb-3.5">
           <BookMarked className="size-4 text-primary" />
-          <span className="font-display text-base text-ink">Ruta · Inteligencia avanzada</span>
+          <span className="font-display text-base text-ink">
+            Ruta · {activeRoute?.name || 'Inteligencia avanzada'}
+          </span>
           <Badge variant="muted" className="ml-auto">
-            borrador
+            {isLoading ? 'generando...' : 'borrador'}
           </Badge>
         </div>
         <Separator className="mb-3.5 bg-secondary" />
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={proposal.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-2.5">
-              {proposal.map((m, i) => (
-                <ModuleRow key={m.id} m={m} index={i} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+        {isLoading ? (
+          <div className="flex flex-col gap-2.5">
+            <ModuleSkeleton />
+            <ModuleSkeleton />
+            <ModuleSkeleton />
+          </div>
+        ) : isFailed ? (
+          <FailureState onRegenerate={regenerate} />
+        ) : (
+          <>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <SortableContext items={proposal.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                <div className="flex flex-col gap-2.5">
+                  {proposal.map((m, i) => (
+                    <ModuleRow key={m.id} m={m} index={i} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
 
-        <Button
-          variant="ghost"
-          className="mt-3 w-full border-[1.5px] border-dashed border-input text-primary hover:border-primary hover:bg-card"
-          onClick={addProposal}
-        >
-          <Plus /> Agregar módulo
-        </Button>
+            <Button
+              variant="ghost"
+              className="mt-3 w-full border-[1.5px] border-dashed border-input text-primary hover:border-primary hover:bg-card"
+              onClick={addProposal}
+            >
+              <Plus /> Agregar módulo
+            </Button>
+          </>
+        )}
       </Card>
 
       <Separator className="mt-5.5 mb-5" />
@@ -268,7 +446,7 @@ export default function EstructuraPropuesta() {
           <Button variant="outline" asChild>
             <Link href="/nueva-ruta">Volver</Link>
           </Button>
-          <Button onClick={approve} disabled={approving}>
+          <Button onClick={approve} disabled={isLoading || isFailed || approving}>
             {approving ? 'Aprobando...' : 'Aprobar estructura'} <ArrowRight />
           </Button>
         </div>

@@ -20,6 +20,11 @@ class JobsService:
         if not job:
             return None
 
+        # Si el job ya está en estado terminal (completado o fallido), devolverlo tal cual
+        # para no sobrescribir el resultado del background worker con la simulación.
+        if job.get("status") in [JobStatus.COMPLETED, JobStatus.FAILED]:
+            return job
+
         # Dynamic transition based on elapsed seconds
         now = datetime.now(timezone.utc)
         elapsed = (now - job["created_at"]).total_seconds()

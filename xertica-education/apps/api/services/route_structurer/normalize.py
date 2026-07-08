@@ -38,12 +38,28 @@ def to_route_modules(raw_modules: list[dict]) -> list[dict]:
         if not contents:
             continue  # un módulo sin componentes válidos no aporta
 
+        description = (raw.get("description") or raw.get("descripcion") or "").strip()
+        
+        component_durations = {
+            "lesson": 5,
+            "video": 3,
+            "infografia": 2,
+            "quiz": 4,
+            "lab": 15
+        }
+        computed_minutes = sum(component_durations.get(c["kind"], 5) for c in contents)
+        target_minutes = int(raw.get("target_minutes") or raw.get("duracion_objetivo_min") or raw.get("min") or computed_minutes)
+
         out.append({
             "id": f"r1m{i}",
             "num": f"{i:02d}",
             "name": name,
+            "description": description,
+            "descripcion": description,
             "type": mtype,
             "status": "borrador",
+            "target_minutes": target_minutes,
+            "duracion_objetivo_min": target_minutes,
             "contents": contents,
         })
 

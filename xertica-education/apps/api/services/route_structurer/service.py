@@ -19,11 +19,13 @@ componentes. El MATERIAL manda: los módulos deben cubrir su contenido en orden 
 El brief da el objetivo y el contexto personaliza (área/industria/audiencia).
 
 Responde SOLO un JSON válido, sin texto alrededor:
-{"modules":[{"name":"...","type":"<intro|capsula|lab|evaluacion|cierre>",
+{"modules":[{"name":"...","description":"...","type":"<intro|capsula|lab|evaluacion|cierre>","target_minutes":10,
 "components":[{"kind":"<lesson|video|infografia|quiz|lab>","summary":"..."}]}]}
 
-Reglas: 'name' en español, conciso. El primer módulo suele ser 'intro' y el último
-'evaluacion' o 'cierre'. 'summary' describe qué cubre el componente (1 frase)."""
+Reglas: 'name' en español, conciso. 'description' describe el objetivo del módulo en 1-2 frases en español.
+El primer módulo suele ser 'intro' y el último 'evaluacion' o 'cierre'.
+'target_minutes' es la duración total del módulo en minutos (entero).
+'summary' describe qué cubre el componente (1 frase)."""
 
 
 class LLMRouteStructurer(RouteStructurerInterface):

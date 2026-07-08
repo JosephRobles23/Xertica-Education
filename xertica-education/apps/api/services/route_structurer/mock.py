@@ -20,7 +20,9 @@ class MockRouteStructurer(RouteStructurerInterface):
         return to_route_modules([
             {
                 "name": f"Fundamentos aplicados para {area} ({industry})",
+                "description": f"Conceptos base adaptados a {industry} y {audience}{docs_note}.",
                 "type": "intro",
+                "target_minutes": 12,
                 "components": [
                     {"kind": "lesson", "summary": f"Conceptos base adaptados a {industry} y {audience}{docs_note}."},
                     {"kind": "video", "summary": f"Cápsula con ejemplos del área {area}{ws}."},
@@ -29,7 +31,9 @@ class MockRouteStructurer(RouteStructurerInterface):
             },
             {
                 "name": f"Laboratorio contextualizado para {area}",
+                "description": f"Actividad práctica y visual adaptada a la industria {industry} para comprender el flujo de trabajo.",
                 "type": "lab",
+                "target_minutes": 21,
                 "components": [
                     {"kind": "lesson", "summary": "Buenas prácticas y criterios de adopción."},
                     {"kind": "infografia", "summary": f"Mapa visual de casos de uso en {industry}."},

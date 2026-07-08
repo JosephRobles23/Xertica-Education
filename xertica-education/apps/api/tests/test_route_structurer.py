@@ -13,7 +13,7 @@ from adapters.llm.base import BaseLLMAdapter
 # ── normalize ──────────────────────────────────────────────────────────────
 def test_normalize_clamps_invalid_enums_and_shapes():
     mods = to_route_modules([
-        {"name": "Intro", "type": "INTRO", "components": [
+        {"name": "Intro", "type": "INTRO", "description": "Desc intro", "target_minutes": 10, "components": [
             {"kind": "lesson", "summary": "a"},
             {"kind": "inventado", "summary": "x"},   # kind inválido → descartado
             {"kind": "lesson", "summary": "dup"},    # duplicado → descartado
@@ -24,7 +24,10 @@ def test_normalize_clamps_invalid_enums_and_shapes():
     assert [m["num"] for m in mods] == ["01", "02"]
     assert mods[0]["type"] == "intro"           # clampa mayúsculas
     assert len(mods[0]["contents"]) == 1        # solo el lesson válido
+    assert mods[0]["description"] == "Desc intro"
+    assert mods[0]["target_minutes"] == 10
     assert mods[1]["type"] == "capsula"         # tipo inválido → default capsula
+    assert mods[1]["target_minutes"] == 4       # quiz fallback = 4 min
 
 
 def test_normalize_drops_modules_without_valid_components():
