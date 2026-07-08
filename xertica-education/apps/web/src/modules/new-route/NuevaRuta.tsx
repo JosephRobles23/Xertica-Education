@@ -259,17 +259,6 @@ export default function NuevaRuta() {
       </PageDescription>
 
       <Card className="gap-5 p-6">
-        {/* Brief */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="brief">Describe la ruta o pega tu estructura</Label>
-          <Textarea
-            id="brief"
-            rows={3}
-            value={briefText}
-            onChange={(e) => setBriefText(e.target.value)}
-          />
-        </div>
-
         {/* Contexto del cliente */}
         <div className="rounded-xl border-[1.5px] border-input bg-background/70 p-4">
           <button
@@ -464,6 +453,18 @@ export default function NuevaRuta() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Brief */}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="brief">Describe el objetivo de aprendizaje</Label>
+          <Textarea
+            id="brief"
+            rows={4}
+            value={briefText}
+            placeholder={'Objetivo de aprendizaje: ¿qué quieres enseñar y por qué?\n\nIncluye, si lo tienes: nombre de la ruta, herramientas o habilidades a enseñar, puntos importantes a tratar y casos de uso.'}
+            onChange={(e) => setBriefText(e.target.value)}
+          />
         </div>
 
         {/* Upload estructura */}

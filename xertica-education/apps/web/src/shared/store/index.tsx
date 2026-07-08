@@ -131,9 +131,7 @@ let idSeed = 100
 const nextId = () => `p${++idSeed}`
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const [briefText, setBriefText] = useState(
-    'Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio — del concepto al laboratorio, cerrando con una evaluación de dominio. Público: equipos técnicos y de negocio.',
-  )
+  const [briefText, setBriefText] = useState('')
   const [deepResearch, setDeepResearch] = useState(false)
   const [customerContext, setCustomerContext] = useState<CustomerContext>({})
   const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
