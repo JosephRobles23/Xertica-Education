@@ -5,10 +5,9 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
-  ChevronRight,
   CircleCheck,
   Clapperboard,
   ExternalLink,
@@ -26,6 +25,7 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Separator } from '@/shared/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/tooltip'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
@@ -237,8 +237,8 @@ function CorpusSection({ route }: { route: LearningRoute }) {
   )
 }
 
-/* ── Fila de contenido (colapsable + aprobar/refinar) ──────────── */
-function ContentRow({
+/* ── Panel de asset (tab visible) ──────────────────────────────── */
+function ContentReviewPanel({
   route,
   module,
   content,
@@ -248,7 +248,6 @@ function ContentRow({
   content: ModuleContentRef
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
   const { contentStatusOf, approveContent, refineContent, isStoryboardApproved, isLabGuideApproved } = useStore()
 
   const status = contentStatusOf(route.id, module.id, content.kind, content.status)
@@ -283,97 +282,83 @@ function ContentRow({
   )
 
   return (
-    <div className="mb-2 rounded-lg border-[1.5px] border-secondary">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3.5 py-2.75 text-left outline-none transition-colors hover:bg-background/70 focus-visible:ring-[3px] focus-visible:ring-ring/30"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 text-input" />
-        ) : (
-          <ChevronRight className="size-3.5 text-input" />
-        )}
-        <span className="flex-1 text-[13.5px]">{label}</span>
-        <StatusBadge status={status} />
-      </button>
-
-      {open && (
-        <div className="border-t border-secondary px-4 pt-3.5 pb-4 pl-9.5">
-          <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">
+    <div className="rounded-xl border-[1.5px] border-secondary bg-background/70 p-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="font-display text-lg font-medium text-ink">{label}</span>
+            <StatusBadge status={status} />
+          </div>
+          <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
             {content.summary}
           </p>
+        </div>
+        <div className="flex gap-2.5">
+          {approveButton}
+          <RefinePopover
+            label={label}
+            onRefine={() => refineContent(route.id, module.id, content.kind)}
+          >
+            <Button variant="outline-primary" size="sm">
+              <Sparkles /> Refinar
+            </Button>
+          </RefinePopover>
+        </div>
+      </div>
 
-          {videoNeedsReview && (
-            <button
-              type="button"
-              onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
-              className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <Clapperboard className="size-4.5 text-primary" />
-              <span className="flex-1">
-                <span className="block text-[13px] font-semibold text-ink">
-                  Revisar guion y storyboard
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  Recomendado para validar el guion. También puedes aprobar el video directamente.
-                </span>
-              </span>
-              <ArrowRight className="size-4 text-primary" />
-            </button>
-          )}
+      {videoNeedsReview && (
+        <button
+          type="button"
+          onClick={() => router.push(`/ruta/${route.id}/video-storyboard`)}
+          className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+        >
+          <Clapperboard className="size-4.5 text-primary" />
+          <span className="flex-1">
+            <span className="block text-[13px] font-semibold text-ink">
+              Revisar guion y storyboard
+            </span>
+            <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+              Recomendado para validar el guion. También puedes aprobar el video directamente.
+            </span>
+          </span>
+          <ArrowRight className="size-4 text-primary" />
+        </button>
+      )}
 
-          {isVideo && storyboardOk && status !== 'aprobado' && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
-              <CircleCheck className="size-4 text-success" />
-              Guion y storyboard aprobados — el video está listo para tu aprobación.
-            </div>
-          )}
-
-          {labNeedsReview && (
-            <button
-              type="button"
-              onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
-              className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <FlaskConical className="size-4.5 text-primary" />
-              <span className="flex-1">
-                <span className="block text-[13px] font-semibold text-ink">
-                  Personalizar guía del laboratorio
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                  Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
-                </span>
-              </span>
-              <ArrowRight className="size-4 text-primary" />
-            </button>
-          )}
-
-          {isLab && labGuideOk && status !== 'aprobado' && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
-              <CircleCheck className="size-4 text-success" />
-              Guía del laboratorio aprobada — el laboratorio está listo para tu aprobación.
-            </div>
-          )}
-
-          {/* Preview real del contenido */}
-          <div className="mb-4">
-            <ContentPreview kind={content.kind} pack={route.pack} />
-          </div>
-
-          <div className="flex gap-2.5">
-            {approveButton}
-            <RefinePopover
-              label={label}
-              onRefine={() => refineContent(route.id, module.id, content.kind)}
-            >
-              <Button variant="outline-primary" size="sm">
-                <Sparkles /> Refinar
-              </Button>
-            </RefinePopover>
-          </div>
+      {isVideo && storyboardOk && status !== 'aprobado' && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
+          <CircleCheck className="size-4 text-success" />
+          Guion y storyboard aprobados — el video está listo para tu aprobación.
         </div>
       )}
+
+      {labNeedsReview && (
+        <button
+          type="button"
+          onClick={() => router.push(`/ruta/${route.id}/lab-guia`)}
+          className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-lg border-[1.5px] border-accent bg-primary/8 px-3.5 py-3 text-left transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+        >
+          <FlaskConical className="size-4.5 text-primary" />
+          <span className="flex-1">
+            <span className="block text-[13px] font-semibold text-ink">
+              Personalizar guía del laboratorio
+            </span>
+            <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+              Recomendado para ajustar la práctica. También puedes aprobar el laboratorio directamente.
+            </span>
+          </span>
+          <ArrowRight className="size-4 text-primary" />
+        </button>
+      )}
+
+      {isLab && labGuideOk && status !== 'aprobado' && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-success/10 px-3.5 py-2.5 text-[12.5px] text-foreground">
+          <CircleCheck className="size-4 text-success" />
+          Guía del laboratorio aprobada — el laboratorio está listo para tu aprobación.
+        </div>
+      )}
+
+      <ContentPreview kind={content.kind} pack={route.pack} />
     </div>
   )
 }
@@ -382,9 +367,18 @@ function ContentRow({
 export default function Ruta() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { routes, isCorpusApproved, markGenerated, moduleStatusOf, approveModule, routeProgressOf } = useStore()
+  const {
+    routes,
+    isCorpusApproved,
+    markGenerated,
+    contentStatusOf,
+    moduleStatusOf,
+    approveModule,
+    routeProgressOf,
+  } = useStore()
   const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
-  const [openModule, setOpenModule] = useState<string | null>(null)
+  const [selectedModuleIndex, setSelectedModuleIndex] = useState(0)
+  const [selectedContentKind, setSelectedContentKind] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
 
   const progress = useMemo(
@@ -404,8 +398,28 @@ export default function Ruta() {
   }
 
   const corpusOk = isCorpusApproved(route.id)
-  const activeModule = route.modules.find((m) => moduleStatusOf(route.id, m) === 'en-revision')
-  const effectiveOpen = openModule ?? activeModule?.id ?? route.modules[0]?.id ?? null
+  const selectedModule = route.modules[selectedModuleIndex] ?? route.modules[0]
+  const selectedModuleStatus = selectedModule ? moduleStatusOf(route.id, selectedModule) : 'borrador'
+  const selectedModuleContents = selectedModule?.contents ?? []
+  const selectedContent =
+    selectedModuleContents.find((content) => content.kind === selectedContentKind) ?? selectedModuleContents[0]
+  const selectedTab = selectedContent?.kind ?? ''
+  const approvedAssets = selectedModule
+    ? selectedModuleContents.filter(
+        (content) => contentStatusOf(route.id, selectedModule.id, content.kind, content.status) === 'aprobado',
+      ).length
+    : 0
+  const allAssetsApproved =
+    selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
+  const isFirstModule = selectedModuleIndex === 0
+  const isLastModule = selectedModuleIndex >= route.modules.length - 1
+
+  const goToModule = (nextIndex: number) => {
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
+    const nextModule = route.modules[boundedIndex]
+    setSelectedModuleIndex(boundedIndex)
+    setSelectedContentKind(nextModule?.contents[0]?.kind ?? null)
+  }
 
   const generate = () => {
     setGenerating(true)
@@ -453,7 +467,7 @@ export default function Ruta() {
         {/* Corpus encima de Módulos */}
         <CorpusSection route={route} />
 
-        {/* Módulos */}
+        {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">
           <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
           <span className="font-mono text-[11px] text-muted-foreground">
@@ -461,69 +475,132 @@ export default function Ruta() {
           </span>
         </div>
 
-        <div className="flex flex-col gap-3">
-          {route.modules.map((m) => {
-            const isOpen = effectiveOpen === m.id
-            const moduleStatus = moduleStatusOf(route.id, m)
-            return (
-              <Card
-                key={m.id}
-                className={cn('gap-0 overflow-hidden p-0', moduleStatus === 'en-revision' && 'border-primary')}
-              >
-                <button
-                  type="button"
-                  onClick={() => setOpenModule(isOpen ? '' : m.id)}
-                  className="flex w-full cursor-pointer items-center gap-3.5 px-4.5 py-4 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                >
-                  {isOpen ? (
-                    <ChevronDown className="size-3.5 text-input" />
-                  ) : (
-                    <ChevronRight className="size-3.5 text-input" />
-                  )}
-                  <span className="font-mono text-[13px] font-semibold text-primary">{m.num}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-base text-ink">{m.name}</span>
-                    <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
-                      {m.type}
-                    </span>
+        {selectedModule && (
+          <Card className={cn('gap-5 p-5', selectedModuleStatus === 'en-revision' && 'border-primary')}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-mono text-[13px] font-semibold text-primary">
+                  {selectedModule.num}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-display text-xl font-medium leading-tight text-ink">
+                    {selectedModule.name}
                   </span>
-                  <StatusBadge status={moduleStatus} />
-                </button>
-                {isOpen && (
-                  <div className="border-t-[1.5px] border-secondary px-4.5 pt-3 pb-4 pl-11">
-                    {m.contents.map((c) => (
-                      <ContentRow key={c.kind} route={route} module={m} content={c} />
-                    ))}
-                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-secondary px-3.5 py-3">
-                      <span className="text-[12.5px] text-muted-foreground">
-                        Aprueba todos los assets de este módulo en una sola acción.
-                      </span>
-                      <Button
-                        variant={moduleStatus === 'aprobado' ? 'outline' : 'success'}
-                        size="sm"
-                        disabled={moduleStatus === 'aprobado'}
-                        onClick={() => {
-                          approveModule(route.id, m)
-                          toast.success('Módulo aprobado', { description: `${m.name} · ${route.name}` })
-                        }}
-                      >
-                        {moduleStatus === 'aprobado' ? (
-                          <>
-                            <CircleCheck /> Aprobado
-                          </>
-                        ) : (
-                          <>
-                            <Check /> Aprobar módulo completo
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )
-          })}
-        </div>
+                  <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
+                    {selectedModule.type} · módulo {selectedModuleIndex + 1} de {route.modules.length}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={selectedModuleStatus} />
+                <Badge variant={allAssetsApproved ? 'success' : 'muted'}>
+                  {approvedAssets}/{selectedModuleContents.length} assets
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary px-3.5 py-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isFirstModule}
+                onClick={() => goToModule(selectedModuleIndex - 1)}
+              >
+                <ArrowLeft /> Módulo anterior
+              </Button>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {route.modules.map((module, index) => {
+                  const status = moduleStatusOf(route.id, module)
+                  return (
+                    <button
+                      type="button"
+                      key={module.id}
+                      onClick={() => goToModule(index)}
+                      className={cn(
+                        'size-8 rounded-lg border-[1.5px] font-mono text-[11px] font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+                        index === selectedModuleIndex
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : status === 'aprobado'
+                            ? 'border-success bg-success/10 text-success'
+                            : 'border-input bg-card text-muted-foreground hover:border-primary',
+                      )}
+                      aria-label={`Ver módulo ${module.num}`}
+                    >
+                      {status === 'aprobado' ? <Check className="mx-auto size-3.5" /> : module.num}
+                    </button>
+                  )
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLastModule}
+                onClick={() => goToModule(selectedModuleIndex + 1)}
+              >
+                Siguiente módulo <ArrowRight />
+              </Button>
+            </div>
+
+            {selectedModuleContents.length > 0 ? (
+              <Tabs value={selectedTab} onValueChange={setSelectedContentKind}>
+                <TabsList className="w-full overflow-x-auto border-b-[1.5px]">
+                  {selectedModuleContents.map((content) => {
+                    const status = contentStatusOf(route.id, selectedModule.id, content.kind, content.status)
+                    return (
+                      <TabsTrigger key={content.kind} value={content.kind} className="px-3">
+                        {status === 'aprobado' && <CircleCheck className="size-3.5 text-success" />}
+                        {KIND_LABEL[content.kind]}
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+
+                {selectedModuleContents.map((content) => (
+                  <TabsContent key={content.kind} value={content.kind} className="mt-3">
+                    <ContentReviewPanel route={route} module={selectedModule} content={content} />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            ) : (
+              <div className="rounded-xl border-[1.5px] border-dashed border-input p-6 text-center text-[13px] text-muted-foreground">
+                Este módulo todavía no tiene assets generados.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-secondary px-3.5 py-3">
+              <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+                {allAssetsApproved
+                  ? 'Todos los assets de este módulo están aprobados.'
+                  : 'Revisa y aprueba cada asset antes de cerrar este módulo.'}
+              </span>
+              {allAssetsApproved ? (
+                <Button
+                  variant={isLastModule ? 'success' : 'outline-primary'}
+                  size="sm"
+                  onClick={() => {
+                    approveModule(route.id, selectedModule)
+                    toast.success('Módulo aprobado', { description: `${selectedModule.name} · ${route.name}` })
+                    if (!isLastModule) goToModule(selectedModuleIndex + 1)
+                  }}
+                >
+                  {isLastModule ? (
+                    <>
+                      <CircleCheck /> Módulo aprobado
+                    </>
+                  ) : (
+                    <>
+                      Continuar al siguiente módulo <ArrowRight />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Badge variant="outline">
+                  {approvedAssets} de {selectedModuleContents.length} aprobados
+                </Badge>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Generar contenido */}
         <Separator className="mt-6 mb-5" />
