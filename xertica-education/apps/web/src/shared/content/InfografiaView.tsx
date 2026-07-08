@@ -1,17 +1,147 @@
-import { CheckCircle2 } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { CheckCircle2, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import type { InfografiaContent } from '@/shared/lib/types'
+import { useStore } from '@/shared/store'
+import { api } from '@/shared/lib/api'
+import { toast } from 'sonner'
+import { Button } from '@/shared/ui/button'
+import { Textarea } from '@/shared/ui/textarea'
 
 /** Infografía de una página (proporción A4) con bullets y footer. */
 export function InfografiaView({
   info,
   compact = false,
   className,
+  routeId,
 }: {
   info: InfografiaContent
   compact?: boolean
   className?: string
+  routeId?: string
 }) {
+  const [feedback, setFeedback] = useState('')
+  const [regenerating, setRegenerating] = useState(false)
+  const { fetchRoutes } = useStore()
+
+  const handleRegenerate = async () => {
+    if (!routeId) return
+    setRegenerating(true)
+    const toastId = toast.loading('Regenerando infografía con tu feedback...', {
+      description: 'Llamando a OpenAI (gpt-image-2)...',
+    })
+    try {
+      await api.request(`/learning-paths/${routeId}/infographic/regenerate`, {
+        method: 'POST',
+        body: JSON.stringify({ user_prompt: feedback }),
+      })
+      await fetchRoutes()
+      toast.success('Infografía regenerada con éxito', { id: toastId })
+      setFeedback('')
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al regenerar la infografía', {
+        id: toastId,
+        description: e instanceof Error ? e.message : 'Error desconocido',
+      })
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  if (info?.imageUrl) {
+    return (
+      <div className={cn('flex flex-col items-center gap-4', className)}>
+        <div
+          className={cn(
+            'flex flex-col gap-3 rounded-lg border-[1.5px] bg-card p-5 shadow-(--shadow-soft) items-center',
+            compact ? 'w-72' : 'w-120',
+          )}
+        >
+          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary w-full text-left">
+            Infografía · Imagen Generada por IA
+          </div>
+          <div className="relative overflow-hidden rounded-md border border-secondary w-full aspect-[1/1.5] bg-muted flex items-center justify-center">
+            {regenerating ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="size-8 animate-spin text-primary" />
+                <span className="text-xs text-muted-foreground font-medium">Generando con IA...</span>
+              </div>
+            ) : (
+              <img src={info.imageUrl} alt={info.title} className="w-full h-full object-contain" />
+            )}
+          </div>
+          {info.title && <div className="text-xs font-semibold text-center mt-1 text-ink">{info.title}</div>}
+
+          {/* Download footer */}
+          <div className="flex gap-2 w-full mt-2">
+            <a
+              href={info.imageUrl}
+              download={`${info.title || 'infografia'}.png`}
+              className="flex h-8 flex-1 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center"
+            >
+              Descargar PNG
+            </a>
+            
+            {info.pdfUrl ? (
+              <a
+                href={info.pdfUrl}
+                download={`${info.title || 'infografia'}.pdf`}
+                className="flex h-8 flex-1 items-center justify-center rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success transition-colors hover:bg-success/20 text-center"
+              >
+                Descargar PDF
+              </a>
+            ) : (
+              <div className="flex h-8 flex-1 items-center justify-center rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success opacity-50">
+                PDF no disponible
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Feedback Section (only visible if routeId is provided and we're not compact) */}
+        {routeId && !compact && (
+          <div className="w-120 flex flex-col gap-2 rounded-lg border-[1.5px] border-input bg-card p-4 shadow-sm">
+            <div className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
+              <Sparkles className="size-4 text-primary" />
+              ¿Quieres ajustar el diseño o contenido?
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Describe los cambios que te gustaría ver (colores, distribución, detalles) y la IA generará una nueva versión.
+            </p>
+            <Textarea
+              rows={2}
+              placeholder="Ej: Utiliza colores neón más llamativos y coloca el logotipo centrado..."
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              disabled={regenerating}
+              className="text-[12px] min-h-[50px] resize-none"
+            />
+            <div className="flex justify-end mt-1">
+              <Button
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={regenerating || !feedback.trim()}
+                className="text-xs"
+              >
+                {regenerating ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                    Regenerando...
+                  </>
+                ) : (
+                  'Aplicar y Regenerar'
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={cn('flex justify-center', className)}>
       <div

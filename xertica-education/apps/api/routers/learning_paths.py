@@ -13,6 +13,7 @@ from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
     get_sourcing_repository, get_storage_adapter, get_documents_repository,
     get_source_link_repository, get_linker, get_route_structurer,
+    get_infographic_service,
 )
 from config.settings import settings
 from services.route.service import RouteService
@@ -24,7 +25,10 @@ from repositories.sourcing.interface import SourcingRepositoryInterface
 from repositories.sourcing.mapping import route_sources_to_domain
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
+from services.infographic.service import InfographicService
 from typing import Dict, Any, List
+import hashlib
+from uuid import UUID
 
 
 async def _run_structure_job(
@@ -293,19 +297,18 @@ async def approve_learning_path(
 async def approve_sourcing(
     route_id: str,
     background_tasks: BackgroundTasks,
+    payload: Dict[str, Any] | None = None,
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service),
     knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
     sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
     storage=Depends(get_storage_adapter),
     documents_repo=Depends(get_documents_repository),
+    infographic_service: InfographicService = Depends(get_infographic_service),
 ):
     """
-    Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
-
-    Gate 1: persiste (UPSERT) las fuentes de deep-research (ADR-0007) y dispara la ingesta RAG
-    del corpus aprobado — solo documentos subidos (Vía 2, ADR-0011) — como Job en background,
-    sin bloquear la aprobación (ADR-0006 §3). Las fuentes de Vía 1 no se ingestan.
+    Finalizes the content sourcing workflow, transitioning the path status to 'generado',
+    triggering KB/RAG ingestion, and generating the infographic.
     """
     route = await route_service.get_route(route_id)
     if not route:
@@ -327,8 +330,119 @@ async def approve_sourcing(
         _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
     )
 
-    updated = await route_service.update_route(route_id, {"status": "generado"})
+    # 4) Generación de la infografía
+    # Generate stable component_id
+    h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
+    component_id = UUID(h)
+    
+    # Extract customer company name or fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company") or cust_ctx.get("industry") or "Google"
+    
+    # Extract word budget or fallback
+    word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
+    
+    # Extract aspect_ratio from payload or default to auto
+    aspect_ratio = (payload or {}).get("aspect_ratio", "auto")
+    
+    # Call infographic service
+    res = await infographic_service.generate_infographic(
+        component_id=component_id,
+        sources=route.get("sources", []),
+        company_name=company_name,
+        word_budget=word_budget,
+        aspect_ratio=aspect_ratio
+    )
+    
+    # Update the pack with infographic data
+    pack = route.get("pack", {}) or {}
+    pack["infografia"] = {
+        "title": f"Infografía - {route.get('name', 'Curso')}",
+        "bullets": [
+            "Branding corporativo integrado automáticamente por gpt-image-2.",
+            "Paleta de colores y logos oficiales de la compañía inferidos.",
+            "Visualización de conceptos clave en alta resolución.",
+            f"Basado en fuentes verídicas con presupuesto de {word_budget} palabras."
+        ],
+        "footer": ["Descargar PNG", "Descargar PDF"],
+        "imageUrl": res.get("local_png_url"),
+        "pdfUrl": res.get("local_pdf_url"),
+        "aspectRatio": aspect_ratio
+    }
+
+    # 5) Update route status to 'generado' and include both RAG job details and infographic pack
+    updated = await route_service.update_route(route_id, {
+        "status": "generado",
+        "pack": pack
+    })
+
     if isinstance(updated, dict):
         updated["ingestionJobId"] = str(job_id)
         updated["sourcesPersisted"] = len(all_sources)
+
+    return updated
+
+@router.post("/{route_id}/infographic/regenerate", response_model=Dict[str, Any])
+async def regenerate_infographic(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    infographic_service: InfographicService = Depends(get_infographic_service)
+):
+    """
+    Regenerates the infographic for a learning path, optionally incorporating user prompt feedback.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    user_prompt = payload.get("user_prompt")
+    aspect_ratio = payload.get("aspect_ratio", "auto")
+    
+    # Generate stable component_id
+    h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
+    component_id = UUID(h)
+    
+    # Extract customer company name or fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company") or cust_ctx.get("industry") or "Google"
+    
+    # Extract word budget or fallback
+    word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
+    
+    # Call infographic service with user_prompt and aspect_ratio
+    res = await infographic_service.generate_infographic(
+        component_id=component_id,
+        sources=route.get("sources", []),
+        company_name=company_name,
+        word_budget=word_budget,
+        user_prompt=user_prompt,
+        aspect_ratio=aspect_ratio
+    )
+    
+    # Update the pack with infographic data, adding a cache-busting query parameter to the URL
+    pack = route.get("pack", {}) or {}
+    
+    import time
+    cache_buster = int(time.time())
+    local_png_url = f"{res.get('local_png_url')}?cb={cache_buster}"
+    local_pdf_url = f"{res.get('local_pdf_url')}?cb={cache_buster}"
+    
+    pack["infografia"] = {
+        "title": f"Infografía - {route.get('name', 'Curso')}",
+        "bullets": [
+            "Branding corporativo integrado automáticamente por gpt-image-2.",
+            "Paleta de colores y logos oficiales de la compañía inferidos.",
+            "Visualización de conceptos clave en alta resolución.",
+            f"Basado en fuentes verídicas con presupuesto de {word_budget} palabras."
+        ],
+        "footer": ["Descargar PNG", "Descargar PDF"],
+        "imageUrl": local_png_url,
+        "pdfUrl": local_pdf_url,
+        "aspectRatio": aspect_ratio
+    }
+    
+    updated = await route_service.update_route(route_id, {
+        "pack": pack
+    })
     return updated

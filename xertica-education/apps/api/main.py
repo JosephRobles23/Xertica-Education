@@ -17,6 +17,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
 from routers.jobs import router as jobs_router
 from routers.learning_paths import router as learning_paths_router
 from routers.kb import router as kb_router
@@ -53,11 +54,9 @@ app.include_router(kb_router)
 app.include_router(documents_router)
 app.include_router(video_router)
 
-# Mount static files directory to serve local fallback assets
+# Mount static files directory to serve local fallback assets (e.g. generated infographics)
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
 
 @app.get("/")
 async def root():

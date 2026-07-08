@@ -4,6 +4,7 @@ from services.route.service import RouteService
 from services.kb.interface import KnowledgeBaseInterface
 from services.kb.service import KBService
 from services.video.service import VideoService
+from services.infographic.service import InfographicService
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
@@ -40,6 +41,7 @@ _linker = _build_linker()
 
 # Estructura Propuesta (ADR-0014): generador route_structurer (mock ↔ LLM Haiku 4.5).
 _route_structurer = _build_route_structurer()
+_infographic_service = InfographicService()
 
 def get_jobs_service() -> JobsService:
     return _jobs_service
@@ -73,3 +75,6 @@ def get_route_structurer():
 
 def get_video_service() -> VideoService:
     return _video_service
+
+def get_infographic_service() -> InfographicService:
+    return _infographic_service

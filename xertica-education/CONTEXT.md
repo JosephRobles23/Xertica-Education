@@ -50,6 +50,7 @@ Términos canónicos. En el dominio se usa el español (**Ruta**, **tema**, **br
 | **Subtítulos / Captions** | `edit_decisions.captions` | Palabra destacada con timing word-level, renderizada por Remotion CaptionOverlay. El timing se extrae de la respuesta de Google Cloud TTS (`timepoints`), no de un transcriber externo. |
 | **OpenMontage** | `openmontage/` (git submodule) | Repositorio externo (github.com/calesthio/OpenMontage) que provee herramientas Python de audio/música/composición y el proyecto Remotion `remotion-composer/`. Integrado como submódulo (ADR-0010), no como dependencia pip. Solo el equipo de video lo conoce. |
 | **Biblioteca** | `/biblioteca` | Catálogo de rutas/assets ya producidos. |
+| **Infografía** | `InfographicService`, `infografia` | Componente visual generado directamente como imagen PNG por `gpt-image-2` infiriendo colores y logo de marca de la compañía objetivo, y luego envuelto en un PDF de una página. |
 
 ### Estados de un Job
 `queued` → `running` → (`rendering`) → `completed` | `failed`
