@@ -1,0 +1,25 @@
+---
+description: Reglas y skills siempre activas del repo (hub en AGENTS.md)
+alwaysApply: true
+---
+
+# Reglas siempre activas
+
+Sigue **siempre** las reglas y el protocolo de skills definidos en [`AGENTS.md`](../../AGENTS.md)
+(raíz del repo). Es la fuente de verdad cross-tool.
+
+## Antes de tocar código
+Lee `xertica-education/CONTEXT.md` (dominio y glosario) y los ADRs en
+`xertica-education/docs/adr/`. Usa el vocabulario del glosario.
+
+## Reglas núcleo
+- Mocks-first, de izquierda a derecha (`Contracts → Models → Endpoints → Frontend → IA real`).
+- No cambies contratos de API sin acordarlo.
+- Decisiones difíciles de revertir → ADR.
+- TDD + minimalismo (solución más simple que funcione).
+- Higiene de secretos: nunca commitees `.env`/claves; no hagas `push` sin pedirlo.
+
+## Protocolo de skills
+Cuando el usuario invoque `/<nombre>` o pida una skill por su propósito, abre
+`.claude/skills/<nombre>/SKILL.md` o `.agents/skills/<nombre>/SKILL.md` y **síguelo al pie
+de la letra**. El texto tras el comando son sus `ARGUMENTS`. Ver el índice en `AGENTS.md` §3.
