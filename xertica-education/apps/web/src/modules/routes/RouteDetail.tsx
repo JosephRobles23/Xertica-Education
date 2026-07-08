@@ -4,16 +4,22 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleCheck,
+  Clapperboard,
   ExternalLink,
+  FileText,
   FlaskConical,
   Info,
   Link2,
   Loader2,
   Search,
+  ShieldCheck,
   Sparkles,
   Upload as UploadIcon,
   Wand2,
@@ -23,6 +29,7 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Separator } from '@/shared/ui/separator'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
@@ -145,6 +152,221 @@ function findSecondaryYoutubeSource(route: LearningRoute, module: RouteModule, c
     .sort((a, b) => b.score - a.score)
 
   return candidates[0]?.source
+}
+
+/* ── Fuente individual (con preview de video colapsable) ───────── */
+function SourceCard({
+  source,
+  approved,
+  onDiscard,
+}: {
+  source: Source
+  approved: boolean
+  onDiscard: () => void
+}) {
+  const [videoOpen, setVideoOpen] = useState(false)
+  const requiresReview = source.status === 'requires-review' || !source.verified
+
+  return (
+    <Card className="gap-3 p-4.5">
+      <div className="flex items-start gap-3.5">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {source.toolName && (
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                {source.toolName}
+              </span>
+            )}
+            {source.kind && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.kind === 'youtube' ? (
+                  <Clapperboard className="size-3" />
+                ) : (
+                  <FileText className="size-3" />
+                )}
+                {source.kind === 'youtube' ? 'video' : 'documentación'}
+              </span>
+            )}
+            {source.relevanceScore !== undefined && (
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.relevanceScore}% match
+              </span>
+            )}
+          </div>
+          <h3 className="mb-2 font-display text-[15.5px] font-medium leading-snug text-ink">
+            {source.title}
+          </h3>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+              {source.plat}
+            </span>
+            {source.verified ? (
+              <Badge variant="success">
+                <ShieldCheck className="size-3" /> Verificada
+              </Badge>
+            ) : (
+              <Badge variant="destructive">
+                <AlertTriangle className="size-3" /> Requiere revisión
+              </Badge>
+            )}
+            {source.suggestedUse && (
+              <span className="rounded-md bg-accent px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                uso: {source.suggestedUse}
+              </span>
+            )}
+          </div>
+        </div>
+        {!approved && (
+          <Button variant="outline-destructive" size="sm" onClick={onDiscard}>
+            Descartar
+          </Button>
+        )}
+      </div>
+      <blockquote className="border-l-[3px] border-accent pl-3.5 text-[13.5px] italic leading-relaxed">
+        {source.quote}
+      </blockquote>
+      {source.verificationReason && (
+        <div
+          className={cn(
+            'flex items-start gap-2 rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed',
+            requiresReview ? 'bg-destructive/8' : 'bg-success/10',
+          )}
+        >
+          {requiresReview ? (
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+          ) : (
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+          )}
+          <span>{source.verificationReason}</span>
+        </div>
+      )}
+      {source.url && (
+        <Button asChild variant="ghost" size="sm" className="w-fit px-0">
+          <a href={source.url} target="_blank" rel="noreferrer">
+            {requiresReview && source.kind === 'youtube' ? 'Abrir canal candidato' : 'Abrir fuente concreta'}
+            <ExternalLink className="size-3.5" />
+          </a>
+        </Button>
+      )}
+      {source.videoPreview && (
+        <SourceVideoPreview
+          preview={source.videoPreview}
+          open={videoOpen}
+          onOpenChange={setVideoOpen}
+        />
+      )}
+    </Card>
+  )
+}
+
+/* ── Corpus de fuentes (encima de Módulos) ─────────────────────── */
+function CorpusSection({ route }: { route: LearningRoute }) {
+  const { isCorpusApproved, approveCorpus, discardedSources, discardSource } = useStore()
+  const approved = isCorpusApproved(route.id)
+  const discarded = discardedSources(route.id)
+  const sources = route.sources.filter((_, i) => !discarded.includes(i))
+  const verified = sources.filter((s) => s.verified).length
+  const [initialAspectRatio, setInitialAspectRatio] = useState<string>('vertical')
+  const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
+    const key = source.toolName || 'Fuentes generales'
+    groups[key] = [...(groups[key] ?? []), { source, index: route.sources.indexOf(source) }]
+    return groups
+  }, {})
+  const detectedTools = Object.keys(groupedSources)
+
+  return (
+    <section className="mb-8">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
+          {approved && (
+            <Badge variant="success">
+              <Check className="size-3" /> aprobado
+            </Badge>
+          )}
+        </div>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {sources.length} candidatas · {verified} verificadas
+        </span>
+      </div>
+
+      {!approved && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl bg-secondary px-4.5 py-3.5">
+          <Search className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="text-[13px] leading-relaxed">
+            Aprueba las fuentes antes de que aterricen en el contenido. El agente prioriza canales
+            y dominios verificados por herramienta/vendor; deja en revisión lo que no pase la
+            política.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {detectedTools.map((tool) => (
+          <div key={tool} className="rounded-xl border-[1.5px] border-secondary p-3">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <h3 className="font-display text-[15px] font-medium text-ink">{tool}</h3>
+                <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+                  {groupedSources[tool]?.length ?? 0} fuentes candidatas
+                </p>
+              </div>
+              <Badge variant="outline">
+                {groupedSources[tool]?.filter((item) => item.source.verified).length ?? 0} verificadas
+              </Badge>
+            </div>
+            <div className="flex flex-col gap-3">
+              {groupedSources[tool]?.map(({ source, index }) => (
+                <SourceCard
+                  key={`${source.title}-${index}`}
+                  source={source}
+                  approved={approved}
+                  onDiscard={() => {
+                    discardSource(route.id, index)
+                    toast.info('Fuente descartada', { description: source.title })
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!approved && (
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-4 bg-muted/30 p-3 rounded-xl border border-secondary/50">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-medium text-muted-foreground">Formato de infografía:</span>
+            <select
+              value={initialAspectRatio}
+              onChange={(e) => setInitialAspectRatio(e.target.value)}
+              className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="vertical">Vertical (1024x1792)</option>
+              <option value="horizontal">Horizontal (1792x1024)</option>
+              <option value="square">Cuadrada (1024x1024)</option>
+              <option value="auto">Automático (Vertical)</option>
+            </select>
+          </div>
+          <Button
+            onClick={async () => {
+              toast.loading('Aprobando fuentes y generando infografía...', { id: 'approve-sourcing' })
+              try {
+                await approveCorpus(route.id, initialAspectRatio)
+                toast.success('Fuentes aprobadas e infografía generada', {
+                  id: 'approve-sourcing',
+                  description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
+                })
+              } catch (e) {
+                toast.error('Error al aprobar fuentes', { id: 'approve-sourcing' })
+              }
+            }}
+          >
+            Aprobar fuentes <ArrowRight />
+          </Button>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function VideoRecommendationPanel({
@@ -658,6 +880,9 @@ export default function Ruta() {
           </div>
           <p className="text-[14.5px] leading-relaxed">{route.objective}</p>
         </Card>
+
+        {/* Corpus encima de Módulos */}
+        <CorpusSection route={route} />
 
         {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">

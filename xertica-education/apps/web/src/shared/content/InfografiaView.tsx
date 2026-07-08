@@ -1,16 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { CheckCircle2, Download, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
-import type { InfografiaContent } from '@/shared/lib/types'
+import type { InfografiaContent, AspectRatio } from '@/shared/lib/types'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Textarea } from '@/shared/ui/textarea'
 
-/** Infografía de una página (proporción A4) con bullets y footer. */
+/** Infografía de una página con bullets y footer. */
 export function InfografiaView({
   info,
   compact = false,
@@ -23,19 +23,25 @@ export function InfografiaView({
   routeId?: string
 }) {
   const [feedback, setFeedback] = useState('')
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(info?.aspectRatio || 'vertical')
   const [regenerating, setRegenerating] = useState(false)
+  const [downloading, setDownloading] = useState<string | null>(null)
   const { fetchRoutes } = useStore()
 
-  const handleRegenerate = async () => {
+  const handleRegenerate = async (targetRatio?: AspectRatio) => {
     if (!routeId) return
+    const ratioToUse = targetRatio || aspectRatio
     setRegenerating(true)
     const toastId = toast.loading('Regenerando infografía con tu feedback...', {
-      description: 'Llamando a OpenAI (gpt-image-2)...',
+      description: `Llamando a OpenAI (gpt-image-2) con formato ${ratioToUse}...`,
     })
     try {
       await api.request(`/learning-paths/${routeId}/infographic/regenerate`, {
         method: 'POST',
-        body: JSON.stringify({ user_prompt: feedback }),
+        body: JSON.stringify({ 
+          user_prompt: feedback,
+          aspect_ratio: ratioToUse
+        }),
       })
       await fetchRoutes()
       toast.success('Infografía regenerada con éxito', { id: toastId })
@@ -51,19 +57,67 @@ export function InfografiaView({
     }
   }
 
+  // Programmatically fetches and triggers a direct browser download
+  const triggerDownload = async (url: string, filename: string, type: string) => {
+    setDownloading(type)
+    const toastId = toast.loading(`Preparando descarga de ${type.toUpperCase()}...`)
+    try {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Network response was not ok')
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+      toast.success(`${type.toUpperCase()} descargado con éxito`, { id: toastId })
+    } catch (e) {
+      console.error(e)
+      toast.error(`Error al descargar ${type.toUpperCase()}. Abriendo en nueva pestaña...`, { id: toastId })
+      window.open(url, '_blank')
+    } finally {
+      setDownloading(null)
+    }
+  }
+
   if (info?.imageUrl) {
+    const isHorizontal = info.aspectRatio === 'horizontal'
+    const isSquare = info.aspectRatio === 'square'
+
+    const containerWidth = compact 
+      ? 'w-72' 
+      : isHorizontal 
+        ? 'w-160' 
+        : isSquare 
+          ? 'w-120' 
+          : 'w-120'
+
+    const imageAspect = isHorizontal 
+      ? 'aspect-[1.77/1]' 
+      : isSquare 
+        ? 'aspect-square' 
+        : 'aspect-[1/1.5]'
+
     return (
       <div className={cn('flex flex-col items-center gap-4', className)}>
         <div
           className={cn(
             'flex flex-col gap-3 rounded-lg border-[1.5px] bg-card p-5 shadow-(--shadow-soft) items-center',
-            compact ? 'w-72' : 'w-120',
+            containerWidth,
           )}
         >
-          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary w-full text-left">
-            Infografía · Imagen Generada por IA
+          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary w-full flex justify-between items-center">
+            <span>Infografía · Imagen Generada por IA</span>
+            {info.aspectRatio && (
+              <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[8px] font-semibold capitalize">
+                Formato: {info.aspectRatio}
+              </span>
+            )}
           </div>
-          <div className="relative overflow-hidden rounded-md border border-secondary w-full aspect-[1/1.5] bg-muted flex items-center justify-center">
+          <div className={cn('relative overflow-hidden rounded-md border border-secondary w-full bg-muted flex items-center justify-center', imageAspect)}>
             {regenerating ? (
               <div className="flex flex-col items-center gap-2">
                 <Loader2 className="size-8 animate-spin text-primary" />
@@ -77,22 +131,22 @@ export function InfografiaView({
 
           {/* Download footer */}
           <div className="flex gap-2 w-full mt-2">
-            <a
-              href={info.imageUrl}
-              download={`${info.title || 'infografia'}.png`}
-              className="flex h-8 flex-1 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center"
+            <button
+              onClick={() => triggerDownload(info.imageUrl!, `${info.title || 'infografia'}.png`, 'png')}
+              disabled={downloading !== null}
+              className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary/10 font-mono text-[10px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center cursor-pointer disabled:opacity-50"
             >
-              Descargar PNG
-            </a>
+              <Download className="size-3" /> Descargar PNG
+            </button>
             
             {info.pdfUrl ? (
-              <a
-                href={info.pdfUrl}
-                download={`${info.title || 'infografia'}.pdf`}
-                className="flex h-8 flex-1 items-center justify-center rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success transition-colors hover:bg-success/20 text-center"
+              <button
+                onClick={() => triggerDownload(info.pdfUrl!, `${info.title || 'infografia'}.pdf`, 'pdf')}
+                disabled={downloading !== null}
+                className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success transition-colors hover:bg-success/20 text-center cursor-pointer disabled:opacity-50"
               >
-                Descargar PDF
-              </a>
+                <Download className="size-3" /> Descargar PDF
+              </button>
             ) : (
               <div className="flex h-8 flex-1 items-center justify-center rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success opacity-50">
                 PDF no disponible
@@ -103,38 +157,67 @@ export function InfografiaView({
 
         {/* Feedback Section (only visible if routeId is provided and we're not compact) */}
         {routeId && !compact && (
-          <div className="w-120 flex flex-col gap-2 rounded-lg border-[1.5px] border-input bg-card p-4 shadow-sm">
+          <div className={cn('flex flex-col gap-3.5 rounded-lg border-[1.5px] border-input bg-card p-4 shadow-sm', containerWidth)}>
             <div className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
               <Sparkles className="size-4 text-primary" />
-              ¿Quieres ajustar el diseño o contenido?
+              ¿Quieres ajustar el diseño o cambiar formato?
             </div>
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              Describe los cambios que te gustaría ver (colores, distribución, detalles) y la IA generará una nueva versión.
-            </p>
-            <Textarea
-              rows={2}
-              placeholder="Ej: Utiliza colores neón más llamativos y coloca el logotipo centrado..."
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              disabled={regenerating}
-              className="text-[12px] min-h-[50px] resize-none"
-            />
-            <div className="flex justify-end mt-1">
-              <Button
-                size="sm"
-                onClick={handleRegenerate}
-                disabled={regenerating || !feedback.trim()}
-                className="text-xs"
-              >
-                {regenerating ? (
-                  <>
-                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                    Regenerando...
-                  </>
-                ) : (
-                  'Aplicar y Regenerar'
-                )}
-              </Button>
+            
+            {/* Format selector */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Cambiar Relación de Aspecto:</span>
+              <div className="flex gap-1.5 flex-wrap">
+                {(['vertical', 'horizontal', 'square', 'auto'] as const).map((ratio) => (
+                  <Button
+                    key={ratio}
+                    size="sm"
+                    variant={aspectRatio === ratio ? 'primary' : 'outline'}
+                    className="capitalize text-[10.5px] h-7 px-2.5"
+                    onClick={() => {
+                      setAspectRatio(ratio)
+                      // Proactively regenerate with the new ratio if they clicked it directly
+                      handleRegenerate(ratio)
+                    }}
+                    disabled={regenerating}
+                  >
+                    {ratio === 'auto' ? 'Automático' : ratio}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-px bg-secondary" />
+
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ajuste de contenido / prompt adicional:</span>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Describe los cambios que te gustaría ver (colores, distribución, detalles) y la IA generará una nueva versión.
+              </p>
+              <Textarea
+                rows={2}
+                placeholder="Ej: Utiliza colores neón más llamativos y coloca el logotipo centrado..."
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                disabled={regenerating}
+                className="text-[12px] min-h-[50px] resize-none"
+              />
+              <div className="flex justify-end mt-1">
+                <Button
+                  size="sm"
+                  onClick={() => handleRegenerate()}
+                  disabled={regenerating || !feedback.trim()}
+                  className="text-xs"
+                >
+                  {regenerating ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                      Regenerando...
+                    </>
+                  ) : (
+                    'Aplicar y Regenerar'
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         )}
