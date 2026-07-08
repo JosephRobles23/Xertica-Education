@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
     get_sourcing_repository, get_storage_adapter, get_documents_repository,
+    get_source_link_repository, get_linker,
 )
 from config.settings import settings
 from services.route.service import RouteService
@@ -209,6 +210,79 @@ async def run_deep_research(
         "sources": research["sources"],
         "route": updated,
     }
+
+@router.post("/{route_id}/link-sources", response_model=Dict[str, Any])
+async def link_sources(
+    route_id: str,
+    payload: Dict[str, Any] | None = None,
+    route_service: RouteService = Depends(get_route_service),
+    sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
+    source_link_repo=Depends(get_source_link_repository),
+    linker=Depends(get_linker),
+):
+    """Vinculación Source↔Módulo on-demand (ADR-0012). Re-rankea el pool de fuentes YA
+    recolectadas de la ruta y asigna cada módulo a su fuente más pertinente. NO re-busca
+    (eso es `deep-research`). Persiste el mapping (`origin='llm'`) y lo devuelve.
+
+    Body opcional `{ "module_id": "r1m1" }` para vincular un solo módulo; sin él, todos.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    # Pool de fuentes persistidas (con id real). Si aún no lo están (pre-Gate 1), se
+    # persisten desde route["sources"] para poder referenciarlas.
+    sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
+    if not sources:
+        sources = await sourcing_repo.upsert_sources(
+            route_sources_to_domain(route.get("sources", []), route_id)
+        )
+
+    modules = route.get("modules", []) or []
+    module_id = (payload or {}).get("module_id")
+    if module_id:
+        modules = [m for m in modules if str(m.get("id")) == str(module_id)]
+        if not modules:
+            raise HTTPException(status_code=404, detail="Module not found in route")
+
+    links = await linker.link(route_id, modules, sources)
+    persisted = await source_link_repo.upsert_links(links)
+    why_by_key = {(str(l.source_id), l.module_id): l.why for l in links}
+
+    return {
+        "links": [
+            {
+                "source_id": str(l.source_id),
+                "module_id": l.module_id,
+                "score": l.score,
+                "origin": l.origin,
+                "why": why_by_key.get((str(l.source_id), l.module_id)),
+            }
+            for l in persisted
+        ]
+    }
+
+
+@router.get("/{route_id}/source-links", response_model=Dict[str, Any])
+async def list_source_links(
+    route_id: str,
+    route_service: RouteService = Depends(get_route_service),
+    source_link_repo=Depends(get_source_link_repository),
+):
+    """Devuelve la vinculación Source↔Módulo persistida de la ruta (ADR-0012). El
+    frontend la lee y, si un módulo no tiene fila, cae a la heurística client-side."""
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+    links = await source_link_repo.list_by_learning_path(as_uuid(route_id))
+    return {
+        "links": [
+            {"source_id": str(l.source_id), "module_id": l.module_id,
+             "score": l.score, "origin": l.origin}
+            for l in links
+        ]
+    }
+
 
 @router.post("/{route_id}/approve", response_model=Dict[str, Any])
 async def approve_learning_path(

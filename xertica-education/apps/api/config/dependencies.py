@@ -9,7 +9,9 @@ from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
 from repositories.sourcing import get_sourcing_repository as _build_sourcing_repository
 from repositories.documents import get_documents_repository as _build_documents_repository
+from repositories.source_links import get_source_link_repository as _build_source_link_repository
 from adapters.embeddings import get_embedder
+from adapters.linker import get_linker as _build_linker
 from adapters.storage import get_storage_adapter as _build_storage_adapter
 
 # Instantiate repositories and services
@@ -31,6 +33,10 @@ _sourcing_repository = _build_sourcing_repository()
 _documents_repository = _build_documents_repository()
 _storage_adapter = _build_storage_adapter()
 
+# Vinculación Source↔Módulo (ADR-0012): repo del mapping + linker (mock ↔ real).
+_source_link_repository = _build_source_link_repository()
+_linker = _build_linker()
+
 def get_jobs_service() -> JobsService:
     return _jobs_service
 
@@ -51,5 +57,12 @@ def get_documents_repository():
 
 def get_storage_adapter():
     return _storage_adapter
+
+def get_source_link_repository():
+    return _source_link_repository
+
+def get_linker():
+    return _linker
+
 def get_video_service() -> VideoService:
     return _video_service
