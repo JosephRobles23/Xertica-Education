@@ -17,7 +17,6 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
-import { Checkbox } from '@/shared/ui/checkbox'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Switch } from '@/shared/ui/switch'
@@ -118,8 +117,8 @@ export default function NuevaRuta() {
     trackJob, fetchRoutes, setActiveRouteId, replaceRouteSources,
   } = useStore()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [useAsSource, setUseAsSource] = useState(true)
-  const [baseMaterialRaw, setBaseMaterialRaw] = useState<File | null>(null)
+  // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
+  const [materialFiles, setMaterialFiles] = useState<File[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
@@ -156,22 +155,44 @@ export default function NuevaRuta() {
     })
   }
 
-  const attachBaseMaterial = (file: File | null) => {
-    if (!file) return
-
-    setBaseMaterialRaw(file)
+  // Metadata del primer doc → customerContext.baseMaterialFile (compat: inferencia +
+  // "video propio" en RouteDetail). El resto vive en la lista `materialFiles`.
+  const syncPrimaryMeta = (files: File[]) => {
+    const first = files[0]
     updateCustomerContext({
-      baseMaterialFile: {
-        name: file.name,
-        type: file.type || file.name.split('.').pop()?.toUpperCase() || 'archivo',
-        sizeKb: Math.max(1, Math.round(file.size / 1024)),
-      },
-      inferredFrom: Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material'])),
+      baseMaterialFile: first
+        ? {
+            name: first.name,
+            type: first.type || first.name.split('.').pop()?.toUpperCase() || 'archivo',
+            sizeKb: Math.max(1, Math.round(first.size / 1024)),
+          }
+        : undefined,
+      inferredFrom: first
+        ? Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material']))
+        : customerContext.inferredFrom,
     })
+  }
 
-    toast.success('Material base adjuntado', {
-      description: `${file.name} se usará como contexto de personalización.`,
-    })
+  const attachMaterial = (incoming: FileList | File[] | null) => {
+    const files = incoming ? Array.from(incoming) : []
+    if (!files.length) return
+    // dedup por nombre+tamaño para no subir el mismo archivo dos veces.
+    const merged = [...materialFiles]
+    for (const f of files) {
+      if (!merged.some((m) => m.name === f.name && m.size === f.size)) merged.push(f)
+    }
+    setMaterialFiles(merged)
+    syncPrimaryMeta(merged)
+    toast.success(
+      files.length > 1 ? `${files.length} documentos adjuntados` : 'Documento adjuntado',
+      { description: 'Se usará como contexto y se añadirá a la base de conocimiento.' },
+    )
+  }
+
+  const removeMaterial = (index: number) => {
+    const next = materialFiles.filter((_, i) => i !== index)
+    setMaterialFiles(next)
+    syncPrimaryMeta(next)
   }
 
   const propose = async () => {
@@ -194,17 +215,17 @@ export default function NuevaRuta() {
 
       setActiveRouteId(newPath.id)
 
-      // Vía 2 (ADR-0008): sube el documento del cliente a la ruta recién creada.
-      // Se almacena siempre; con "usar como fuente" entra a la KB en Gate 1.
-      if (baseMaterialRaw) {
+      // Vía 2 (ADR-0013): sube cada documento del cliente a la ruta recién creada.
+      // Todos se ingestan por default (contexto de estructura + fuente de la KB).
+      for (const file of materialFiles) {
         try {
-          const uploaded = await api.uploadDocument(newPath.id, baseMaterialRaw, useAsSource)
-          toast.loading(
-            useAsSource ? 'Documento subido · se añadirá a la base de conocimiento' : 'Documento subido como contexto',
-            { id: toastId, description: uploaded.filename },
-          )
+          const uploaded = await api.uploadDocument(newPath.id, file)
+          toast.loading('Documento subido · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
         } catch (uploadErr) {
-          toast.error('No se pudo subir el documento', {
+          toast.error(`No se pudo subir ${file.name}`, {
             description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
           })
         }
@@ -430,7 +451,7 @@ export default function NuevaRuta() {
                           size="icon"
                           className="size-7"
                           onClick={() => {
-                            setBaseMaterialRaw(null)
+                            setMaterialFiles([])
                             updateCustomerContext({ baseMaterialFile: undefined })
                           }}
                         >
@@ -540,18 +561,19 @@ export default function NuevaRuta() {
           <Switch checked={deepResearch} className="pointer-events-none" tabIndex={-1} />
         </div>
 
-        {/* Material de referencia (Vía 2) — comparte el archivo de la propuesta */}
+        {/* Material de referencia (Vía 2 · ADR-0013) — múltiples docs; todos a la KB por default */}
         <div className="flex flex-col gap-2">
           <Label>O sube material de referencia</Label>
           <input
             ref={baseMaterialInputRef}
             type="file"
+            multiple
             accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
             className="hidden"
             onClick={(e) => {
               ;(e.currentTarget as HTMLInputElement).value = ''
             }}
-            onChange={(e) => attachBaseMaterial(e.target.files?.[0] ?? null)}
+            onChange={(e) => attachMaterial(e.target.files)}
           />
           <button
             type="button"
@@ -559,34 +581,40 @@ export default function NuevaRuta() {
             className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
           >
             <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-            <div className="text-[13px]">Selecciona un archivo</div>
+            <div className="text-[13px]">Selecciona uno o varios archivos</div>
             <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
               DOCX · PDF · PPTX · XLSX · TXT
             </div>
           </button>
-          {customerContext.baseMaterialFile ? (
-            <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-              <FileText className="size-4 text-primary" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] text-ink">
-                  {customerContext.baseMaterialFile.name}
+          {materialFiles.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {materialFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.size}`}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FileText className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      {Math.max(1, Math.round(file.size / 1024))} KB · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => removeMaterial(index)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
                 </div>
-                <div className="font-mono text-[10.5px] text-muted-foreground">
-                  {customerContext.baseMaterialFile.sizeKb} KB · se sube al crear la ruta
-                </div>
-              </div>
-              <Label htmlFor="use-source" className="cursor-pointer gap-2 font-normal text-foreground">
-                <Checkbox
-                  id="use-source"
-                  checked={useAsSource}
-                  onCheckedChange={(v) => setUseAsSource(v === true)}
-                />
-                <span className="text-xs">usar también como fuente</span>
-              </Label>
+              ))}
             </div>
           ) : (
             <span className="font-mono text-[11px] text-muted-foreground">
-              Adjunta un archivo para usarlo como contexto y, opcionalmente, como fuente de la KB.
+              Adjunta uno o varios archivos: informan la estructura y alimentan la base de conocimiento.
             </span>
           )}
         </div>
