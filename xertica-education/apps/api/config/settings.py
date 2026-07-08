@@ -28,8 +28,10 @@ class Settings(BaseSettings):
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
 
-    # Embeddings de la KB (ADR-0006). Con openai_key placeholder → MockEmbedder.
-    embedding_model: str = "text-embedding-3-small"
+    # Embeddings de la KB (ADR-0006). Se sirven vía OpenRouter (OpenAI-compatible)
+    # con openrouter_key; con placeholder → MockEmbedder.
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    embedding_model: str = "openai/text-embedding-3-small"
     embedding_dimension: int = 1536
 
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).

@@ -98,7 +98,7 @@ El `README.md` y el doc de arquitectura describen partes **aspiracionales** que 
 - Los servicios reales presentes son `route`, `jobs`, `video`, `workflow` (no todos los del README todavía).
 - El backend usa **`uv`** (no `venv`+`pip` como dice el README).
 - **Supabase (ADR-0004):** los repos ya hacen CRUD real con fallback in-memory; la persistencia se activa al aplicar `supabase/migrations` + rellenar `apps/api/.env`. Mientras esos secretos sean placeholders, todo corre en memoria.
-- **Embeddings (ADR-0006):** `architecture.md` proyecta `embeddings: text-embedding-google` vía un gateway `models.yaml` que **aún no existe**. El MVP de la KB usa **OpenAI `text-embedding-3-small` (1536 dim)** con `MockEmbedder` por defecto; lo real se activa con `OPENAI_API_KEY`. Conflicto declarado y resuelto en [[docs/adr/0006-kb-rag-ingestion-embeddings]].
+- **Embeddings (ADR-0006):** `architecture.md` proyecta `embeddings: text-embedding-google` vía un gateway `models.yaml` que **aún no existe**. El MVP de la KB usa **`text-embedding-3-small` (1536 dim) servido vía OpenRouter** (OpenAI-compatible) con la `OPENROUTER_KEY` existente; `MockEmbedder` si la clave es placeholder. Conflicto declarado y resuelto en [[docs/adr/0006-kb-rag-ingestion-embeddings]].
 
 Cuando algo aquí contradiga un ADR, **decláralo explícitamente** en tu output en vez de sobrescribirlo en silencio.
 

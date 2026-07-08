@@ -34,8 +34,18 @@ def test_different_texts_give_different_vectors():
     assert a != b
 
 
-def test_factory_returns_mock_when_key_is_placeholder():
-    # settings trae openai_key = 'placeholder-key' por defecto → mock, sin red
+def test_factory_selects_mock_vs_openrouter_by_key(monkeypatch):
+    from config.settings import settings
+    from adapters.embeddings.openai_embedder import OpenAIEmbedder
+
+    # placeholder → mock (sin red)
+    monkeypatch.setattr(settings, "openrouter_key", "placeholder-key")
+    assert isinstance(get_embedder(), MockEmbedder)
+
+    # clave real → adapter OpenRouter (construcción sin importar el SDK; no hay red aquí)
+    monkeypatch.setattr(settings, "openrouter_key", "sk-or-v1-fake")
     emb = get_embedder()
-    assert isinstance(emb, MockEmbedder)
+    assert isinstance(emb, OpenAIEmbedder)
     assert emb.dimension == 1536
+    assert emb._base_url == settings.openrouter_base_url
+    assert emb._model == "openai/text-embedding-3-small"
