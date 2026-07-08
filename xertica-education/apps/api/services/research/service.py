@@ -1,4 +1,9 @@
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+from config.settings import settings
 
 
 TOOL_REGISTRY = [
@@ -85,7 +90,101 @@ TOOL_REGISTRY = [
 ]
 
 
+def _parse_youtube_duration(value: str) -> str:
+    match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", value or "")
+    if not match:
+        return "--:--"
+
+    hours, minutes, seconds = (int(part or 0) for part in match.groups())
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+class YouTubeSearchClient:
+    SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+    VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.api_key and "placeholder" not in self.api_key.lower())
+
+    def search(self, query: str, *, max_results: int = 8) -> List[Dict[str, Any]]:
+        if not self.enabled:
+            return []
+
+        with httpx.Client(timeout=10.0) as client:
+            search_response = client.get(
+                self.SEARCH_URL,
+                params={
+                    "key": self.api_key,
+                    "part": "snippet",
+                    "q": query,
+                    "type": "video",
+                    "maxResults": max_results,
+                    "safeSearch": "moderate",
+                    "videoEmbeddable": "true",
+                    "order": "relevance",
+                },
+            )
+            search_response.raise_for_status()
+            items = search_response.json().get("items", [])
+
+            video_ids = [
+                item.get("id", {}).get("videoId")
+                for item in items
+                if item.get("id", {}).get("videoId")
+            ]
+            if not video_ids:
+                return []
+
+            details_response = client.get(
+                self.VIDEOS_URL,
+                params={
+                    "key": self.api_key,
+                    "part": "contentDetails,statistics",
+                    "id": ",".join(video_ids),
+                },
+            )
+            details_response.raise_for_status()
+            details_by_id = {
+                item["id"]: item
+                for item in details_response.json().get("items", [])
+                if item.get("id")
+            }
+
+        results = []
+        for item in items:
+            video_id = item.get("id", {}).get("videoId")
+            if not video_id:
+                continue
+
+            snippet = item.get("snippet", {})
+            details = details_by_id.get(video_id, {})
+            content_details = details.get("contentDetails", {})
+            statistics = details.get("statistics", {})
+
+            results.append(
+                {
+                    "youtube_id": video_id,
+                    "title": snippet.get("title") or "Video de YouTube",
+                    "channel": snippet.get("channelTitle") or "YouTube",
+                    "duration": _parse_youtube_duration(content_details.get("duration", "")),
+                    "view_count": int(statistics.get("viewCount") or 0),
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                }
+            )
+
+        return results
+
+
 class ResearchService:
+    def __init__(self, youtube_client: Optional[YouTubeSearchClient] = None):
+        self.youtube_client = youtube_client or YouTubeSearchClient(settings.youtube_api_key)
+
     def detect_tools(self, text: str) -> List[Dict[str, Any]]:
         haystack = text.lower()
         detected = [
@@ -94,6 +193,126 @@ class ResearchService:
             if any(alias in haystack for alias in tool["aliases"])
         ]
         return detected or [TOOL_REGISTRY[2]]
+
+    def _youtube_query(self, tool: Dict[str, Any], customer_context: Dict[str, Any]) -> str:
+        audience = customer_context.get("audienceLevel") or ""
+        industry = customer_context.get("industry") or ""
+        terms = [tool["tool"], tool["vendor"], "tutorial", "official", audience, industry]
+        return " ".join(str(term) for term in terms if term)
+
+    def _is_verified_youtube_channel(self, tool: Dict[str, Any], channel: str) -> bool:
+        normalized = channel.strip().lower()
+        allowed_channels = {
+            *(value.lower() for value in tool["channels"]),
+            str(tool["official_video"].get("channel", "")).lower(),
+        }
+        return normalized in allowed_channels
+
+    def _youtube_sources_for_tool(
+        self,
+        tool: Dict[str, Any],
+        customer_context: Dict[str, Any],
+        *,
+        used_video_ids: set[str],
+    ) -> List[Dict[str, Any]]:
+        if not self.youtube_client.enabled:
+            return []
+
+        try:
+            videos = self.youtube_client.search(self._youtube_query(tool, customer_context))
+        except Exception as exc:
+            print(f"YouTube search failed for {tool['tool']}: {exc}")
+            return []
+
+        sources = []
+        for index, video in enumerate(videos):
+            youtube_id = video["youtube_id"]
+            if youtube_id in used_video_ids:
+                continue
+            used_video_ids.add(youtube_id)
+
+            verified = self._is_verified_youtube_channel(tool, video["channel"])
+            score = max(40, 96 - index * 4 + min(video["view_count"] // 500000, 8))
+            sources.append(
+                {
+                    "title": video["title"],
+                    "plat": "YouTube",
+                    "kind": "youtube",
+                    "url": video["url"],
+                    "verified": verified,
+                    "status": "approved" if verified else "requires-review",
+                    "toolName": tool["tool"],
+                    "vendor": tool["vendor"],
+                    "verificationReason": (
+                        f"Video de canal permitido para {tool['vendor']}: {video['channel']}"
+                        if verified
+                        else f"Video específico encontrado en YouTube, pero el canal no está en la lista permitida: {video['channel']}."
+                    ),
+                    "relevanceScore": score,
+                    "suggestedUse": "video",
+                    "quote": (
+                        f"Video específico encontrado por YouTube Data API para {tool['tool']}."
+                    ),
+                    "videoPreview": {
+                        "channel": video["channel"],
+                        "duration": video["duration"],
+                        "gradient": "from-sky-600 via-cyan-500 to-emerald-400",
+                        "emoji": "▶",
+                        "youtubeId": youtube_id,
+                        "videoTitle": video["title"],
+                    },
+                }
+            )
+
+        return sources
+
+    def _mock_youtube_source_for_tool(
+        self,
+        tool: Dict[str, Any],
+        index: int,
+        area: str,
+        industry: str,
+        *,
+        used_video_ids: set[str],
+    ) -> Dict[str, Any]:
+        tool_name = tool["tool"]
+        vendor = tool["vendor"]
+        official_video = tool["official_video"]
+        youtube_id = official_video.get("youtube_id")
+        has_specific_video = bool(youtube_id and youtube_id not in used_video_ids)
+        if youtube_id:
+            used_video_ids.add(youtube_id)
+
+        return {
+            "title": official_video["title"],
+            "plat": "YouTube",
+            "kind": "youtube",
+            "url": official_video["url"],
+            "verified": has_specific_video,
+            "status": "approved" if has_specific_video else "requires-review",
+            "toolName": tool_name,
+            "vendor": vendor,
+            "verificationReason": (
+                f"Video específico del canal permitido para {vendor}: {official_video['channel']}"
+                if has_specific_video
+                else f"Canal permitido identificado ({official_video['channel']}), pero falta seleccionar un video específico."
+            ),
+            "relevanceScore": 94 - index if has_specific_video else 78 - index,
+            "suggestedUse": "video",
+            "quote": (
+                f"Video específico recomendado para introducir {tool_name} con ejemplos de {area} en {industry}."
+                if has_specific_video
+                else f"Candidato para búsqueda manual: elegir un video concreto de {official_video['channel']} antes de aprobar."
+            ),
+            "videoPreview": {
+                "channel": official_video["channel"],
+                "duration": official_video["duration"],
+                "gradient": "from-sky-600 via-cyan-500 to-emerald-400",
+                "emoji": "▶",
+                "youtubeId": youtube_id,
+                "videoTitle": official_video["title"],
+            },
+        }
 
     def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         brief = payload.get("brief", "")
@@ -113,46 +332,31 @@ class ResearchService:
         )
 
         sources = []
+        used_video_ids: set[str] = set()
         for index, tool in enumerate(tools):
             primary_channel = tool["channels"][0]
             primary_domain = tool["domains"][0]
             tool_name = tool["tool"]
             vendor = tool["vendor"]
-            official_video = tool["official_video"]
-            has_specific_video = bool(official_video.get("youtube_id"))
+            youtube_sources = self._youtube_sources_for_tool(
+                tool,
+                customer_context,
+                used_video_ids=used_video_ids,
+            )
+            if not youtube_sources:
+                youtube_sources = [
+                    self._mock_youtube_source_for_tool(
+                        tool,
+                        index,
+                        area,
+                        industry,
+                        used_video_ids=used_video_ids,
+                    )
+                ]
 
             sources.extend(
                 [
-                    {
-                        "title": official_video["title"],
-                        "plat": "YouTube",
-                        "kind": "youtube",
-                        "url": official_video["url"],
-                        "verified": has_specific_video,
-                        "status": "approved" if has_specific_video else "requires-review",
-                        "toolName": tool_name,
-                        "vendor": vendor,
-                        "verificationReason": (
-                            f"Video específico del canal permitido para {vendor}: {official_video['channel']}"
-                            if has_specific_video
-                            else f"Canal permitido identificado ({official_video['channel']}), pero falta seleccionar un video específico."
-                        ),
-                        "relevanceScore": 94 - index if has_specific_video else 78 - index,
-                        "suggestedUse": "video",
-                        "quote": (
-                            f"Video específico recomendado para introducir {tool_name} con ejemplos de {area} en {industry}."
-                            if has_specific_video
-                            else f"Candidato para búsqueda manual: elegir un video concreto de {official_video['channel']} antes de aprobar."
-                        ),
-                        "videoPreview": {
-                            "channel": official_video["channel"],
-                            "duration": official_video["duration"],
-                            "gradient": "from-sky-600 via-cyan-500 to-emerald-400",
-                            "emoji": "▶",
-                            "youtubeId": official_video.get("youtube_id"),
-                            "videoTitle": official_video["title"],
-                        },
-                    },
+                    *youtube_sources,
                     {
                         "title": f"Documentación oficial de {tool_name}",
                         "plat": primary_domain,
