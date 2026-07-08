@@ -413,13 +413,6 @@ export default function NuevaRuta() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label>Propuesta del cliente</Label>
-                    <input
-                      ref={baseMaterialInputRef}
-                      type="file"
-                      accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
-                      className="hidden"
-                      onChange={(e) => attachBaseMaterial(e.target.files?.[0] ?? null)}
-                    />
                     <button
                       type="button"
                       onClick={() => baseMaterialInputRef.current?.click()}
@@ -549,6 +542,16 @@ export default function NuevaRuta() {
         {/* Material de referencia (Vía 2) — comparte el archivo de la propuesta */}
         <div className="flex flex-col gap-2">
           <Label>O sube material de referencia</Label>
+          <input
+            ref={baseMaterialInputRef}
+            type="file"
+            accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
+            className="hidden"
+            onClick={(e) => {
+              ;(e.currentTarget as HTMLInputElement).value = ''
+            }}
+            onChange={(e) => attachBaseMaterial(e.target.files?.[0] ?? null)}
+          />
           <button
             type="button"
             onClick={() => baseMaterialInputRef.current?.click()}
