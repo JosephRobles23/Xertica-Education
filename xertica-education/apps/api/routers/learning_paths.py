@@ -152,10 +152,10 @@ async def run_deep_research(
     """
     Runs a tool-aware deep research pass for a learning path.
 
-    The current implementation is deterministic and mock-backed so the full UX can
-    be tested before wiring real YouTube/search providers. It detects tools from
-    the brief/modules, applies vendor-specific allowlists, and persists the source
-    candidates on the route details.
+    Uses YouTube Data API v3 when YOUTUBE_API_KEY is configured and falls back to
+    the deterministic registry otherwise. It detects tools from the brief/modules,
+    applies vendor-specific channel allowlists, deduplicates video IDs, and
+    persists the source candidates on the route details.
     """
     route = await route_service.get_route(route_id)
     if not route:

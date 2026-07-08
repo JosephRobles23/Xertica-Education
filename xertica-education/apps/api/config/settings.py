@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     openrouter_key: str = "placeholder-key"
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
+    youtube_api_key: str = "placeholder-key"
 
     # Google Cloud settings for Vertex AI (Imagen 3 + Veo 3.1)
     google_cloud_project: str = "placeholder-project"
@@ -92,4 +93,3 @@ if not settings.remotion_composer_path:
     _api_remotion = Path(__file__).resolve().parent.parent / "remotion"
     if _api_remotion.exists():
         settings.remotion_composer_path = str(_api_remotion)
-

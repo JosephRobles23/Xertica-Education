@@ -48,12 +48,18 @@ const isYoutubeSource = (source: Source) =>
 const hasSpecificYoutubeVideo = (source: Source) =>
   Boolean(source.videoPreview?.youtubeId) || Boolean(source.url?.includes('youtube.com/watch'))
 
+const youtubeVideoIdOf = (source: Source) => {
+  if (source.videoPreview?.youtubeId) return source.videoPreview.youtubeId
+  const match = source.url?.match(/[?&]v=([^&]+)/)
+  return match?.[1]
+}
+
 const moduleText = (module: RouteModule, content?: ModuleContentRef) =>
   [module.name, module.type, content?.summary].filter(Boolean).join(' ').toLowerCase()
 
-function findRecommendedYoutubeSource(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
+function recommendedYoutubeCandidates(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
   const targetText = moduleText(module, content)
-  const candidates = route.sources
+  return route.sources
     .filter(
       (source) =>
         isYoutubeSource(source) &&
@@ -79,8 +85,39 @@ function findRecommendedYoutubeSource(route: LearningRoute, module: RouteModule,
       }
     })
     .sort((a, b) => b.score - a.score)
+    .map((candidate) => candidate.source)
+}
 
-  return candidates[0]?.source
+function pickRecommendedYoutubeSource(
+  route: LearningRoute,
+  module: RouteModule,
+  content?: ModuleContentRef,
+  usedYoutubeIds: Set<string> = new Set(),
+) {
+  return recommendedYoutubeCandidates(route, module, content).find((source) => {
+    const youtubeId = youtubeVideoIdOf(source)
+    return !youtubeId || !usedYoutubeIds.has(youtubeId)
+  })
+}
+
+function findRecommendedYoutubeSource(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
+  const usedYoutubeIds = new Set<string>()
+
+  for (const routeModule of route.modules) {
+    for (const routeContent of routeModule.contents) {
+      if (routeModule.id === module.id && routeContent.kind === content?.kind) {
+        return pickRecommendedYoutubeSource(route, module, content, usedYoutubeIds)
+      }
+
+      if (routeContent.kind !== 'video') continue
+
+      const assigned = pickRecommendedYoutubeSource(route, routeModule, routeContent, usedYoutubeIds)
+      const youtubeId = assigned ? youtubeVideoIdOf(assigned) : undefined
+      if (youtubeId) usedYoutubeIds.add(youtubeId)
+    }
+  }
+
+  return pickRecommendedYoutubeSource(route, module, content, usedYoutubeIds)
 }
 
 function findSecondaryYoutubeSource(route: LearningRoute, module: RouteModule, content?: ModuleContentRef) {
