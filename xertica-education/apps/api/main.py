@@ -17,7 +17,6 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
 from routers.jobs import router as jobs_router
 from routers.learning_paths import router as learning_paths_router
 from routers.kb import router as kb_router
