@@ -27,7 +27,6 @@ import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
 import { ContentPreview } from '@/shared/content/ContentPreview'
 import { SourceVideoPreview } from '@/shared/content/SourceVideoPreview'
-import { VideoFrame } from '@/shared/content/VideoFrame'
 import { RefinePopover } from '@/modules/routes/components/RefinePopover'
 import { api } from '@/shared/lib/api'
 import {
@@ -118,6 +117,7 @@ function VideoRecommendationPanel({
   onFindAnother,
   findingAnother,
   onUseAiVideo,
+  storyboardVideoUrl,
 }: {
   route: LearningRoute
   content: ModuleContentRef
@@ -126,6 +126,7 @@ function VideoRecommendationPanel({
   onFindAnother: () => void
   findingAnother: boolean
   onUseAiVideo: () => void
+  storyboardVideoUrl?: string
 }) {
   const [videoOpen, setVideoOpen] = useState(Boolean(recommendedSource?.videoPreview?.youtubeId))
   const [selectedMode, setSelectedMode] = useState<'youtube' | 'ai' | 'own' | null>(null)
@@ -180,7 +181,7 @@ function VideoRecommendationPanel({
             <span className="font-display text-[14px] font-medium text-ink">Video generado con IA</span>
             <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">Veo 3</span>
           </div>
-          <VideoFrame video={route.pack.video} compact />
+          <ContentPreview kind="video" pack={route.pack} videoUrl={storyboardVideoUrl} />
           <div className="mt-3 rounded-lg border-[1.5px] border-dashed border-input px-3 py-2 text-[12.5px] text-muted-foreground">
             {secondarySource ? (
               <div className="flex flex-wrap items-center gap-2">
@@ -280,6 +281,7 @@ function ContentReviewPanel({
     approveContent,
     refineContent,
     isLabGuideApproved,
+    storyboardVideoUrlOf,
     replaceRouteSources,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
@@ -290,6 +292,7 @@ function ContentReviewPanel({
   const isLab = content.kind === 'lab'
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
+  const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
   const recommendedVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
   const secondaryYoutubeVideo =
     isVideo && !recommendedVideo ? findSecondaryYoutubeSource(route, module, content) : undefined
@@ -383,6 +386,7 @@ function ContentReviewPanel({
           recommendedSource={recommendedVideo}
           secondarySource={secondaryYoutubeVideo}
           findingAnother={findingAnotherVideo}
+          storyboardVideoUrl={storyboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
           onUseAiVideo={() => {
             toast.info('Flujo de video AI', {
@@ -419,7 +423,11 @@ function ContentReviewPanel({
         </div>
       )}
 
-      {!isVideo && <ContentPreview kind={content.kind} pack={route.pack} />}
+      {!isVideo && (
+        <div className="mb-4">
+          <ContentPreview kind={content.kind} pack={route.pack} />
+        </div>
+      )}
     </div>
   )
 }
