@@ -223,9 +223,9 @@ export default function NuevaRuta() {
         replaceRouteSources(newPath.id, research.sources)
 
         const toolNames = research.detected_tools.map((tool) => tool.tool).join(', ')
-        toast.loading('Fuentes candidatas listas para revisión', {
+        toast.loading('Deep Research listo para enriquecer los assets', {
           id: toastId,
-          description: `${research.sources.length} fuentes para ${toolNames || 'la ruta'}.`,
+          description: `${research.sources.length} recomendaciones para ${toolNames || 'la ruta'}.`,
         })
       }
 
@@ -234,7 +234,7 @@ export default function NuevaRuta() {
       toast.success('Estructura generada con éxito', {
         id: toastId,
         description: deepResearch
-          ? 'Revisa la estructura y las fuentes verificadas antes de aprobar.'
+          ? 'Revisa la estructura; las recomendaciones aparecerán dentro de cada asset relevante.'
           : 'Revisa, reordena y cura los módulos antes de aprobar.',
       })
       router.push('/estructura-propuesta')
