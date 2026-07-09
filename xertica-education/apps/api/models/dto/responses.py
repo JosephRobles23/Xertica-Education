@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 from models.common import JobStatus
 
 class JobResponse(BaseModel):
@@ -18,6 +18,7 @@ class VideoJobResult(BaseModel):
     video_url: str
     duration_seconds: float
     cost_usd: float
+    provenance: Optional[Dict[str, Any]] = None
 
 class VideoJobResponse(BaseModel):
     job_id: UUID
@@ -32,6 +33,7 @@ class GroundingInfo(BaseModel):
     storyboard so the human reviewing the script can see which chunks grounded it.
     Defer `asset_sources` persistence (ADR-0007) to a later ticket; this block is
     exposed now so the data exists when that ticket lands."""
+    status: Literal["kb_grounded", "module_grounded"] = "module_grounded"
     query: str
     k: int
     chunks: list  # list[GroundedChunk] (kept loose to avoid a domain↔dto cycle)
@@ -46,4 +48,3 @@ class StoryboardResponse(BaseModel):
     """
     storyboard: dict
     grounding: GroundingInfo
-

@@ -3,6 +3,7 @@ from uuid import UUID
 from typing import Optional, List
 from models.dto.requests import StoryboardRequest
 from models.dto.responses import VideoJobResponse
+from services.kb.interface import KnowledgeBaseInterface
 
 class VideoServiceInterface(ABC):
     @abstractmethod
@@ -23,6 +24,7 @@ class VideoServiceInterface(ABC):
         component_kind: str = "video",
         component_id: Optional[UUID] = None,
         k: int = 8,
+        kb: Optional[KnowledgeBaseInterface] = None,
     ) -> dict:
         """Generates a KB-grounded storyboard for the given Render Target.
 
@@ -41,4 +43,3 @@ class VideoServiceInterface(ABC):
     async def segment_video(self, video_url: str) -> List[dict]:
         """Ingests an existing video and segments it into timestamped sub-topics."""
         pass
-

@@ -2,6 +2,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
 from services.video.interface import VideoServiceInterface
+from services.kb.interface import KnowledgeBaseInterface
 from models.dto.requests import StoryboardRequest
 from models.dto.responses import VideoJobResponse, VideoJobResult
 from models.common import JobStatus
@@ -69,6 +70,7 @@ class MockVideoService(VideoServiceInterface):
         component_kind: str = "video",
         component_id: Optional[UUID] = None,
         k: int = 8,
+        kb: Optional[KnowledgeBaseInterface] = None,
     ) -> dict:
         return {
             "storyboard": {
@@ -76,7 +78,7 @@ class MockVideoService(VideoServiceInterface):
                 "total_word_budget": 300,
                 "scenes": [],
             },
-            "grounding": {"query": "", "k": k, "chunks": []},
+            "grounding": {"status": "module_grounded", "query": "", "k": k, "chunks": []},
         }
 
     async def segment_video(self, video_url: str) -> List[dict]:
@@ -86,4 +88,3 @@ class MockVideoService(VideoServiceInterface):
             {"id": "seg3", "title": "Configuración del Pipeline de Renderizado", "start": "12:45", "end": "20:30", "summary": "Cómo se orquestan Playwright y FFmpeg en segundo plano."},
             {"id": "seg4", "title": "Conclusión y Cierre", "start": "20:30", "end": "25:00", "summary": "Resumen final y pasos sugeridos para integración."}
         ]
-

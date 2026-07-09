@@ -19,6 +19,8 @@ VisualType = Literal[
     "ai_illustration",
 ]
 
+GroundingStatus = Literal["kb_grounded", "module_grounded"]
+
 class CreateLearningPathRequest(BaseModel):
     titulo: str
     tema: str
@@ -60,6 +62,11 @@ class VideoScene(BaseModel):
       - ai_illustration — Imagen 3 diagram/illustration with Ken Burns
     """
     visual_config: dict
+    teaching_point: Optional[str] = None
+    pedagogical_intent: Optional[str] = None
+    teaching_pattern: Optional[str] = None
+    visual_rationale: Optional[str] = None
+    grounding_status: Optional[GroundingStatus] = None
 
 class StoryboardRequest(BaseModel):
     title: str

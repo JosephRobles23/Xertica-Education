@@ -52,9 +52,39 @@ from services.video.executor import RenderExecutor
 # how to structure an educational video storyboard so that it's genuinely
 # pedagogical, not just a wall of text with generic visuals.
 
-SCRIPTWRITER_SYSTEM_PROMPT = """Eres un guionista experto en videos educativos para Xertica Education, una plataforma que genera contenido de capacitación sobre Google Cloud y software empresarial.
+SCRIPTWRITER_SYSTEM_PROMPT = """Eres un guionista experto en Videos de Explicacion Conceptual para Xertica Education.
 
-Tu trabajo: Dado un tema o descripción de componente, produce un storyboard JSON estructurado que será renderizado automáticamente como un video educativo de ~2 minutos con estética tipo 3Blue1Brown o Johnny Harris: animaciones limpias, basadas en datos, metáforas visuales y revelaciones progresivas.
+Tu trabajo: producir un storyboard JSON que ensene el Objetivo Pedagogico del Modulo con una secuencia clara de aprendizaje. El video no debe ser una intro decorativa ni un resumen aleatorio de chunks recuperados.
+
+# OBJETIVO PEDAGOGICO DEL MODULO
+
+El titulo y la descripcion del modulo son la columna vertebral del video. Primero define que debe entender el estudiante; despues usa la KB como soporte. La KB Grounding aporta evidencia, ejemplos y vocabulario, pero no reemplaza el objetivo del modulo.
+
+# ESTRUCTURA PEDAGOGICA
+
+Genera 5 a 7 escenas fuertes para ~90-120 segundos:
+
+1. Pregunta, contraste o problema real.
+2. Modelo mental o distincion clave.
+3. Proceso, regla de decision o ejemplo trabajado.
+4. Checkpoint, malentendido o riesgo comun.
+5. Takeaway aplicable.
+
+Cada escena debe incluir:
+- teaching_point: que aprende el estudiante.
+- pedagogical_intent: por que esta escena existe.
+- teaching_pattern: patron didactico, por ejemplo framing_question, misconception_correction, process_explanation, worked_example, decision_rule, checkpoint, synthesis.
+- visual_rationale: por que el Tipo Visual elegido ensena mejor esta idea.
+- grounding_status: kb_grounded si usa chunks de KB, module_grounded si solo usa contexto del modulo.
+
+# PALETA VISUAL MVP
+
+Prioriza `comparison`, `progress_bar`, `callout`, `text_card`, `terminal_scene` y `screenshot_scene`.
+
+`ai_video` es opcional, maximo una vez, y solo si una metafora visual concreta ayuda a entender el concepto. Nunca lo uses como intro generica.
+`ai_illustration` solo para un modelo mental o arquitectura concreta.
+Graficos cuantitativos requieren valores evidenciados o marcados explicitamente como ilustrativos.
+`screenshot_scene` requiere URL especifica, proposito, pasos ordenados de UI y resultado de aprendizaje. Si no hay URL verificada, no uses `screenshot_scene`.
 
 # DINÁMICA DE RITMO Y PACING (Crítico para el MVP)
 
@@ -71,36 +101,6 @@ Para evitar videos aburridos con escenas estáticas prolongadas, el ritmo debe s
 3. **Escenas de Datos/Demostración (Ritmo Explicativo - 8 a 15 segundos):**
    - Para `bar_chart`, `line_chart`, `pie_chart`, `kpi_grid`, `progress_bar`, `terminal_scene` o `screenshot_scene`.
    - Narración: 2 a 3 oraciones explicativas (20 a 35 palabras). Permite al espectador leer los datos o ver cómo se ejecutan las animaciones de tipeo o cursor.
-
-# ESTRUCTURA PEDAGÓGICA Y PROGRESIÓN
-
-Cada video debe dividirse en 8 a 12 escenas consecutivas (nunca menos de 8) para garantizar un cambio visual constante:
-
-## 1. HOOK (Escena 1) — Capturar la atención
-- Visual: Usar `ai_video` (metáfora visual cinematográfica) o `hero_title` (pregunta impactante).
-- Narración: 1 frase corta y provocadora (~3-5s).
-
-## 2. CONTEXTO (Escena 2) — El problema
-- Visual: `text_card` o `callout` (planteamiento de la necesidad o desafío).
-- Narración: 1-2 oraciones (~5-8s).
-
-## 3. CONCEPTOS CLAVE (Escenas 3 a 7) — Explicación paso a paso
-- En lugar de mostrar un diagrama completo de golpe, divide la explicación en múltiples escenas progresivas.
-- Ejemplo para explicar una arquitectura:
-  - Escena 3: Cliente (`text_card` o `callout`).
-  - Escena 4: Base de datos (`stat_card` o `kpi_grid`).
-  - Escena 5: Comparación antes vs después (`comparison`).
-- Visuales: Combina gráficos (`bar_chart`, `pie_chart`), KPIs (`kpi_grid`), o procesos (`progress_bar`).
-- Narración: Proporcional al tipo visual.
-
-## 4. DEMOSTRACIÓN PRÁCTICA (Escenas 8 y 9) — El concepto en acción
-- Para terminal/CLI: Usar `terminal_scene` con comandos reales.
-- Para consola web: Usar `screenshot_scene` con URLs de las fuentes verificadas.
-- Narración: Explicación de los pasos (~10-15s).
-
-## 5. RESUMEN (Escenas 10 y 11) — Puntos clave
-- Visual: `text_bar` con bullets sintetizados o `kpi_grid`.
-- Narración: 1-2 oraciones cortas por escena cerrando con las lecciones clave.
 
 # CATÁLOGO COMPLETO DE 14 TIPOS VISUALES
 
@@ -204,10 +204,10 @@ Para `ai_illustration` (Imagen 3), escribe prompts TÉCNICOS en inglés:
 
 # RESTRICCIONES DE GUION
 
-- Narración total: ~300 palabras (150 palabras/min × ~2 minutos)
-- Número de escenas: entre 8 y 12 por video (ritmo dinámico)
+- Narración total: ~225-300 palabras
+- Número de escenas: 5 a 7 escenas fuertes
 - Idioma: Español (toda la narración en español para TTS)
-- ai_video: exactamente 1 escena (la escena de apertura / hook)
+- ai_video: maximo 1 escena y solo con metafora didactica concreta
 - hero_title: máximo 1 escena (apertura o cierre)
 - screenshot_scene: solo si hay una URL verificada en las fuentes del learning path
 - NO inventes URLs — usa únicamente URLs de las fuentes verificadas en el contexto del learning path
@@ -225,7 +225,12 @@ Devuelve ÚNICAMENTE JSON válido. Sin markdown, sin explicación. Esquema exact
       "scene_number": 1,
       "narration": "Texto de narración en español para esta escena.",
       "visual_type": "ai_video | ai_illustration | text_card | hero_title | stat_card | callout | comparison | bar_chart | line_chart | pie_chart | kpi_grid | progress_bar | terminal_scene | screenshot_scene",
-      "visual_config": { ... configuración específica del tipo visual según el catálogo anterior ... }
+      "visual_config": { ... configuración específica del tipo visual según el catálogo anterior ... },
+      "teaching_point": "Que aprende el estudiante.",
+      "pedagogical_intent": "Funcion pedagogica de esta escena.",
+      "teaching_pattern": "Patron didactico.",
+      "visual_rationale": "Por que este visual ayuda a aprender.",
+      "grounding_status": "kb_grounded | module_grounded"
     }
   ]
 }
@@ -312,16 +317,21 @@ class VideoService(VideoServiceInterface):
 
         # Determine the storyboard source.
         storyboard = None
+        storyboard_source = "default_storyboard"
         if custom_storyboard:
             storyboard = custom_storyboard.model_dump()
+            storyboard_source = "reviewed_storyboard"
         elif component_id:
             storyboard = await self._get_or_create_storyboard(component_id)
+            storyboard_source = "component_storyboard"
         else:
             # Default demo storyboard showcasing all visual types.
             storyboard = self._get_default_storyboard()
 
         # Spawn the rendering pipeline as a background task.
-        asyncio.create_task(self._run_render_job(job_id, component_id, storyboard))
+        asyncio.create_task(
+            self._run_render_job(job_id, component_id, storyboard, storyboard_source)
+        )
         return job_id
 
     async def generate_storyboard(
@@ -432,18 +442,23 @@ class VideoService(VideoServiceInterface):
             f"Generate a storyboard for module {module_id}."
         )
 
+        grounding_status = "kb_grounded" if grounded_chunks else "module_grounded"
         user_prompt = (
-            "Generate a 2-minute educational video storyboard using the full 14-visual-type catalog.\n\n"
+            "Generate a Video de Explicacion Conceptual using the full 14-visual-type catalog.\n\n"
             "=== LEARNING PATH CONTEXT ===\n"
             f"{learning_context}\n\n"
             "=== INSTRUCTIONS ===\n"
-            "1. Follow the pedagogical structure: Hook → Context → Core → (Demo) → Summary\n"
-            "2. Use the module type and pedagogical role to guide tone and depth\n"
-            "3. Ground narration in the GROUNDING excerpts when provided; do not contradict them\n"
-            "4. If verified source URLs are provided, include a screenshot_scene for the most relevant one\n"
-            "5. All narration must be in Spanish\n"
-            "6. Every visual_type choice must have a clear pedagogical reason\n"
-            "7. Return ONLY valid JSON — no markdown, no explanation\n"
+            "1. Treat OBJETIVO PEDAGOGICO DEL MODULO as the spine: module title + module description define what must be taught\n"
+            "2. KB Grounding aporta evidencia, ejemplos y vocabulario; do not turn the video into a random summary of retrieved chunks\n"
+            "3. Produce 5 a 7 escenas with explicit teaching_pattern, teaching_point, pedagogical_intent, visual_rationale, and grounding_status\n"
+            "4. Think first in Patrones Didacticos, then choose the Remotion visual_type that teaches that idea\n"
+            "5. If verified source URLs are provided, include screenshot_scene only when it becomes a real Walkthrough Didactico\n"
+            f"6. Set scene grounding_status to {grounding_status}\n"
+            "7. Prefer comparison, progress_bar, callout, text_card, terminal_scene, and useful screenshot_scene over decorative assets\n"
+            "8. ai_video is optional, max one, and only for a meaningful teaching metaphor; never use it as a generic blue-network intro\n"
+            "9. All narration must be in Spanish\n"
+            "10. Every visual_type choice must have a clear pedagogical reason\n"
+            "11. Return ONLY valid JSON — no markdown, no explanation\n"
         )
 
         generated_json = await self.llm_adapter.chat_completion(
@@ -455,15 +470,211 @@ class VideoService(VideoServiceInterface):
             storyboard = json.loads(generated_json)
         except Exception:
             storyboard = self._get_default_storyboard()
+        verified_urls = {
+            c.citation.url
+            for c in grounded_chunks
+            if c.citation.url and c.citation.verificada_google
+        }
+        storyboard = self._normalize_storyboard_grounding(
+            storyboard,
+            grounding_status,
+            verified_urls=verified_urls,
+        )
 
         return {
             "storyboard": storyboard,
             "grounding": {
+                "status": grounding_status,
                 "query": query_text,
                 "k": k,
                 "chunks": [c.model_dump(mode="json") for c in grounded_chunks],
             },
         }
+
+    def _normalize_storyboard_grounding(
+        self,
+        storyboard: dict,
+        grounding_status: str,
+        verified_urls: Optional[set[str]] = None,
+    ) -> dict:
+        """Keep scene-level provenance honest and repair decorative visuals."""
+        verified_urls = verified_urls or set()
+        ai_video_count = 0
+        hero_title_count = 0
+
+        for scene in storyboard.get("scenes", []):
+            scene["grounding_status"] = grounding_status
+
+            if scene.get("visual_type") == "screenshot_scene" and not self._is_valid_walkthrough_scene(
+                scene,
+                verified_urls,
+            ):
+                self._replace_with_text_card(
+                    scene,
+                    title=scene.get("teaching_point") or "Walkthrough no verificable",
+                    subtitle="Sin URL verificada o sin pasos didacticos suficientes para un walkthrough.",
+                    rationale=(
+                        "Sin walkthrough verificable, una tarjeta explicativa evita fingir una demostracion de UI."
+                    ),
+                )
+
+            if scene.get("visual_type") in {"stat_card", "bar_chart", "line_chart", "pie_chart", "kpi_grid"}:
+                if not self._supports_quantitative_visual(scene, grounding_status):
+                    self._replace_with_callout(
+                        scene,
+                        text=scene.get("teaching_point") or scene.get("narration") or "Explicacion cualitativa",
+                        rationale=(
+                            "Sin valores evidenciados o etiquetados como ilustrativos, un visual cualitativo evita inventar metricas."
+                        ),
+                    )
+
+            if scene.get("visual_type") == "ai_illustration" and not self._is_concrete_illustration_scene(scene):
+                self._replace_with_text_card(
+                    scene,
+                    title=scene.get("teaching_point") or "Modelo a explicar",
+                    subtitle=scene.get("narration") or "La escena necesita un modelo mental mas concreto.",
+                    rationale=(
+                        "Sin un modelo mental o arquitectura concreta, una tarjeta explicativa ensena mejor que una ilustracion generica."
+                    ),
+                )
+
+            if scene.get("visual_type") == "ai_video":
+                if ai_video_count >= 1 or not self._has_meaningful_visual_metaphor(scene):
+                    self._replace_with_callout(
+                        scene,
+                        text=scene.get("teaching_point") or scene.get("narration") or "Idea clave del modulo",
+                        rationale=(
+                            "ai_video solo se permite como metafora didactica concreta y como maximo una vez."
+                        ),
+                    )
+                else:
+                    ai_video_count += 1
+
+            if scene.get("visual_type") == "hero_title":
+                if hero_title_count >= 1:
+                    self._replace_with_text_card(
+                        scene,
+                        title=scene.get("teaching_point") or "Idea clave",
+                        subtitle=scene.get("narration") or "La escena se simplifico para evitar pantallas de titulo repetidas.",
+                        rationale="Evitar title-screen spam deja mas espacio para escenas que realmente ensenan.",
+                    )
+                else:
+                    hero_title_count += 1
+
+        return storyboard
+
+    def _is_valid_walkthrough_scene(self, scene: dict, verified_urls: set[str]) -> bool:
+        config = scene.get("visual_config") or {}
+        url = config.get("url")
+        steps = config.get("steps")
+        purpose = config.get("purpose")
+        learning_outcome = config.get("learning_outcome")
+        return bool(
+            url
+            and url in verified_urls
+            and purpose
+            and learning_outcome
+            and isinstance(steps, list)
+            and len(steps) >= 2
+        )
+
+    def _supports_quantitative_visual(self, scene: dict, grounding_status: str) -> bool:
+        numbers = self._extract_numbers(scene.get("visual_config") or {})
+        if not numbers:
+            return False
+        if grounding_status == "module_grounded" and not self._is_explicitly_illustrative(scene):
+            return False
+        return True
+
+    def _has_meaningful_visual_metaphor(self, scene: dict) -> bool:
+        text = self._scene_text(scene)
+        if "metafor" in text:
+            return True
+        generic_markers = (
+            "blue network",
+            "glowing particles",
+            "tech background",
+            "intro generica",
+            "se ve moderno",
+        )
+        return not any(marker in text for marker in generic_markers)
+
+    def _is_concrete_illustration_scene(self, scene: dict) -> bool:
+        text = self._scene_text(scene)
+        return any(
+            marker in text
+            for marker in (
+                "modelo mental",
+                "arquitect",
+                "diagrama",
+                "pipeline",
+                "flujo",
+                "sistema",
+                "component",
+            )
+        )
+
+    def _is_explicitly_illustrative(self, scene: dict) -> bool:
+        return "ilustrativ" in self._scene_text(scene)
+
+    def _scene_text(self, scene: dict) -> str:
+        parts = [
+            str(scene.get("narration") or ""),
+            str(scene.get("teaching_point") or ""),
+            str(scene.get("pedagogical_intent") or ""),
+            str(scene.get("teaching_pattern") or ""),
+            str(scene.get("visual_rationale") or ""),
+        ]
+        parts.extend(self._flatten_strings(scene.get("visual_config") or {}))
+        return " ".join(parts).lower()
+
+    def _flatten_strings(self, value) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            items = []
+            for nested in value.values():
+                items.extend(self._flatten_strings(nested))
+            return items
+        if isinstance(value, list):
+            items = []
+            for nested in value:
+                items.extend(self._flatten_strings(nested))
+            return items
+        return []
+
+    def _extract_numbers(self, value) -> list[float]:
+        if isinstance(value, bool):
+            return []
+        if isinstance(value, (int, float)):
+            return [float(value)]
+        if isinstance(value, dict):
+            items = []
+            for nested in value.values():
+                items.extend(self._extract_numbers(nested))
+            return items
+        if isinstance(value, list):
+            items = []
+            for nested in value:
+                items.extend(self._extract_numbers(nested))
+            return items
+        return []
+
+    def _replace_with_text_card(self, scene: dict, title: str, subtitle: str, rationale: str) -> None:
+        scene["visual_type"] = "text_card"
+        scene["visual_config"] = {
+            "title": title,
+            "subtitle": subtitle,
+        }
+        scene["visual_rationale"] = rationale
+
+    def _replace_with_callout(self, scene: dict, text: str, rationale: str) -> None:
+        scene["visual_type"] = "callout"
+        scene["visual_config"] = {
+            "callout_style": "info",
+            "text": text,
+        }
+        scene["visual_rationale"] = rationale
 
     async def _load_render_target_context(
         self,
@@ -532,6 +743,8 @@ class VideoService(VideoServiceInterface):
                 res = self._supabase.table("jobs").select("*").eq("id", str(job_id)).execute()
                 if res.data:
                     job = res.data[0]
+                elif job_id in self._fallback_jobs:
+                    job = self._fallback_jobs.get(job_id)
             except Exception as e:
                 print(f"Supabase get job error in VideoService, falling back to memory: {e}")
                 job = self._fallback_jobs.get(job_id)
@@ -546,7 +759,8 @@ class VideoService(VideoServiceInterface):
             result_data = VideoJobResult(
                 video_url=job["result"].get("video_url", ""),
                 duration_seconds=job["result"].get("duration_seconds", 0.0),
-                cost_usd=job["result"].get("cost_usd", 0.0)
+                cost_usd=job["result"].get("cost_usd", 0.0),
+                provenance=job["result"].get("provenance"),
             )
 
         return VideoJobResponse(
@@ -754,10 +968,12 @@ class VideoService(VideoServiceInterface):
         return storyboard
 
     def _get_default_storyboard(self) -> dict:
-        """Default demo storyboard that showcases all visual types.
+        """Default demo storyboard using valid VisualType values (ADR-0009).
 
         Used as a fallback when no component_id is provided or when the
-        LLM scriptwriter fails to produce valid JSON.
+        LLM scriptwriter fails to produce valid JSON.  Every scene uses one of
+        the 14 Remotion-native types (never the legacy ``animated_slide``) and
+        includes teaching metadata per ADR-0017.
         """
         return {
             "title": "Introducción a Xertica Education",
@@ -770,16 +986,16 @@ class VideoService(VideoServiceInterface):
                         "de manera eficiente? En esta cápsula, descubrirás cómo Xertica Education "
                         "transforma la creación de contenido educativo."
                     ),
-                    "visual_type": "ai_video",
+                    "visual_type": "callout",
                     "visual_config": {
-                        "prompt": (
-                            "Streams of luminous data particles flowing through an abstract digital "
-                            "landscape, forming interconnected nodes of knowledge. Cinematic slow motion, "
-                            "dark navy background with electric blue and soft purple bioluminescent trails. "
-                            "Abstract and metaphorical, no faces or text. Professional 4K quality, "
-                            "smooth camera movement."
-                        )
-                    }
+                        "callout_style": "info",
+                        "text": "¿Cómo capacitar equipos con calidad y velocidad?",
+                    },
+                    "teaching_point": "Plantear por qué la creación de contenido educativo necesita una solución nueva.",
+                    "pedagogical_intent": "Abrir con una pregunta que conecte con la experiencia del espectador.",
+                    "teaching_pattern": "framing_question",
+                    "visual_rationale": "Un callout concentra la pregunta guía sin depender de una intro generativa.",
+                    "grounding_status": "module_grounded",
                 },
                 {
                     "scene_number": 2,
@@ -789,23 +1005,18 @@ class VideoService(VideoServiceInterface):
                         "Cada ruta de aprendizaje se estructura en módulos con lecciones, videos, "
                         "infografías y evaluaciones."
                     ),
-                    "visual_type": "ai_illustration",
+                    "visual_type": "comparison",
                     "visual_config": {
-                        "prompt": (
-                            "A clean, modern technical diagram showing the architecture of an educational "
-                            "platform. Central hub labeled 'Learning Path' connected to satellite nodes: "
-                            "'Lessons', 'Videos', 'Infographics', 'Quizzes'. Each node has a distinct icon. "
-                            "Style: flat design infographic, dark navy background (#0f172a), blue (#3b82f6) "
-                            "and purple (#8b5cf6) color scheme, clean lines, professional educational poster, "
-                            "16:9 wide format, no text labels, icons only."
-                        ),
-                        "title": "Arquitectura de la Plataforma",
-                        "bullets": [
-                            "Rutas de aprendizaje personalizadas",
-                            "Módulos con múltiples tipos de contenido",
-                            "IA generativa con verificación humana"
-                        ]
-                    }
+                        "leftLabel": "Creación manual",
+                        "leftValue": "Semanas de trabajo por ruta",
+                        "rightLabel": "Con Xertica Education",
+                        "rightValue": "Horas con supervisión humana",
+                    },
+                    "teaching_point": "Contrastar la creación manual de contenido con la orquestación asistida por IA.",
+                    "pedagogical_intent": "Establecer el modelo mental de la plataforma como orquestación, no como reemplazo.",
+                    "teaching_pattern": "misconception_correction",
+                    "visual_rationale": "La comparación muestra el contraste central sin inventar métricas.",
+                    "grounding_status": "module_grounded",
                 },
                 {
                     "scene_number": 3,
@@ -814,17 +1025,23 @@ class VideoService(VideoServiceInterface):
                         "automáticamente una estructura de ruta, investiga fuentes verificables, "
                         "y crea un borrador completo que el equipo puede revisar y aprobar."
                     ),
-                    "visual_type": "animated_slide",
+                    "visual_type": "progress_bar",
                     "visual_config": {
                         "title": "Flujo de Creación de Contenido",
-                        "bullets": [
-                            "Definir tema → Estructura automática de ruta",
-                            "Investigación con fuentes verificables Google",
+                        "progress": 60,
+                        "steps": [
+                            "Definir tema",
+                            "Estructura automática de ruta",
+                            "Investigación con fuentes verificables",
                             "Generación de borradores con IA",
-                            "Revisión y aprobación humana (HITL)",
-                            "Publicación en Google Classroom"
-                        ]
-                    }
+                            "Revisión y aprobación humana",
+                        ],
+                    },
+                    "teaching_point": "Presentar la secuencia de producción para que el estudiante entienda el flujo completo.",
+                    "pedagogical_intent": "Convertir el proceso en una secuencia ordenada y repetible.",
+                    "teaching_pattern": "process_explanation",
+                    "visual_rationale": "La barra de progreso comunica orden y avance sin inventar métricas.",
+                    "grounding_status": "module_grounded",
                 },
                 {
                     "scene_number": 4,
@@ -833,16 +1050,20 @@ class VideoService(VideoServiceInterface):
                         "verifica la calidad, la precisión técnica y la relevancia del contenido. "
                         "Esto garantiza que ningún material educativo se publique sin supervisión."
                     ),
-                    "visual_type": "animated_slide",
+                    "visual_type": "callout",
                     "visual_config": {
-                        "title": "Control de Calidad",
-                        "bullets": [
-                            "Gate 0: Aprobación de estructura",
-                            "Gate 1: Verificación de fuentes",
-                            "Gate 2: Revisión de guiones y storyboards",
+                        "callout_style": "warning",
+                        "text": (
+                            "Gate 0: Aprobación de estructura · "
+                            "Gate 1: Verificación de fuentes · "
                             "Gate 3: Aprobación final de assets"
-                        ]
-                    }
+                        ),
+                    },
+                    "teaching_point": "Explicar que la supervisión humana ocurre en puntos específicos, no al final.",
+                    "pedagogical_intent": "Corregir el supuesto de que la IA actúa sin supervisión.",
+                    "teaching_pattern": "checkpoint",
+                    "visual_rationale": "El callout tipo warning resalta una regla operativa importante.",
+                    "grounding_status": "module_grounded",
                 },
                 {
                     "scene_number": 5,
@@ -851,24 +1072,35 @@ class VideoService(VideoServiceInterface):
                         "artificial con la precisión del juicio humano para crear contenido "
                         "educativo de alta calidad, verificable y listo para el aula."
                     ),
-                    "visual_type": "animated_slide",
+                    "visual_type": "text_card",
                     "visual_config": {
                         "title": "Puntos Clave",
-                        "bullets": [
-                            "IA + Supervisión humana = Calidad garantizada",
-                            "Contenido verificable con fuentes rastreables",
+                        "subtitle": (
+                            "IA + Supervisión humana = Calidad garantizada • "
+                            "Contenido verificable con fuentes rastreables • "
                             "De idea a aula en horas, no semanas"
-                        ]
-                    }
-                }
-            ]
+                        ),
+                    },
+                    "teaching_point": "Cerrar con los tres beneficios principales para que el estudiante los recuerde.",
+                    "pedagogical_intent": "Sintetizar el aprendizaje en una regla aplicable.",
+                    "teaching_pattern": "synthesis",
+                    "visual_rationale": "Una tarjeta de texto concentra el takeaway sin ruido visual.",
+                    "grounding_status": "module_grounded",
+                },
+            ],
         }
 
     # ═══════════════════════════════════════════════════════════════════
     # RENDER PIPELINE (the assembly line)
     # ═══════════════════════════════════════════════════════════════════
 
-    async def _run_render_job(self, job_id: UUID, component_id: Optional[UUID], storyboard: dict):
+    async def _run_render_job(
+        self,
+        job_id: UUID,
+        component_id: Optional[UUID],
+        storyboard: dict,
+        storyboard_source: str,
+    ):
         """Background rendering orchestrated by RenderPlan."""
         temp_dir = f"/tmp/render_{job_id}"
         os.makedirs(temp_dir, exist_ok=True)
@@ -894,15 +1126,17 @@ class VideoService(VideoServiceInterface):
             estimated_cost = (veo_scenes * 0.20) + (imagen_scenes * 0.04) + (0.004 * total_duration)
 
             final_url = executor.stage_outputs.get("upload", {}).get("url", "")
+            render_provenance = self._build_render_provenance(storyboard, storyboard_source)
             result = {
                 "video_url": final_url,
                 "duration_seconds": round(total_duration, 2),
                 "cost_usd": round(estimated_cost, 2),
+                "provenance": render_provenance,
             }
             await self._update_job(job_id, JobStatus.COMPLETED, 100, result=result)
 
             if component_id:
-                await self._update_asset_completed(component_id, final_url)
+                await self._update_asset_completed(component_id, final_url, render_provenance)
 
         except Exception as e:
             print(f"[Job {job_id}] Critical error during video rendering: {e}")
@@ -942,20 +1176,82 @@ class VideoService(VideoServiceInterface):
             if job_id in self._fallback_jobs:
                 self._fallback_jobs[job_id].update(payload)
 
-    async def _update_asset_completed(self, component_id: UUID, video_url: str):
+    def _build_render_provenance(self, storyboard: dict, storyboard_source: str) -> dict:
+        return {
+            "storyboard_source": storyboard_source,
+            "storyboard": storyboard,
+            "render_profile": {
+                "resolution": "1280x720",
+                "codec": "h264",
+                "container": "mp4",
+            },
+            "artifact_retention": {
+                "successful_render": {
+                    "retained_artifacts": ["final_mp4", "render_provenance"],
+                    "discarded_intermediates": [
+                        "scene_tts",
+                        "playwright_screenshots",
+                        "imagen_pngs",
+                        "veo_clips",
+                        "remotion_workdir",
+                    ],
+                },
+                "failed_render": {
+                    "mode": "explicit_short_lived_only",
+                    "ttl_hours": 24,
+                },
+                "debug_mode": {
+                    "mode": "explicit_short_lived_only",
+                    "ttl_hours": 24,
+                },
+            },
+        }
+
+    async def _update_asset_completed(
+        self,
+        component_id: UUID,
+        video_url: str,
+        render_provenance: Optional[dict] = None,
+    ):
         now_str = datetime.now(timezone.utc).isoformat()
+        existing_asset = await self._get_video_asset(component_id)
+        existing_provenance = (
+            existing_asset.get("provenance")
+            if existing_asset and isinstance(existing_asset.get("provenance"), dict)
+            else {}
+        )
         payload = {
             "estado": "generado",
             "storage_path": video_url,
-            "updated_at": now_str
+            "updated_at": now_str,
         }
+        if render_provenance:
+            payload["provenance"] = {**existing_provenance, **render_provenance}
         if self._supabase:
             try:
                 self._supabase.table("assets").update(payload).eq("componente_id", str(component_id)).eq("tipo", "video").execute()
             except Exception as e:
                 print(f"Supabase update asset url error: {e}")
-                if component_id in self._fallback_assets:
-                    self._fallback_assets[component_id].update(payload)
+                current_asset = self._fallback_assets.get(component_id, existing_asset or {})
+                current_asset.update(payload)
+                self._fallback_assets[component_id] = current_asset
         else:
-            if component_id in self._fallback_assets:
-                self._fallback_assets[component_id].update(payload)
+            current_asset = self._fallback_assets.get(component_id, existing_asset or {})
+            current_asset.update(payload)
+            self._fallback_assets[component_id] = current_asset
+
+    async def _get_video_asset(self, component_id: UUID) -> dict:
+        if self._supabase:
+            try:
+                res = (
+                    self._supabase.table("assets")
+                    .select("*")
+                    .eq("componente_id", str(component_id))
+                    .eq("tipo", "video")
+                    .execute()
+                )
+                if res.data:
+                    return res.data[0]
+            except Exception as e:
+                print(f"Supabase get asset error in VideoService: {e}")
+        return self._fallback_assets.get(component_id, {})

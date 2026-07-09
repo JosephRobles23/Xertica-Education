@@ -10,7 +10,6 @@ import {
   CircleCheck,
   ExternalLink,
   FlaskConical,
-  Info,
   Link2,
   Loader2,
   Search,
@@ -806,36 +805,6 @@ export default function Ruta() {
         </div>
       </div>
 
-      {/* Provenance */}
-      <Card className="sticky top-20 gap-4 p-5">
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          Provenance · Ruta
-        </div>
-        <div>
-          <div className="mb-1 text-[11px] text-muted-foreground">Modelo de generación</div>
-          <div className="font-mono text-[13.5px] text-ink">Gemini 2.5 · Veo 3</div>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-success" />
-          <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => s.verified).length}</b> fuentes
-            verificadas
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-destructive" />
-          <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => !s.verified).length}</b> sin
-            verificar
-          </span>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Info className="size-3.5" />
-          Cada asset registra modelo y fuentes usadas.
-        </div>
-      </Card>
     </div>
   )
 }
