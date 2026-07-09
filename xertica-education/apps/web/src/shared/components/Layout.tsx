@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { getRoute } from '@/shared/data/routes'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/tooltip'
 
 interface Crumb {
   label: string
@@ -41,7 +40,6 @@ function crumbsFor(pathname: string): Crumb[] {
 const NAV = [
   { label: 'Rutas', to: '/', enabled: true },
   { label: 'Biblioteca', to: '/biblioteca', enabled: true },
-  { label: 'Ajustes', to: '/', enabled: false },
 ] as const
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -98,21 +96,16 @@ export default function Layout({ children }: { children: ReactNode }) {
             const active =
               (isRutas && (pathname === '/' || pathname.startsWith('/nueva') || pathname.startsWith('/estructura') || pathname.startsWith('/ruta'))) ||
               (isBiblioteca && pathname === '/biblioteca')
-            const item = (
+            return (
               <Link
                 key={n.label}
                 href={n.to}
-                aria-disabled={!n.enabled}
                 className={cn(
                   'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
                   active
                     ? 'bg-primary/28 font-semibold text-white'
                     : 'font-medium text-sidebar-foreground hover:bg-white/5 hover:text-white',
-                  !n.enabled && 'cursor-default opacity-70 hover:bg-transparent hover:text-sidebar-foreground',
                 )}
-                onClick={(e) => {
-                  if (!n.enabled) e.preventDefault()
-                }}
               >
                 <span
                   className={cn(
@@ -122,14 +115,6 @@ export default function Layout({ children }: { children: ReactNode }) {
                 />
                 {n.label}
               </Link>
-            )
-            return n.enabled ? (
-              item
-            ) : (
-              <Tooltip key={n.label}>
-                <TooltipTrigger asChild>{item}</TooltipTrigger>
-                <TooltipContent side="right">Próximamente</TooltipContent>
-              </Tooltip>
             )
           })}
         </nav>

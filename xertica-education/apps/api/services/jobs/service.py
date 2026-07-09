@@ -17,7 +17,7 @@ class JobsService:
     async def get_job_status(self, job_id: UUID) -> Optional[Dict[str, Any]]:
         """Retrieves details of a job by ID.
 
-        El estado lo escribe únicamente el background worker (queued → running →
+        El estado lo escribe únicamente el background worker (queued -> running ->
         completed/failed). Aquí solo se lee: simular la transición por tiempo hacía
         que el frontend viera 'completed' antes de que el LLM terminara.
         """

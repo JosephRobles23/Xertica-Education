@@ -34,7 +34,10 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0013](0013-parse-at-upload-parsed-md.md) · KB | Parse-at-upload (`documents.parsed_md`) | Aceptado |
 | [0014](0014-structure-generation-llm.md) · KB | Estructura Propuesta vía LLM (Gate 0) | Aceptado |
 | [0015](0015-route-details-persistence-and-llm-identity.md) · KB | Persistencia de detalles de ruta y título/tema/objetivo por LLM | Aceptado |
+| [0015](0015-storyboard-kb-grounded-endpoint.md) · Video | Storyboard KB-grounded independiente del render | Propuesto |
 | [0016](0016-approved-research-sources.md) · Research | URLs aprobadas fuera de la KB | Aceptado |
+| [0016](0016-video-render-artifact-retention.md) · Video | Retención de artefactos de render de video | Aceptado |
+| [0017](0017-concept-explanation-video-quality-strategy.md) · Video | Estrategia de calidad para Videos de Explicación Conceptual | Aceptado |
 | [0017](0017-deep-research-source-review-policy.md) · Research | Política de revisión de fuentes de Deep Research | Aceptado |
 | [0018](0018-infografia-quiz-generation-flows.md) · Assets | Flujos de generacion de Infografia y Quiz | Aceptado |
 

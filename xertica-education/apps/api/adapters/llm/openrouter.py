@@ -53,7 +53,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
         mapping = {
             "gemini-2.5-pro": "google/gemini-2.5-pro",
             "gemini-2.5-flash": "google/gemini-2.5-flash",
-            "claude-sonnet": "anthropic/claude-3-sonnet",
+            "claude-sonnet": "anthropic/claude-3.5-sonnet",
             "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
             "gpt-4o-mini": "openai/gpt-4o-mini",
         }
@@ -69,38 +69,61 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
                     {
                         "scene_number": 1,
                         "narration": "¿Alguna vez te has preguntado cómo funciona esta tecnología? En esta cápsula, lo descubrirás paso a paso.",
-                        "visual_type": "ai_video",
+                        "visual_type": "callout",
                         "visual_config": {
-                            "prompt": "Luminous data streams flowing through a dark digital landscape, forming interconnected nodes, cinematic slow motion, blue and purple bioluminescent trails, abstract, no faces, 4K"
-                        }
+                            "callout_style": "info",
+                            "text": "¿Cómo funciona esta tecnología?"
+                        },
+                        "teaching_point": "Plantear la pregunta central de la lección.",
+                        "pedagogical_intent": "Captar la atención del alumno de forma directa.",
+                        "teaching_pattern": "framing_question",
+                        "visual_rationale": "El callout enfoca la pregunta guía sin ruido visual.",
+                        "grounding_status": "module_grounded"
                     },
                     {
                         "scene_number": 2,
                         "narration": "Esta plataforma utiliza inteligencia artificial para generar contenido educativo de alta calidad, siempre verificado por expertos humanos.",
-                        "visual_type": "ai_illustration",
+                        "visual_type": "comparison",
                         "visual_config": {
-                            "prompt": "Clean technical diagram of an AI-powered educational platform, central hub connected to satellite modules, flat design, dark navy background, blue and purple accents, 16:9, no text",
-                            "title": "Plataforma Educativa",
-                            "bullets": ["IA generativa", "Verificación humana", "Contenido personalizado"]
-                        }
+                            "leftLabel": "IA Sola",
+                            "leftValue": "Falta de precisión, alucinaciones",
+                            "rightLabel": "IA + Humano",
+                            "rightValue": "Calidad pedagógica y precisión técnica"
+                        },
+                        "teaching_point": "Mostrar el valor de la supervisión humana.",
+                        "pedagogical_intent": "Introducir el modelo mental de diseño híbrido.",
+                        "teaching_pattern": "misconception_correction",
+                        "visual_rationale": "La comparación muestra la diferencia de calidad claramente.",
+                        "grounding_status": "module_grounded"
                     },
                     {
                         "scene_number": 3,
                         "narration": "El proceso comienza con la definición de un tema. La plataforma genera una estructura automática que el equipo puede revisar y aprobar.",
-                        "visual_type": "animated_slide",
+                        "visual_type": "progress_bar",
                         "visual_config": {
                             "title": "Flujo de Trabajo",
-                            "bullets": ["Definir tema", "Generar estructura", "Revisar y aprobar", "Publicar"]
-                        }
+                            "progress": 50,
+                            "steps": ["Definir tema", "Generar estructura", "Revisar y aprobar", "Publicar"]
+                        },
+                        "teaching_point": "Entender la secuencia del flujo de trabajo.",
+                        "pedagogical_intent": "Explicar el proceso operativo paso a paso.",
+                        "teaching_pattern": "process_explanation",
+                        "visual_rationale": "La barra de progreso comunica avance y orden lógico.",
+                        "grounding_status": "module_grounded"
                     },
                     {
                         "scene_number": 4,
                         "narration": "En resumen, esta solución combina velocidad de la IA con precisión del juicio humano.",
-                        "visual_type": "animated_slide",
+                        "visual_type": "text_card",
                         "visual_config": {
                             "title": "Puntos Clave",
-                            "bullets": ["IA + Supervisión humana", "Contenido verificable", "Listo para el aula"]
-                        }
+                            "subtitle": "IA + Supervisión humana = Calidad garantizada • Contenido verificable • Listo para el aula"
+                        },
+                        "teaching_point": "Resumir el beneficio central de la plataforma.",
+                        "pedagogical_intent": "Reforzar el takeaway principal antes de cerrar.",
+                        "teaching_pattern": "synthesis",
+                        "visual_rationale": "Una tarjeta de texto limpia asegura la retención de los takeaways.",
+                        "grounding_status": "module_grounded"
                     }
                 ]
             }

@@ -19,6 +19,8 @@ VisualType = Literal[
     "ai_illustration",
 ]
 
+GroundingStatus = Literal["kb_grounded", "module_grounded"]
+
 class CreateLearningPathRequest(BaseModel):
     titulo: str
     tema: str
@@ -60,6 +62,11 @@ class VideoScene(BaseModel):
       - ai_illustration — Imagen 3 diagram/illustration with Ken Burns
     """
     visual_config: dict
+    teaching_point: Optional[str] = None
+    pedagogical_intent: Optional[str] = None
+    teaching_pattern: Optional[str] = None
+    visual_rationale: Optional[str] = None
+    grounding_status: Optional[GroundingStatus] = None
 
 class StoryboardRequest(BaseModel):
     title: str
@@ -73,3 +80,14 @@ class GenerateVideoRequest(BaseModel):
     component_kind: Optional[str] = None
     custom_storyboard: Optional[StoryboardRequest] = None
     use_mock: Optional[bool] = False
+
+
+class GenerateStoryboardRequest(BaseModel):
+    """Input for `POST /videos/storyboard` (ADR-0015). Identifies the module to
+    guionize via the Render Target trio (route_id + module_id + component_kind).
+    `component_id` is opt-in for when the Component already exists."""
+    route_id: str
+    module_id: str
+    component_kind: str = "video"
+    component_id: Optional[UUID] = None
+    k: int = 8
