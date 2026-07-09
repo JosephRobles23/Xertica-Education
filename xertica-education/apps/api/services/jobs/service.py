@@ -15,51 +15,23 @@ class JobsService:
         return job_id
 
     async def get_job_status(self, job_id: UUID) -> Optional[Dict[str, Any]]:
-        """Retrieves details of a job by ID, dynamically transitioning state over time."""
-        job = await self.repository.get_by_id(job_id)
-        if not job:
-            return None
+        """Retrieves details of a job by ID.
 
-        # Si el job ya está en estado terminal (completado o fallido), devolverlo tal cual
-        # para no sobrescribir el resultado del background worker con la simulación.
-        if job.get("status") in [JobStatus.COMPLETED, JobStatus.FAILED]:
-            return job
+        El estado lo escribe únicamente el background worker (queued -> running ->
+        completed/failed). Aquí solo se lee: simular la transición por tiempo hacía
+        que el frontend viera 'completed' antes de que el LLM terminara.
+        """
+        return await self.repository.get_by_id(job_id)
 
-        # Dynamic transition based on elapsed seconds
-        now = datetime.now(timezone.utc)
-        elapsed = (now - job["created_at"]).total_seconds()
-
-        if elapsed < 2:
-            status = JobStatus.QUEUED
-            progress = 10
-        elif elapsed < 6:
-            status = JobStatus.RUNNING
-            progress = 50
-        else:
-            status = JobStatus.COMPLETED
-            progress = 100
-
-        updates = {
-            "status": status,
-            "progress": progress,
-            "updated_at": now
-        }
-
-        if status == JobStatus.COMPLETED and not job.get("result"):
-            updates["result"] = {"message": f"Task '{job['type']}' completed successfully."}
-
-        # Persist the dynamic transition updates
-        updated_job = await self.repository.update(job_id, updates)
-        return updated_job
-
-    async def update_job_status(self, job_id: UUID, status: JobStatus, error: Optional[str] = None) -> bool:
+    async def update_job_status(
+        self, job_id: UUID, status: JobStatus, error: Optional[str] = None
+    ) -> bool:
         """Updates the status of a job directly."""
-        data = {
+        updates: Dict[str, Any] = {
             "status": status,
             "updated_at": datetime.now(timezone.utc)
         }
         if error is not None:
-            data["error"] = error
-        updated = await self.repository.update(job_id, data)
+            updates["error"] = error
+        updated = await self.repository.update(job_id, updates)
         return updated is not None
-

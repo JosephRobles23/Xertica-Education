@@ -1,5 +1,6 @@
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -88,6 +89,28 @@ TOOL_REGISTRY = [
         },
     },
 ]
+
+APPROVED_DOCUMENTATION_DOMAINS = {
+    "cloud.google.com",
+    "ai.google.dev",
+    "developers.google.com",
+    "firebase.google.com",
+    "workspace.google.com",
+    "support.google.com",
+    "platform.openai.com",
+    "help.openai.com",
+    "docs.anthropic.com",
+    "canva.com",
+    "developers.canva.com",
+}
+
+TECHNOLOGY_ALIASES = {
+    "Vertex AI": ["vertex ai", "vertex"],
+    "Firebase": ["firebase", "firestore"],
+    "Cloud Run": ["cloud run"],
+    "OpenAI": ["openai", "chatgpt"],
+    "Anthropic": ["anthropic", "claude"],
+}
 
 
 def _parse_youtube_duration(value: str) -> str:
@@ -182,17 +205,139 @@ class YouTubeSearchClient:
 
 
 class ResearchService:
-    def __init__(self, youtube_client: Optional[YouTubeSearchClient] = None):
+    def __init__(self, youtube_client: Optional[YouTubeSearchClient] = None, documentation_client=None):
         self.youtube_client = youtube_client or YouTubeSearchClient(settings.youtube_api_key)
+        self.documentation_client = documentation_client
 
     def detect_tools(self, text: str) -> List[Dict[str, Any]]:
         haystack = text.lower()
-        detected = [
+        return [
             tool
             for tool in TOOL_REGISTRY
             if any(alias in haystack for alias in tool["aliases"])
         ]
-        return detected or [TOOL_REGISTRY[2]]
+
+    def detect_technologies(self, text: str, tools: List[Dict[str, Any]]) -> list[str]:
+        haystack = text.lower()
+        names = [tool["tool"] for tool in tools]
+        if (
+            self.documentation_client
+            and self.documentation_client.enabled
+            and hasattr(self.documentation_client, "detect_technologies")
+        ):
+            try:
+                for name in self.documentation_client.detect_technologies(text):
+                    if name not in names:
+                        names.append(name)
+            except Exception as exc:
+                print(f"Technology detection failed: {exc}")
+        for name, aliases in TECHNOLOGY_ALIASES.items():
+            if any(alias in haystack for alias in aliases) and name not in names:
+                names.append(name)
+        return names
+
+    def _youtube_sources_for_technology(
+        self,
+        technology: str,
+        customer_context: Dict[str, Any],
+        used_video_ids: set[str],
+    ) -> list[dict]:
+        if not self.youtube_client.enabled:
+            return []
+        audience = customer_context.get("audienceLevel") or ""
+        try:
+            videos = self.youtube_client.search(f"{technology} tutorial official {audience}".strip())
+        except Exception as exc:
+            print(f"YouTube search failed for {technology}: {exc}")
+            return []
+        trusted_channels = {
+            channel.lower()
+            for tool in TOOL_REGISTRY
+            for channel in tool["channels"]
+        }
+        sources = []
+        for index, video in enumerate(videos):
+            youtube_id = video["youtube_id"]
+            if youtube_id in used_video_ids:
+                continue
+            used_video_ids.add(youtube_id)
+            verified = video["channel"].strip().lower() in trusted_channels
+            sources.append({
+                "title": video["title"],
+                "plat": "YouTube",
+                "kind": "youtube",
+                "url": video["url"],
+                "verified": verified,
+                "status": "approved" if verified else "requires-review",
+                "toolName": technology,
+                "verificationReason": (
+                    f"Video de canal permitido: {video['channel']}"
+                    if verified
+                    else f"Canal no incluido en allowlist: {video['channel']}"
+                ),
+                "relevanceScore": max(40, 92 - index * 4),
+                "suggestedUse": "video",
+                "quote": f"Video encontrado para {technology}.",
+                "videoPreview": {
+                    "channel": video["channel"],
+                    "duration": video["duration"],
+                    "gradient": "from-sky-600 via-cyan-500 to-emerald-400",
+                    "emoji": "▶",
+                    "youtubeId": youtube_id,
+                    "videoTitle": video["title"],
+                },
+            })
+        return sources
+
+    @staticmethod
+    def _is_verified_document_url(url: str) -> bool:
+        hostname = (urlparse(url).hostname or "").lower()
+        return any(
+            hostname == domain or hostname.endswith(f".{domain}")
+            for domain in APPROVED_DOCUMENTATION_DOMAINS
+        )
+
+    def _grounded_documentation_sources(self, technologies: list[str], context: str) -> list[dict]:
+        if not self.documentation_client or not self.documentation_client.enabled:
+            return []
+        sources = []
+        seen_urls: set[str] = set()
+        for technology in technologies:
+            try:
+                results = self.documentation_client.search(technology, context)
+            except Exception as exc:
+                print(f"Grounded documentation search failed for {technology}: {exc}")
+                continue
+            for index, result in enumerate(results):
+                url = result.get("url", "")
+                hostname = (urlparse(url).hostname or "").lower()
+                if (
+                    not url
+                    or url in seen_urls
+                    or hostname in {"youtube.com", "www.youtube.com", "youtu.be"}
+                ):
+                    continue
+                seen_urls.add(url)
+                verified = self._is_verified_document_url(url)
+                sources.append({
+                    "title": result.get("title") or f"Documentación de {technology}",
+                    "plat": hostname,
+                    "kind": "documentation",
+                    "url": url,
+                    "verified": verified,
+                    "status": "approved" if verified else "requires-review",
+                    "toolName": technology,
+                    "verificationReason": (
+                        f"Dominio aprobado: {hostname}"
+                        if verified
+                        else "Dominio fuera del allowlist; requiere aprobación humana."
+                    ),
+                    "relevanceScore": max(50, 95 - index * 5),
+                    "suggestedUse": "lesson",
+                    "quote": "Fuente encontrada con Gemini y Google Search Grounding.",
+                    "metadata": result.get("metadata", {}),
+                })
+        return sources
 
     def _youtube_query(self, tool: Dict[str, Any], customer_context: Dict[str, Any]) -> str:
         audience = customer_context.get("audienceLevel") or ""
@@ -314,6 +459,29 @@ class ResearchService:
             },
         }
 
+    def _apply_reranking(self, sources: List[Dict[str, Any]], context: str) -> List[Dict[str, Any]]:
+        """Replace positional relevanceScore with LLM-judged scores and sort desc.
+
+        No-op (keeps positional scores and order) when the documentation client
+        is a mock/disabled or the ranking call fails, so the pipeline never breaks.
+        """
+        client = self.documentation_client
+        if not client or not getattr(client, "enabled", False):
+            return sources
+        if not hasattr(client, "rank_sources"):
+            return sources
+        try:
+            scores = client.rank_sources(sources, context)
+        except Exception as exc:
+            print(f"Source re-ranking failed: {exc}")
+            return sources
+        if not scores:
+            return sources
+        for index, source in enumerate(sources):
+            if index in scores:
+                source["relevanceScore"] = scores[index]
+        return sorted(sources, key=lambda source: source.get("relevanceScore", 0), reverse=True)
+
     def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         brief = payload.get("brief", "")
         modules = payload.get("modules", [])
@@ -322,6 +490,10 @@ class ResearchService:
         context_text = " ".join(str(value) for value in customer_context.values())
         text = " ".join([route_name, brief, context_text, " ".join(str(module) for module in modules)])
         tools = self.detect_tools(text)
+        technologies = self.detect_technologies(text, tools)
+        if not technologies:
+            tools = [TOOL_REGISTRY[2]]
+            technologies = ["Gemini"]
         industry = customer_context.get("industry") or "el contexto del cliente"
         area = customer_context.get("area") or "General"
         audience = customer_context.get("audienceLevel") or "la audiencia definida"
@@ -331,6 +503,7 @@ class ResearchService:
             else ""
         )
 
+        grounded_sources = self._grounded_documentation_sources(technologies, text)
         sources = []
         used_video_ids: set[str] = set()
         for index, tool in enumerate(tools):
@@ -354,37 +527,41 @@ class ResearchService:
                     )
                 ]
 
+            legacy_documentation = [] if grounded_sources else [
+                {
+                    "title": f"Documentación oficial de {tool_name}",
+                    "plat": primary_domain,
+                    "kind": "documentation",
+                    "url": tool["official_doc"],
+                    "verified": True,
+                    "status": "approved",
+                    "toolName": tool_name,
+                    "vendor": vendor,
+                    "verificationReason": f"Dominio oficial permitido para {vendor}: {primary_domain}",
+                    "relevanceScore": 91 - index,
+                    "suggestedUse": "lesson",
+                    "quote": f"Referencia oficial para aterrizar conceptos, restricciones y buenas prácticas de {tool_name} para {audience}{workspace_suffix}.",
+                },
+                {
+                    "title": f"{tool_name}: referencia oficial del producto",
+                    "plat": primary_domain,
+                    "kind": "article",
+                    "url": tool["official_article"],
+                    "verified": True,
+                    "status": "approved",
+                    "toolName": tool_name,
+                    "vendor": vendor,
+                    "verificationReason": f"Página oficial permitida para {vendor}: {primary_domain}",
+                    "relevanceScore": 87 - index,
+                    "suggestedUse": "general",
+                    "quote": f"Fuente oficial concreta para contextualizar qué es {tool_name} y cuándo usarlo en {industry}.",
+                },
+            ]
+
             sources.extend(
                 [
                     *youtube_sources,
-                    {
-                        "title": f"Documentación oficial de {tool_name}",
-                        "plat": primary_domain,
-                        "kind": "documentation",
-                        "url": tool["official_doc"],
-                        "verified": True,
-                        "status": "approved",
-                        "toolName": tool_name,
-                        "vendor": vendor,
-                        "verificationReason": f"Dominio oficial permitido para {vendor}: {primary_domain}",
-                        "relevanceScore": 91 - index,
-                        "suggestedUse": "lesson",
-                        "quote": f"Referencia oficial para aterrizar conceptos, restricciones y buenas prácticas de {tool_name} para {audience}{workspace_suffix}.",
-                    },
-                    {
-                        "title": f"{tool_name}: referencia oficial del producto",
-                        "plat": primary_domain,
-                        "kind": "article",
-                        "url": tool["official_article"],
-                        "verified": True,
-                        "status": "approved",
-                        "toolName": tool_name,
-                        "vendor": vendor,
-                        "verificationReason": f"Página oficial permitida para {vendor}: {primary_domain}",
-                        "relevanceScore": 87 - index,
-                        "suggestedUse": "general",
-                        "quote": f"Fuente oficial concreta para contextualizar qué es {tool_name} y cuándo usarlo en {industry}.",
-                    },
+                    *legacy_documentation,
                     {
                         "title": f"{tool_name}: ejemplo comunitario para inspiración",
                         "plat": "YouTube",
@@ -409,15 +586,33 @@ class ResearchService:
                 ]
             )
 
+        registered_names = {tool["tool"] for tool in tools}
+        for technology in technologies:
+            if technology not in registered_names:
+                sources.extend(
+                    self._youtube_sources_for_technology(
+                        technology,
+                        customer_context,
+                        used_video_ids,
+                    )
+                )
+        sources.extend(grounded_sources)
+        sources = self._apply_reranking(sources, text)
         return {
             "detected_tools": [
                 {
-                    "tool": tool["tool"],
-                    "vendor": tool["vendor"],
-                    "verifiedChannels": tool["channels"],
-                    "verifiedDomains": tool["domains"],
+                    "tool": technology,
+                    "vendor": next(
+                        (tool["vendor"] for tool in tools if tool["tool"] == technology),
+                        None,
+                    ),
+                    "verifiedChannels": next(
+                        (tool["channels"] for tool in tools if tool["tool"] == technology),
+                        [],
+                    ),
+                    "verifiedDomains": sorted(APPROVED_DOCUMENTATION_DOMAINS),
                 }
-                for tool in tools
+                for technology in technologies
             ],
             "sources": sources,
         }

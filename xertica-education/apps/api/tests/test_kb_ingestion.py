@@ -34,9 +34,11 @@ async def _persist_verified(repo, lp):
 class _FakeJobs:
     def __init__(self):
         self.status = None
+        self.error = None
 
     async def update_job_status(self, job_id, status, error=None):
         self.status = status
+        self.error = error
 
 
 def test_ingest_sources_creates_chunks_from_verified():

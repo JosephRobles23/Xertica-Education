@@ -45,6 +45,9 @@ const sourceText = (source: Source) =>
 const isYoutubeSource = (source: Source) =>
   source.kind === 'youtube' || source.plat.toLowerCase() === 'youtube' || Boolean(source.videoPreview?.youtubeId)
 
+const isDocumentationSource = (source: Source) =>
+  source.kind === 'documentation' || source.kind === 'article' || (!isYoutubeSource(source) && Boolean(source.url))
+
 const hasSpecificYoutubeVideo = (source: Source) =>
   Boolean(source.videoPreview?.youtubeId) || Boolean(source.url?.includes('youtube.com/watch'))
 
@@ -320,6 +323,157 @@ function VideoRecommendationPanel({
             }}
           />
         </label>
+      </div>
+    </div>
+  )
+}
+
+function SourceApprovalPanel({
+  route,
+  module,
+}: {
+  route: LearningRoute
+  module: RouteModule
+}) {
+  const { replaceRouteSources } = useStore()
+  const [reviewedUrls, setReviewedUrls] = useState<Set<string>>(new Set())
+  const [busyUrl, setBusyUrl] = useState<string | null>(null)
+  const verifiedCount = route.sources.filter(
+    (source) => isDocumentationSource(source) && source.verified,
+  ).length
+  const suggestions = route.sources.filter(
+    (source) =>
+      isDocumentationSource(source) &&
+      !source.verified &&
+      source.status !== 'rejected' &&
+      Boolean(source.url) &&
+      !reviewedUrls.has(source.url ?? ''),
+  )
+
+  if (!suggestions.length) return null
+
+  const reviewSource = async (source: Source, action: 'approve' | 'reject') => {
+    if (!source.url) return
+    setBusyUrl(source.url)
+    try {
+      await api.request(`/learning-paths/${route.id}/research-sources/review`, {
+        method: 'POST',
+        body: JSON.stringify({ url: source.url, action, moduleId: module.id }),
+      })
+      setReviewedUrls((current) => new Set(current).add(source.url!))
+      toast.success(action === 'approve' ? 'Fuente aprobada' : 'Fuente rechazada', {
+        description:
+          action === 'approve'
+            ? 'Ya está disponible para el agente de generación.'
+            : 'Esta fuente no se utilizará para generar contenido.',
+      })
+    } catch (err) {
+      toast.error('No se pudo actualizar la fuente', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setBusyUrl(null)
+    }
+  }
+
+  const replaceSource = async (source: Source) => {
+    if (!source.url) return
+    setBusyUrl(source.url)
+    const toastId = toast.loading('Buscando otra fuente...', {
+      description: `Deep Research está buscando documentación para ${module.name}.`,
+    })
+    try {
+      const research = await api.request<{ sources: readonly Source[] }>(
+        `/learning-paths/${route.id}/deep-research`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            brief: `${route.objective}\n${module.name}`,
+            moduleId: module.id,
+            replaceSourceUrl: source.url,
+            customerContext: route.customerContext ?? {},
+          }),
+        },
+      )
+      replaceRouteSources(route.id, research.sources)
+      toast.success('Nuevas fuentes listas', { id: toastId })
+    } catch (err) {
+      toast.error('No se pudo buscar otra fuente', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setBusyUrl(null)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border-[1.5px] border-accent bg-primary/6 p-4">
+      <div className="mb-3">
+        <div className="text-[13px] font-semibold text-ink">Suggested Sources</div>
+        <p className="mt-0.5 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
+          La documentación verificada se guarda como URLs aprobadas para el agente de generación.
+          Estas fuentes no verificadas no se usarán hasta que las apruebes.
+        </p>
+        {verifiedCount > 0 && (
+          <Badge variant="success" className="mt-2">
+            <Check className="size-3" /> {verifiedCount} verificadas automáticamente
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid gap-2">
+        {suggestions.slice(0, 4).map((source) => (
+          <div
+            key={source.url}
+            className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-background/80 px-3 py-2.5"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-medium text-ink">{source.title}</div>
+              <div className="mt-0.5 text-[11.5px] text-muted-foreground">
+                {source.plat}
+                {source.toolName ? ` · ${source.toolName}` : ''}
+                {source.relevanceScore !== undefined ? ` · ${source.relevanceScore}% match` : ''}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {source.url && (
+                <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-primary">
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    Abrir <ExternalLink className="size-3.5" />
+                  </a>
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busyUrl === source.url}
+                onClick={() => reviewSource(source, 'approve')}
+              >
+                <Check /> Aprobar
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busyUrl === source.url}
+                onClick={() => reviewSource(source, 'reject')}
+              >
+                Rechazar
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busyUrl === source.url}
+                onClick={() => replaceSource(source)}
+              >
+                <Search /> Buscar otra
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -735,25 +889,28 @@ export default function Ruta() {
             </div>
 
             {selectedModuleContents.length > 0 ? (
-              <Tabs value={selectedTab} onValueChange={setSelectedContentKind}>
-                <TabsList className="w-full overflow-x-auto border-b-[1.5px]">
-                  {selectedModuleContents.map((content) => {
-                    const status = contentStatusOf(route.id, selectedModule.id, content.kind, content.status)
-                    return (
-                      <TabsTrigger key={content.kind} value={content.kind} className="px-3">
-                        {status === 'aprobado' && <CircleCheck className="size-3.5 text-success" />}
-                        {KIND_LABEL[content.kind]}
-                      </TabsTrigger>
-                    )
-                  })}
-                </TabsList>
+              <div className="grid gap-3">
+                <SourceApprovalPanel route={route} module={selectedModule} />
+                <Tabs value={selectedTab} onValueChange={setSelectedContentKind}>
+                  <TabsList className="w-full overflow-x-auto border-b-[1.5px]">
+                    {selectedModuleContents.map((content) => {
+                      const status = contentStatusOf(route.id, selectedModule.id, content.kind, content.status)
+                      return (
+                        <TabsTrigger key={content.kind} value={content.kind} className="px-3">
+                          {status === 'aprobado' && <CircleCheck className="size-3.5 text-success" />}
+                          {KIND_LABEL[content.kind]}
+                        </TabsTrigger>
+                      )
+                    })}
+                  </TabsList>
 
-                {selectedModuleContents.map((content) => (
-                  <TabsContent key={content.kind} value={content.kind} className="mt-3">
-                    <ContentReviewPanel route={route} module={selectedModule} content={content} />
-                  </TabsContent>
-                ))}
-              </Tabs>
+                  {selectedModuleContents.map((content) => (
+                    <TabsContent key={content.kind} value={content.kind} className="mt-3">
+                      <ContentReviewPanel route={route} module={selectedModule} content={content} />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </div>
             ) : (
               <div className="rounded-xl border-[1.5px] border-dashed border-input p-6 text-center text-[13px] text-muted-foreground">
                 Este módulo todavía no tiene assets generados.
