@@ -15,7 +15,7 @@ dependencies = [
     "google-cloud-texttospeech>=2.37.0",
     "playwright>=1.61.0",
     "google-genai>=1.0.0",
-    "Pillow>=10.0.0",
+    "pillow>=10.2.0",
 ]
 
 # Extras para el camino RAG real (ADR-0006). Import perezoso: el MVP corre con

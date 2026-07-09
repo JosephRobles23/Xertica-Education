@@ -4,16 +4,22 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
   CircleCheck,
+  Clapperboard,
+  Clock,
   ExternalLink,
+  FileImage,
+  FileText,
   FlaskConical,
   Info,
   Link2,
   Loader2,
   Search,
+  ShieldCheck,
   Sparkles,
   Upload as UploadIcon,
   Wand2,
@@ -23,6 +29,7 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Separator } from '@/shared/ui/separator'
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
@@ -148,6 +155,253 @@ function findSecondaryYoutubeSource(route: LearningRoute, module: RouteModule, c
     .sort((a, b) => b.score - a.score)
 
   return candidates[0]?.source
+}
+
+/* ── Fuente individual (con preview de video colapsable) ───────── */
+function SourceCard({
+  source,
+  approved,
+  onDiscard,
+}: {
+  source: Source
+  approved: boolean
+  onDiscard: () => void
+}) {
+  const [videoOpen, setVideoOpen] = useState(false)
+  const requiresReview = source.status === 'requires-review' || !source.verified
+
+  return (
+    <Card className="gap-3 p-4.5">
+      <div className="flex items-start gap-3.5">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {source.toolName && (
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                {source.toolName}
+              </span>
+            )}
+            {source.kind && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.kind === 'youtube' ? (
+                  <Clapperboard className="size-3" />
+                ) : (
+                  <FileText className="size-3" />
+                )}
+                {source.kind === 'youtube' ? 'video' : 'documentación'}
+              </span>
+            )}
+            {source.relevanceScore !== undefined && (
+              <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                {source.relevanceScore}% match
+              </span>
+            )}
+          </div>
+          <h3 className="mb-2 font-display text-[15.5px] font-medium leading-snug text-ink">
+            {source.title}
+          </h3>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+              {source.plat}
+            </span>
+            {source.verified ? (
+              <Badge variant="success">
+                <ShieldCheck className="size-3" /> Verificada
+              </Badge>
+            ) : (
+              <Badge variant="destructive">
+                <AlertTriangle className="size-3" /> Requiere revisión
+              </Badge>
+            )}
+            {source.suggestedUse && (
+              <span className="rounded-md bg-accent px-2 py-0.5 font-mono text-[10.5px] text-primary">
+                uso: {source.suggestedUse}
+              </span>
+            )}
+          </div>
+        </div>
+        {!approved && (
+          <Button variant="outline-destructive" size="sm" onClick={onDiscard}>
+            Descartar
+          </Button>
+        )}
+      </div>
+      <blockquote className="border-l-[3px] border-accent pl-3.5 text-[13.5px] italic leading-relaxed">
+        {source.quote}
+      </blockquote>
+      {source.verificationReason && (
+        <div
+          className={cn(
+            'flex items-start gap-2 rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed',
+            requiresReview ? 'bg-destructive/8' : 'bg-success/10',
+          )}
+        >
+          {requiresReview ? (
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+          ) : (
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+          )}
+          <span>{source.verificationReason}</span>
+        </div>
+      )}
+      {source.url && (
+        <Button asChild variant="ghost" size="sm" className="w-fit px-0">
+          <a href={source.url} target="_blank" rel="noreferrer">
+            {requiresReview && source.kind === 'youtube' ? 'Abrir canal candidato' : 'Abrir fuente concreta'}
+            <ExternalLink className="size-3.5" />
+          </a>
+        </Button>
+      )}
+      {source.videoPreview && (
+        <SourceVideoPreview
+          preview={source.videoPreview}
+          open={videoOpen}
+          onOpenChange={setVideoOpen}
+        />
+      )}
+    </Card>
+  )
+}
+
+/* ── Corpus de fuentes (encima de Módulos) ─────────────────────── */
+function CorpusSection({ route }: { route: LearningRoute }) {
+  const { isCorpusApproved, approveCorpus, discardedSources, discardSource } = useStore()
+  const approved = isCorpusApproved(route.id)
+  const discarded = discardedSources(route.id)
+  const sources = route.sources.filter((_, i) => !discarded.includes(i))
+  const verified = sources.filter((s) => s.verified).length
+  const [approvingCorpus, setApprovingCorpus] = useState(false)
+  const [initialAspectRatio, setInitialAspectRatio] = useState<string>('vertical')
+  const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
+    const key = source.toolName || 'Fuentes generales'
+    groups[key] = [...(groups[key] ?? []), { source, index: route.sources.indexOf(source) }]
+    return groups
+  }, {})
+  const detectedTools = Object.keys(groupedSources)
+
+  return (
+    <section className="mb-8">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <h2 className="font-display text-xl font-medium text-ink">Revisión de fuentes</h2>
+          {approved && (
+            <Badge variant="success">
+              <Check className="size-3" /> aprobado
+            </Badge>
+          )}
+        </div>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {sources.length} candidatas · {verified} verificadas
+        </span>
+      </div>
+
+      {!approved && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl bg-secondary px-4.5 py-3.5">
+          <Search className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="text-[13px] leading-relaxed">
+            Aprueba las fuentes antes de que aterricen en el contenido. El agente prioriza canales
+            y dominios verificados por herramienta/vendor; deja en revisión lo que no pase la
+            política.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {detectedTools.map((tool) => (
+          <div key={tool} className="rounded-xl border-[1.5px] border-secondary p-3">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <h3 className="font-display text-[15px] font-medium text-ink">{tool}</h3>
+                <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
+                  {groupedSources[tool]?.length ?? 0} fuentes candidatas
+                </p>
+              </div>
+              <Badge variant="outline">
+                {groupedSources[tool]?.filter((item) => item.source.verified).length ?? 0} verificadas
+              </Badge>
+            </div>
+            <div className="flex flex-col gap-3">
+              {groupedSources[tool]?.map(({ source, index }) => (
+                <SourceCard
+                  key={`${source.title}-${index}`}
+                  source={source}
+                  approved={approved}
+                  onDiscard={() => {
+                    discardSource(route.id, index)
+                    toast.info('Fuente descartada', { description: source.title })
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!approved && (
+        <div className="mt-4 rounded-xl border border-secondary/50 bg-muted/30 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <FileImage className="size-3.5 text-muted-foreground" />
+                <span className="text-[12px] font-medium text-muted-foreground">Formato de infografía:</span>
+                <select
+                  value={initialAspectRatio}
+                  onChange={(e) => setInitialAspectRatio(e.target.value)}
+                  disabled={approvingCorpus}
+                  className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                >
+                  <option value="vertical">Vertical (1024×1792)</option>
+                  <option value="horizontal">Horizontal (1792×1024)</option>
+                  <option value="square">Cuadrada (1024×1024)</option>
+                  <option value="auto">Automático (Vertical)</option>
+                </select>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                <Clock className="size-3" />
+                ~2-3 min · gpt-image-2
+              </span>
+            </div>
+            <Button
+              disabled={approvingCorpus}
+              onClick={async () => {
+                setApprovingCorpus(true)
+                toast.loading('Aprobando fuentes y generando infografía…', {
+                  id: 'approve-sourcing',
+                  description: 'Esto puede tardar entre 2 y 3 minutos. No cierres esta página.',
+                })
+                try {
+                  await approveCorpus(route.id, initialAspectRatio)
+                  toast.success('Fuentes aprobadas e infografía generada ✨', {
+                    id: 'approve-sourcing',
+                    description: `${verified} fuentes verificadas alimentan la base de conocimiento. La infografía está lista para revisión.`,
+                  })
+                } catch (e) {
+                  toast.error('Error al aprobar fuentes o generar infografía', {
+                    id: 'approve-sourcing',
+                    description: e instanceof Error ? e.message : 'Verifica que la API key de OpenAI esté activa y con créditos.',
+                  })
+                } finally {
+                  setApprovingCorpus(false)
+                }
+              }}
+            >
+              {approvingCorpus ? (
+                <>
+                  <Loader2 className="animate-spin" /> Generando infografía…
+                </>
+              ) : (
+                <>
+                  Aprobar fuentes <ArrowRight />
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            Al aprobar se generará la infografía del curso con IA. Podrás refinarla o cambiar formato después.
+          </p>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function VideoRecommendationPanel({
@@ -707,7 +961,17 @@ function ContentReviewPanel({
 
       {!isVideo && (
         <div className="mb-4">
-          <ContentPreview kind={content.kind} pack={route.pack} />
+          <ContentPreview
+            kind={content.kind}
+            pack={{
+              ...route.pack,
+              quiz: module.quiz || route.pack.quiz || { questions: [] },
+              lesson: module.lesson || route.pack.lesson,
+              lab: module.lab || route.pack.lab,
+            }}
+            routeId={route.id}
+            moduleId={module.id}
+          />
         </div>
       )}
     </div>
@@ -808,12 +1072,75 @@ export default function Ruta() {
         <PageTitle className="mb-5 text-[31px]">{route.name}</PageTitle>
 
         {/* Objetivo */}
-        <Card className="mb-7 gap-2 border-l-[3px] border-l-primary p-5">
+        <Card className="mb-4 gap-2 border-l-[3px] border-l-primary p-5">
           <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
             TL;DR · Objetivo de la ruta
           </div>
           <p className="text-[14.5px] leading-relaxed">{route.objective}</p>
         </Card>
+
+        {/* Contexto del Cliente */}
+        {route.customerContext && (route.customerContext.companyName || route.customerContext.url || route.customerContext.industry || route.customerContext.area) && (
+          <Card className="mb-7 gap-2.5 border-l-[3px] border-l-accent p-5">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-accent-foreground">
+              Contexto del Cliente
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-muted-foreground">
+              {/* Show companyName; if absent, infer from URL domain */}
+              {(route.customerContext.companyName || route.customerContext.url) && (
+                <span>
+                  <span className="font-semibold text-ink">Empresa:</span>{' '}
+                  {route.customerContext.companyName
+                    || (() => {
+                        try {
+                          const raw = route.customerContext.url || ''
+                          const url = raw.startsWith('http') ? raw : `https://${raw}`
+                          const host = new URL(url).hostname.replace('www.', '')
+                          const name = host.split('.')[0] || ''
+                          if (!name) return raw
+                          return name.charAt(0).toUpperCase() + name.slice(1)
+                        } catch { return route.customerContext.url }
+                      })()
+                  }
+                </span>
+              )}
+              {route.customerContext.industry && (
+                <span>
+                  <span className="font-semibold text-ink">Industria:</span>{' '}
+                  {route.customerContext.industry}
+                </span>
+              )}
+              {route.customerContext.area && (
+                <span>
+                  <span className="font-semibold text-ink">Área:</span>{' '}
+                  {route.customerContext.area}
+                </span>
+              )}
+              {route.customerContext.audienceLevel && (
+                <span>
+                  <span className="font-semibold text-ink">Nivel:</span>{' '}
+                  {route.customerContext.audienceLevel}
+                </span>
+              )}
+              {route.customerContext.url && (
+                <span>
+                  <span className="font-semibold text-ink">URL:</span>{' '}
+                  <a
+                    href={route.customerContext.url.startsWith('http') ? route.customerContext.url : `https://${route.customerContext.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    {route.customerContext.url}
+                  </a>
+                </span>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Corpus encima de Módulos */}
+        <CorpusSection route={route} />
 
         {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">
