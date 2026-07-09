@@ -31,10 +31,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4.5">
-        {routes.map((r) => {
+        {routes.map((r, index) => {
           const { done, total, pct } = routeProgressOf(r)
           const status = routeStatusOf(r)
           const active = status === 'en-revision'
+          const orderNo = String(index + 1).padStart(2, '0')
           return (
             <Link key={r.id} href={`/ruta/${r.id}`} className="group outline-none">
               <Card
@@ -44,7 +45,7 @@ export default function Dashboard() {
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[13px] font-semibold text-primary">{r.id}</span>
+                  <span className="font-mono text-[13px] font-semibold text-primary">{orderNo}</span>
                   <StatusBadge status={status} />
                 </div>
                 <h3 className="font-display text-lg font-medium leading-snug text-ink">

@@ -12,47 +12,18 @@ def _empty_pack() -> Dict[str, Any]:
         "lab": { "steps": [], "console": [] }
     }
 
+def _default_details(tema: str) -> Dict[str, Any]:
+    return {
+        "objective": f"Aprender sobre {tema}",
+        "customerContext": {},
+        "sources": [],
+        "pack": _empty_pack(),
+        "modules": []
+    }
+
 class RouteService:
     def __init__(self, repository: LearningPathRepositoryInterface):
         self.repository = repository
-        self._details: Dict[UUID, Dict[str, Any]] = {}
-        
-        # Seed details for initial 01 and 02 paths
-        id1 = UUID("00000000-0000-0000-0000-000000000001")
-        id2 = UUID("00000000-0000-0000-0000-000000000002")
-        
-        self._details[id1] = {
-            "objective": "Formar a los equipos para diseñar, evaluar y desplegar sistemas de razonamiento avanzado con criterio.",
-            "customerContext": {},
-            "sources": [
-                { "title": "Cómo razonan los modelos de última generación", "plat": "YouTube", "verified": True, "quote": "El razonamiento en cadena permite..." },
-                { "title": "Gemini para educadores", "plat": "Google Docs", "verified": True, "quote": "..." }
-            ],
-            "pack": {
-                "lesson": { "sections": [], "terms": [] },
-                "video": { "duration": "02:04", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                "quiz": { "questions": [] },
-                "lab": { "steps": [], "console": [] }
-            },
-            "modules": [
-                { "id": "r1m1", "num": "01", "name": "Introducción", "type": "intro", "status": "aprobado", "contents": [] }
-            ]
-        }
-        
-        self._details[id2] = {
-            "objective": "Explorar la generación creativa con criterio.",
-            "customerContext": {},
-            "sources": [],
-            "pack": {
-                "lesson": { "sections": [], "terms": [] },
-                "video": { "duration": "01:48", "caption": "", "gradient": "", "emoji": "", "segments": [] },
-                "infografia": { "title": "", "bullets": [], "footer": ["", ""] },
-                "quiz": { "questions": [] },
-                "lab": { "steps": [], "console": [] }
-            },
-            "modules": []
-        }
 
     def _resolve_id(self, route_id: str) -> UUID:
         """Helper to convert route_id to a stable UUID."""
@@ -74,26 +45,18 @@ class RouteService:
             return str(val).zfill(2)
         return str(u)
 
+    def _to_route(self, path: LearningPath) -> Dict[str, Any]:
+        det = path.details or _default_details(path.tema)
+        return {
+            "id": self._get_short_id(path.id),
+            "name": path.titulo,
+            "status": path.estado,
+            **det
+        }
+
     async def list_routes(self) -> List[Dict[str, Any]]:
         paths = await self.repository.list_all()
-        routes = []
-        for path in paths:
-            u_id = path.id
-            short_id = self._get_short_id(u_id)
-            det = self._details.get(u_id, {
-                "objective": f"Aprender sobre {path.tema}",
-                "customerContext": {},
-                "sources": [],
-                "pack": _empty_pack(),
-                "modules": []
-            })
-            routes.append({
-                "id": short_id,
-                "name": path.titulo,
-                "status": path.estado,
-                **det
-            })
-        return routes
+        return [self._to_route(path) for path in paths]
 
     async def create_route(
         self,
@@ -102,48 +65,21 @@ class RouteService:
         brief: str,
         customer_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        path = LearningPath(titulo=title, tema=tema, estado="borrador")
+        details = _default_details(tema)
+        if brief:
+            details["objective"] = brief
+        details["customerContext"] = customer_context or {}
+
+        path = LearningPath(titulo=title, tema=tema, estado="borrador", details=details)
         created_path = await self.repository.create(path)
-        u_id = created_path.id
-        short_id = self._get_short_id(u_id)
-        context = customer_context or {}
-        
-        self._details[u_id] = {
-            "objective": brief or f"Aprender sobre {tema}",
-            "customerContext": context,
-            "sources": [],
-            "pack": _empty_pack(),
-            "modules": []
-        }
-        
-        return {
-            "id": short_id,
-            "name": created_path.titulo,
-            "status": created_path.estado,
-            **self._details[u_id]
-        }
+        return self._to_route(created_path)
 
     async def get_route(self, route_id: str) -> Optional[Dict[str, Any]]:
         u_id = self._resolve_id(route_id)
         path = await self.repository.get_by_id(u_id)
         if not path:
             return None
-            
-        short_id = self._get_short_id(u_id)
-        det = self._details.get(u_id, {
-            "objective": f"Aprender sobre {path.tema}",
-            "customerContext": {},
-            "sources": [],
-            "pack": _empty_pack(),
-            "modules": []
-        })
-        
-        return {
-            "id": short_id,
-            "name": path.titulo,
-            "status": path.estado,
-            **det
-        }
+        return self._to_route(path)
 
     async def update_route(self, route_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         u_id = self._resolve_id(route_id)
@@ -156,34 +92,28 @@ class RouteService:
             db_updates["titulo"] = data["name"]
         if "status" in data:
             db_updates["estado"] = data["status"]
-            
+        if "tema" in data:
+            db_updates["tema"] = data["tema"]
+
+        _COLUMN_KEYS = ("name", "status", "tema")
+        detail_updates = {k: v for k, v in data.items() if k not in _COLUMN_KEYS}
+        details = path.details or _default_details(path.tema)
+        if detail_updates:
+            details.update(detail_updates)
+            db_updates["details"] = details
+
         if db_updates:
-            path = await self.repository.update(u_id, db_updates)
+            updated = await self.repository.update(u_id, db_updates)
+            if updated:
+                path = updated
 
-        if u_id not in self._details:
-            self._details[u_id] = {
-                "objective": f"Aprender sobre {path.tema}",
-                "customerContext": {},
-                "sources": [],
-                "pack": _empty_pack(),
-                "modules": []
-            }
-            
-        for k, v in data.items():
-            if k not in ["name", "status"]:
-                self._details[u_id][k] = v
-
-        short_id = self._get_short_id(u_id)
         return {
-            "id": short_id,
+            "id": self._get_short_id(u_id),
             "name": path.titulo,
             "status": path.estado,
-            **self._details[u_id]
+            **details
         }
 
     async def delete_route(self, route_id: str) -> bool:
         u_id = self._resolve_id(route_id)
-        success = await self.repository.delete(u_id)
-        if success and u_id in self._details:
-            del self._details[u_id]
-        return success
+        return await self.repository.delete(u_id)
