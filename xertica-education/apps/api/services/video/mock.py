@@ -62,6 +62,23 @@ class MockVideoService(VideoServiceInterface):
             error=None
         )
 
+    async def generate_storyboard(
+        self,
+        route_id: UUID,
+        module_id: UUID,
+        component_kind: str = "video",
+        component_id: Optional[UUID] = None,
+        k: int = 8,
+    ) -> dict:
+        return {
+            "storyboard": {
+                "title": "Mock storyboard",
+                "total_word_budget": 300,
+                "scenes": [],
+            },
+            "grounding": {"query": "", "k": k, "chunks": []},
+        }
+
     async def segment_video(self, video_url: str) -> List[dict]:
         return [
             {"id": "seg1", "title": "Introducción y Arquitectura del Corpus", "start": "00:00", "end": "05:15", "summary": "Explicación teórica de cómo se nutre el corpus de conocimiento."},

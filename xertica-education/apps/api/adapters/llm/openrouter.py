@@ -53,7 +53,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
         mapping = {
             "gemini-2.5-pro": "google/gemini-2.5-pro",
             "gemini-2.5-flash": "google/gemini-2.5-flash",
-            "claude-sonnet": "anthropic/claude-3-sonnet",
+            "claude-sonnet": "anthropic/claude-3.5-sonnet",
             "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
             "gpt-4o-mini": "openai/gpt-4o-mini",
         }

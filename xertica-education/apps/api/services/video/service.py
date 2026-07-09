@@ -31,6 +31,7 @@ from supabase import create_client
 from config.settings import settings
 from services.video.interface import VideoServiceInterface
 from services.video.mock import MockVideoService
+from services.kb.interface import KnowledgeBaseInterface
 from adapters.llm.openrouter import OpenRouterLLMAdapter
 from adapters.audio.google_tts import GoogleCloudTTSAdapter
 from adapters.renderer.playwright_capture import PlaywrightCaptureAdapter
@@ -322,6 +323,201 @@ class VideoService(VideoServiceInterface):
         # Spawn the rendering pipeline as a background task.
         asyncio.create_task(self._run_render_job(job_id, component_id, storyboard))
         return job_id
+
+    async def generate_storyboard(
+        self,
+        route_id: UUID,
+        module_id: UUID,
+        component_kind: str = "video",
+        component_id: Optional[UUID] = None,
+        k: int = 8,
+        kb: Optional[KnowledgeBaseInterface] = None,
+    ) -> dict:
+        """KB-grounded storyboard for the Render Target (ADR-0015).
+
+        Pure: KB query → scriptwriter LLM → JSON. No Asset / no Job persistence.
+
+        Module grounding: builds the KB query from ``module.titulo`` and
+        ``module.descripcion`` (+ ``component.titulo`` if any) and calls the
+        existing route-scoped ``KnowledgeBase.query``. Verified URLs come from the
+        KB hits' own citations, so URL provenance matches the grounding.
+        """
+        # ── Pull Spine context: component → module → route ──
+        context = await self._load_render_target_context(
+            route_id, module_id, component_id
+        )
+        module_title = context["module_title"] or "modulo"
+        module_desc = context["module_description"] or ""
+
+        # ── Module-grounded KB query ──
+        query_text = " ".join(p for p in [module_title, module_desc] if p).strip()
+        if context["component_title"]:
+            query_text = f"{context['component_title']}. {query_text}".strip()
+
+        grounded_chunks = []
+        if kb is not None and query_text:
+            try:
+                grounded_chunks = await kb.query(route_id, query_text, k=k)
+            except Exception as e:
+                print(f"[storyboard] KB query failed, degrading ungrounded: {e}")
+                grounded_chunks = []
+
+        # ── Build LLM prompt parts ──
+        context_parts: list[str] = []
+
+        if context["component_title"]:
+            context_parts.append(f"COMPONENT: {context['component_title']}")
+        if module_title:
+            context_parts.append(f"MODULE: {module_title}")
+        if context["module_type"]:
+            context_parts.append(f"MODULE TYPE: {context['module_type']}")
+        if module_desc:
+            context_parts.append(f"MODULE DESCRIPTION: {module_desc}")
+        if context["route_title"]:
+            context_parts.append(f"ROUTE: {context['route_title']}")
+        if context["route_tema"]:
+            context_parts.append(f"ROUTE TOPIC: {context['route_tema']}")
+        if context["route_storytelling"]:
+            context_parts.append(f"ROUTE OBJECTIVE / BRIEF: {context['route_storytelling']}")
+
+        # Grounded excerpts with citations (the new "information from the KB").
+        if grounded_chunks:
+            excerpts = "\n\n".join(
+                f"[Fuente: {c.citation.title or 'sin título'}"
+                f"{' · ' + c.citation.url if c.citation.url else ''}"
+                f"]\n{c.content}"
+                for c in grounded_chunks
+            )
+            context_parts.append(
+                f"GROUNDING (kb excerpts — base narration on these, cite sources):\n{excerpts}"
+            )
+            # Verified URL list reused from the KB hits (no second source query).
+            urls = []
+            seen = set()
+            for c in grounded_chunks:
+                u = c.citation.url
+                if u and u not in seen:
+                    seen.add(u)
+                    urls.append(
+                        f"  - {c.citation.title or 'Untitled'}: {u}"
+                        f"{' (VERIFIED)' if c.citation.verificada_google else ''}"
+                    )
+            if urls:
+                context_parts.append(
+                    f"VERIFIED SOURCE URLS (use ONLY these for screenshot_scene):\n"
+                    f"{chr(10).join(urls)}"
+                )
+        else:
+            context_parts.append(
+                "GROUNDING: No KB excerpts available for this module. "
+                "Write a coherent script from the context above only."
+            )
+            context_parts.append(
+                "VERIFIED SOURCE URLS: None available. Do NOT use screenshot_scene."
+            )
+
+        module_type_map = {
+            "intro": "This module INTRODUCES the learning path. Focus on motivation, overview, and why this matters.",
+            "capsula": "This is a CORE TEACHING module. Focus on explaining concepts clearly with examples and data.",
+            "lab": "This is a HANDS-ON module. Focus on practical steps, commands, and demonstrations.",
+            "evaluacion": "This is an ASSESSMENT module. Focus on reinforcing what was learned.",
+            "cierre": "This is a CLOSING module. Focus on synthesis, takeaways, and next steps.",
+        }
+        if context["module_type"] in module_type_map:
+            context_parts.append(
+                f"PEDAGOGICAL ROLE: {module_type_map[context['module_type']]}"
+            )
+
+        learning_context = "\n\n".join(context_parts) if context_parts else (
+            f"Generate a storyboard for module {module_id}."
+        )
+
+        user_prompt = (
+            "Generate a 2-minute educational video storyboard using the full 14-visual-type catalog.\n\n"
+            "=== LEARNING PATH CONTEXT ===\n"
+            f"{learning_context}\n\n"
+            "=== INSTRUCTIONS ===\n"
+            "1. Follow the pedagogical structure: Hook → Context → Core → (Demo) → Summary\n"
+            "2. Use the module type and pedagogical role to guide tone and depth\n"
+            "3. Ground narration in the GROUNDING excerpts when provided; do not contradict them\n"
+            "4. If verified source URLs are provided, include a screenshot_scene for the most relevant one\n"
+            "5. All narration must be in Spanish\n"
+            "6. Every visual_type choice must have a clear pedagogical reason\n"
+            "7. Return ONLY valid JSON — no markdown, no explanation\n"
+        )
+
+        generated_json = await self.llm_adapter.chat_completion(
+            role="scriptwriter",
+            prompt=f"{SCRIPTWRITER_SYSTEM_PROMPT}\n\n---\n\nUSER REQUEST:\n{user_prompt}",
+        )
+
+        try:
+            storyboard = json.loads(generated_json)
+        except Exception:
+            storyboard = self._get_default_storyboard()
+
+        return {
+            "storyboard": storyboard,
+            "grounding": {
+                "query": query_text,
+                "k": k,
+                "chunks": [c.model_dump(mode="json") for c in grounded_chunks],
+            },
+        }
+
+    async def _load_render_target_context(
+        self,
+        route_id: UUID,
+        module_id: UUID,
+        component_id: Optional[UUID],
+    ) -> dict:
+        """Reads component/module/route fields from Supabase for the given
+        Render Target. Tolerates missing tables or placeholder Supabase; returns
+        blanks so callers can degrade gracefully."""
+        ctx = {
+            "component_title": None,
+            "module_title": None,
+            "module_type": None,
+            "module_description": None,
+            "route_title": None,
+            "route_tema": None,
+            "route_storytelling": None,
+        }
+        if not self._supabase:
+            return ctx
+
+        try:
+            if component_id:
+                comp = self._supabase.table("components").select("*").eq("id", str(component_id)).execute()
+                if comp.data:
+                    row = comp.data[0]
+                    ctx["component_title"] = row.get("titulo") or row.get("tema")
+        except Exception as e:
+            print(f"[storyboard] component query error: {e}")
+
+        try:
+            mod = self._supabase.table("modules").select("*").eq("id", str(module_id)).execute()
+            if mod.data:
+                row = mod.data[0]
+                ctx["module_title"] = row.get("titulo")
+                ctx["module_type"] = row.get("tipo", "capsula")
+                ctx["module_description"] = row.get("descripcion", "")
+                actual_route_id = row.get("learning_path_id", route_id)
+        except Exception as e:
+            print(f"[storyboard] module query error: {e}")
+            actual_route_id = route_id
+
+        try:
+            lp = self._supabase.table("learning_paths").select("*").eq("id", str(actual_route_id)).execute()
+            if lp.data:
+                row = lp.data[0]
+                ctx["route_title"] = row.get("titulo", "")
+                ctx["route_tema"] = row.get("tema", "")
+                ctx["route_storytelling"] = row.get("storytelling", "") or row.get("brief", "")
+        except Exception as e:
+            print(f"[storyboard] learning_path query error: {e}")
+
+        return ctx
 
     async def get_video_job_status(self, job_id: UUID) -> Optional[VideoJobResponse]:
         # Check mock registry first.

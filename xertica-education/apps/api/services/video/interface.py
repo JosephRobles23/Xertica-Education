@@ -16,6 +16,23 @@ class VideoServiceInterface(ABC):
         pass
 
     @abstractmethod
+    async def generate_storyboard(
+        self,
+        route_id: UUID,
+        module_id: UUID,
+        component_kind: str = "video",
+        component_id: Optional[UUID] = None,
+        k: int = 8,
+    ) -> dict:
+        """Generates a KB-grounded storyboard for the given Render Target.
+
+        Pure: consults the KB, calls the scriptwriter LLM, returns JSON. Does NOT
+        persist an Asset nor create a Job (ADR-0015). Returns a dict with shape:
+        ``{"storyboard": <StoryboardRequest-as-dict>, "grounding": GroundingInfo}``.
+        """
+        pass
+
+    @abstractmethod
     async def get_video_job_status(self, job_id: UUID) -> Optional[VideoJobResponse]:
         """Returns the job status details."""
         pass

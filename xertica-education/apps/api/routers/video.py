@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
-from config.dependencies import get_video_service
+from config.dependencies import get_video_service, get_knowledge_base
 from services.video.service import VideoService
-from models.dto.requests import GenerateVideoRequest
-from models.dto.responses import VideoJobResponse
+from services.kb.interface import KnowledgeBaseInterface
+from models.dto.requests import GenerateVideoRequest, GenerateStoryboardRequest
+from models.dto.responses import VideoJobResponse, StoryboardResponse, GroundingInfo
 from typing import Dict
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -22,6 +23,31 @@ async def generate_video(
         use_mock=request.use_mock
     )
     return {"job_id": job_id}
+
+@router.post("/storyboard", response_model=StoryboardResponse)
+async def generate_storyboard(
+    request: GenerateStoryboardRequest,
+    video_service: VideoService = Depends(get_video_service),
+    kb: KnowledgeBaseInterface = Depends(get_knowledge_base),
+):
+    """Generates a KB-grounded storyboard for the given Render Target (ADR-0015).
+
+    Pure: returns the storyboard JSON plus the KB grounding provenance. The
+    frontend can edit the storyboard and pass it back to `/videos/generate`.
+    No Asset / no Job is created here.
+    """
+    result = await video_service.generate_storyboard(
+        route_id=request.route_id,
+        module_id=request.module_id,
+        component_kind=request.component_kind,
+        component_id=request.component_id,
+        k=request.k,
+        kb=kb,
+    )
+    return StoryboardResponse(
+        storyboard=result["storyboard"],
+        grounding=GroundingInfo(**result["grounding"]),
+    )
 
 @router.get("/jobs/{job_id}", response_model=VideoJobResponse)
 async def get_video_job(

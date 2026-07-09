@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     # Linker Source↔Módulo (ADR-0012). Chat vía OpenRouter; placeholder → MockLinker.
     linker_model: str = "openai/gpt-4o-mini"
     # Google Cloud settings for Vertex AI (Imagen 3 + Veo 3.1)
-    google_cloud_project: str = "placeholder-project"
+    google_cloud_project: str = "xertica-agent-courses"
     google_cloud_location: str = "us-central1"
-    imagen_model: str = "gemini-2.5-flash-image"
+    imagen_model: str = "gemini-3.1-flash-image"
     veo_model: str = "veo-3.1-generate-001"
     google_application_credentials: Optional[str] = None
 
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         "route_structurer": "gpt-4o-mini",  # Estructura Propuesta (ADR-0014)
         "scriptwriter": "gemini-2.5-pro",
         "infographic_design": "claude-sonnet",
-        "researcher": "gemini-2.5-flash",
+        "researcher": "gemini-2.5-pro",
     }
 
 

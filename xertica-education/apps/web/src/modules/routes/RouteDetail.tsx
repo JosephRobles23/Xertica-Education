@@ -520,7 +520,7 @@ function ContentReviewPanel({
             toast.info('Flujo de video AI', {
               description: 'Continúa con la revisión de guion y storyboard.',
             })
-            router.push(`/ruta/${route.id}/video-storyboard`)
+            router.push(`/ruta/${route.id}/video-storyboard?module_id=${module.id}`)
           }}
         />
       )}

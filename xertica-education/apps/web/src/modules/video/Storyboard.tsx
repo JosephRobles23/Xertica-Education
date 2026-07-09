@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Check, Info, RefreshCcw, SquarePen, Film, CheckCircle2, AlertTriangle, Loader2, Link2, Scissors } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/shared/ui/badge'
@@ -28,6 +28,36 @@ type ScriptBlock = {
 
 const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
 
+// Visual-type → friendly tag + pacing budget (mirrors ADR-0012 pacing rules).
+const VISUAL_META: Record<VisualType, { tag: string; budget: number }> = {
+  hero_title: { tag: 'Título inicial (Spring)', budget: 80 },
+  text_card: { tag: 'Texto / Slide', budget: 120 },
+  stat_card: { tag: 'Métrica Clave', budget: 120 },
+  callout: { tag: 'Nota / Definición', budget: 120 },
+  comparison: { tag: 'Comparación', budget: 140 },
+  bar_chart: { tag: 'Gráfico de Barras', budget: 200 },
+  line_chart: { tag: 'Gráfico de Líneas', budget: 200 },
+  pie_chart: { tag: 'Gráfico Circular', budget: 200 },
+  kpi_grid: { tag: 'Grid de KPIs', budget: 200 },
+  progress_bar: { tag: 'Barra de Progreso', budget: 200 },
+  terminal_scene: { tag: 'Demo CLI (Terminal)', budget: 240 },
+  screenshot_scene: { tag: 'Walkthrough UI', budget: 240 },
+  ai_video: { tag: 'Hook (Veo 3.1)', budget: 180 },
+  ai_illustration: { tag: 'Ilustración (Imagen 3)', budget: 200 },
+}
+
+const sceneToBlock = (scene: any): ScriptBlock => {
+  const vt = (scene.visual_type as VisualType) ?? 'text_card'
+  const meta = VISUAL_META[vt] ?? VISUAL_META.text_card
+  return {
+    tag: meta.tag,
+    budget: meta.budget,
+    text: scene.narration ?? '',
+    visualType: vt,
+    visualConfig: scene.visual_config ?? {},
+  }
+}
+
 // Prefers verified sources whose title or URL contains keywords from the route's
 // objective/topic. Falls back to any source URL, then customerContext, then google.com.
 const firstWalkthroughUrl = (route: LearningRoute): string => {
@@ -45,8 +75,6 @@ const firstWalkthroughUrl = (route: LearningRoute): string => {
 
 const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
   const lessonLead = route.pack.lesson.sections[0]?.body || route.objective || 'Capacitación integral en arquitectura de sistemas y flujos IA.'
-  const systemsLead = route.pack.lesson.sections[1]?.body || route.pack.video.caption || 'Orquestación de flujos de trabajo e integración de herramientas.'
-  const actionLead = route.pack.lab.steps[0]?.desc || route.pack.quiz.questions[0]?.q || 'Realizar la primera implementación del flujo en un entorno de pruebas.'
 
   const verifiedSources = route.sources.filter((source) => source.verified).slice(0, 3)
   const sourceBullets = verifiedSources.length
@@ -60,18 +88,11 @@ const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
     return res.length > 0 ? res : ['Estrategia y ejecución continua', 'Monitoreo y estándares de calidad verificables']
   }
 
-  const captionText = route.pack.video.caption ? ` Analizaremos a fondo: ${route.pack.video.caption}.` : ''
-  const segmentsText = route.pack.video.segments && route.pack.video.segments.length > 0
-    ? ` Fases clave: ${route.pack.video.segments.map((s) => `${s.at} ${s.label}`).join(' · ')}.`
-    : ''
-
   return [
     {
       tag: 'Gancho Conceptual (Veo 3.1)',
       budget: 180,
-      text:
-        `¿Por qué es fundamental dominar ${route.name}? Abrimos conectando el objetivo de esta ruta con el impacto en el negocio: ${route.objective}. ` +
-        `En este módulo descubrirás cómo transformar la teoría en una ventaja competitiva para el equipo.${captionText}`,
+      text: `¿Por qué es fundamental dominar ${route.name}? Conectamos su objetivo con el negocio.`,
       visualType: 'ai_video',
       visualConfig: {
         prompt: `Cinematic animation representing ${route.name}. Glowing digital streams of knowledge and interconnected nodes in a futuristic dark navy and electric blue landscape, highly engaging 4K educational intro, professional cinematic lighting.`,
@@ -80,10 +101,7 @@ const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
     {
       tag: 'Arquitectura y Contexto (Imagen 3)',
       budget: 200,
-      text:
-        `Para entender los cimientos técnicos, examinamos la arquitectura de la solución. ` +
-        `Punto de partida: ${lessonLead} ` +
-        `Este diagrama ilustra la interacción entre los componentes core, garantizando resultados verificables y sin puntos ciegos.`,
+      text: `Para entender los cimientos técnicos, examinamos la arquitectura de la solución: ${lessonLead}`,
       visualType: 'ai_illustration',
       visualConfig: {
         prompt: `Clean modern educational technical diagram and infographic illustrating ${route.name}. Dark navy background (#0f172a), glowing cyan and purple icons, isometric tech style, professional presentation slide without cluttered text.`,
@@ -92,16 +110,14 @@ const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
       },
     },
     {
-      tag: 'Pilares Clave (Slide Animada)',
+      tag: 'Pilares Clave (Progreso)',
       budget: 180,
-      text:
-        `Desglosamos las etapas fundamentales que sustentan este flujo. Cada pilar asegura calidad y trazabilidad: ` +
-        `${systemsLead} ` +
-        `Al seguir este proceso estructurado, eliminamos la ambigüedad y aseguramos un estándar elevado en cada entrega.`,
-      visualType: 'text_card',
+      text: 'Desglosamos las etapas fundamentales que sustentan este flujo para asegurar la calidad.',
+      visualType: 'progress_bar',
       visualConfig: {
         title: 'Pilares del Sistema',
-        bullets: cleanBullets(
+        progress: 60,
+        steps: cleanBullets(
           route.pack.lesson.sections[0]?.heading,
           route.pack.lesson.sections[1]?.heading,
           route.pack.lesson.sections[2]?.heading,
@@ -112,28 +128,25 @@ const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
     {
       tag: 'Demostración Práctica (Walkthrough)',
       budget: 240,
-      text:
-        `Veamos cómo se ejecuta esto en la práctica dentro del entorno real.${segmentsText} ` +
-        `Acompaña esta demostración paso a paso en la interfaz o documentación oficial, observando qué parámetros configurar y dónde enfocar la atención para operar sin errores.`,
+      text: 'Veamos cómo se ejecuta esto en la práctica dentro del entorno real.',
       visualType: 'screenshot_scene',
       visualConfig: {
         url: firstWalkthroughUrl(route),
       },
     },
     {
-      tag: 'Acción y Siguiente Paso (Slide Animada)',
+      tag: 'Acción y Eficiencia (Gráfico)',
       budget: 160,
-      text:
-        `Para finalizar, es momento de llevar este conocimiento a la ejecución hoy mismo: ${actionLead} ` +
-        `Valida tu comprensión del modelo y aplica el primer caso práctico con tu equipo. El dominio de la herramienta se logra con implementación continua.`,
-      visualType: 'text_card',
+      text: 'Para finalizar, es momento de llevar este conocimiento a la ejecución y medir la eficiencia.',
+      visualType: 'bar_chart',
       visualConfig: {
-        title: 'Siguiente Paso',
-        bullets: cleanBullets(
-          route.pack.lab.steps[0]?.title,
-          route.pack.quiz.questions[0]?.q,
-          'Aplicar el flujo en un proyecto activo de la organización'
-        ),
+        title: 'Eficiencia del Flujo',
+        chartData: [
+          { label: 'Manual', value: 25 },
+          { label: 'Automatizado', value: 85 }
+        ],
+        showValues: true,
+        showGrid: true
       },
     },
   ]
@@ -142,6 +155,8 @@ const buildScriptBlocks = (route: LearningRoute): ScriptBlock[] => {
 export default function Storyboard() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const moduleId = searchParams.get('module_id') ?? undefined
   const {
     routes,
     approveStoryboard,
@@ -160,6 +175,43 @@ export default function Storyboard() {
   const [videoUrl, setVideoUrl] = useState('')
   const [scriptBlocks, setScriptBlocks] = useState<ScriptBlock[]>(defaultScriptBlocks)
   const [isEditing, setIsEditing] = useState(false)
+  const [storyboardLoading, setStoryboardLoading] = useState(false)
+
+  // Fetch a KB-grounded storyboard from /videos/storyboard when a module_id is
+  // present in the URL (ADR-0015). Falls back to local default script on error
+  // or when no module context is available, so the page stays usable.
+  useEffect(() => {
+    if (!route || !moduleId) return
+    let active = true
+    const fetchStoryboard = async () => {
+      setStoryboardLoading(true)
+      try {
+        const data = await api.request<{ storyboard: { scenes?: any[] }, grounding?: any }>(
+          '/videos/storyboard',
+          {
+            method: 'POST',
+            body: JSON.stringify({ route_id: route.id, module_id: moduleId }),
+          },
+        )
+        if (!active) return
+        const scenes = Array.isArray(data?.storyboard?.scenes) ? data.storyboard.scenes : []
+        if (scenes.length > 0) {
+          setScriptBlocks(scenes.map(sceneToBlock))
+          toast.success('Guion generado con base de conocimiento', { id: 'storyboard-fetch' })
+        } else {
+          toast.warning('La KB no devolvió escenas; se mantiene el guion por defecto', { id: 'storyboard-fetch' })
+        }
+      } catch (e) {
+        if (!active) return
+        toast.error('No se pudo generar el guion desde la KB; usando guion por defecto', { id: 'storyboard-fetch' })
+      } finally {
+        if (active) setStoryboardLoading(false)
+      }
+    }
+    void fetchStoryboard()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route?.id, moduleId])
 
   // Video reuse / segmentation states
   const [existingVideoUrl, setExistingVideoUrl] = useState('')
@@ -602,8 +654,8 @@ export default function Storyboard() {
             <Check /> Confirmar y Volver
           </Button>
         ) : renderingState === 'idle' ? (
-          <Button onClick={startRender} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Film /> Renderizar Video
+          <Button onClick={startRender} disabled={storyboardLoading} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Film /> {storyboardLoading ? 'Cargando guion KB…' : 'Renderizar Video'}
           </Button>
         ) : (
           <Button onClick={approve} disabled={renderingState === 'rendering'}>

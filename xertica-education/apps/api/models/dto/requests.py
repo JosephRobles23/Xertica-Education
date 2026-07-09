@@ -73,3 +73,14 @@ class GenerateVideoRequest(BaseModel):
     component_kind: Optional[str] = None
     custom_storyboard: Optional[StoryboardRequest] = None
     use_mock: Optional[bool] = False
+
+
+class GenerateStoryboardRequest(BaseModel):
+    """Input for `POST /videos/storyboard` (ADR-0015). Identifies the module to
+    guionize via the Render Target trio (route_id + module_id + component_kind).
+    `component_id` is opt-in for when the Component already exists."""
+    route_id: UUID
+    module_id: UUID
+    component_kind: str = "video"
+    component_id: Optional[UUID] = None
+    k: int = 8
