@@ -5,28 +5,17 @@ import { QuizView } from './QuizView'
 import { LabView } from './LabView'
 import { LessonView } from './LessonView'
 
-export function ContentPreview({
-  kind,
-  pack,
-  videoUrl,
-  routeId,
-  moduleId,
-}: {
-  kind: ContentKind
-  pack: ContentPack
-  videoUrl?: string
-  routeId?: string
-  moduleId?: string
-}) {
+/** Renderiza el preview correcto según el tipo de contenido. */
+export function ContentPreview({ kind, pack, videoUrl }: { kind: ContentKind; pack: ContentPack; videoUrl?: string }) {
   switch (kind) {
     case 'lesson':
       return <LessonView lesson={pack.lesson} />
     case 'video':
       return <VideoFrame video={pack.video} videoUrl={videoUrl} compact />
     case 'infografia':
-      return <InfografiaView info={pack.infografia} className="justify-start" routeId={routeId} />
+      return <InfografiaView info={pack.infografia} compact className="justify-start" />
     case 'quiz':
-      return <QuizView quiz={pack.quiz} routeId={routeId} moduleId={moduleId} />
+      return <QuizView quiz={pack.quiz} />
     case 'lab':
       return <LabView lab={pack.lab} />
   }

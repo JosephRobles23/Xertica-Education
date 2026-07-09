@@ -53,9 +53,11 @@ app.include_router(kb_router)
 app.include_router(documents_router)
 app.include_router(video_router)
 
-# Mount static files directory to serve local fallback assets (e.g. generated infographics)
+# Mount static files directory to serve local fallback assets
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
 
 @app.get("/")
 async def root():

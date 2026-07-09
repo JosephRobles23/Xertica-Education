@@ -71,7 +71,7 @@ export default function AssetFinal() {
             <VideoFrame video={route.pack.video} videoUrl={videoUrl} />
           </TabsContent>
           <TabsContent value="infografia">
-            <InfografiaView info={route.pack.infografia} routeId={route.id} />
+            <InfografiaView info={route.pack.infografia} />
           </TabsContent>
           <TabsContent value="quiz">
             <QuizView quiz={route.pack.quiz} />

@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     supabase_key: str = "placeholder-key"
     openrouter_key: str = "placeholder-key"
     openai_key: str = "placeholder-key"
-    openai_api_key: str = "placeholder-key"
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
     youtube_api_key: str = "placeholder-key"
