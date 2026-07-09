@@ -32,7 +32,8 @@ export function InfografiaView({
     if (!routeId) return
     const ratioToUse = targetRatio || aspectRatio
     setRegenerating(true)
-    const toastId = toast.loading('Regenerando infografía con tu feedback…', {
+    const toastLabel = info?.imageUrl ? 'Regenerando infografía con tu feedback…' : 'Creando infografía por primera vez…'
+    const toastId = toast.loading(toastLabel, {
       description: `Generando con gpt-image-2 en formato ${ratioToUse}. Esto puede tardar entre 2 y 3 minutos.`,
     })
     try {
@@ -231,8 +232,18 @@ export function InfografiaView({
     )
   }
 
+  const bulletsToUse = info?.bullets && info.bullets.length > 0 ? info.bullets : [
+    "Syllabus completo de la ruta de aprendizaje.",
+    "Estructura modular y temas clave.",
+    "Detalle de contenidos para cada bloque."
+  ]
+
+  const titleToUse = info?.title || "Syllabus de la Ruta"
+  const footerPng = info?.footer?.[0] || "Descargar PNG"
+  const footerPdf = info?.footer?.[1] || "Descargar PDF"
+
   return (
-    <div className={cn('flex justify-center', className)}>
+    <div className={cn('flex flex-col items-center gap-4', className)}>
       <div
         className={cn(
           'flex aspect-[1/1.35] flex-col gap-3.5 rounded-lg border-[1.5px] bg-card p-6 shadow-(--shadow-soft)',
@@ -242,11 +253,11 @@ export function InfografiaView({
         <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-primary">
           Infografía · 1 página
         </div>
-        <div className="font-display text-lg leading-tight text-ink">{info.title}</div>
+        <div className="font-display text-lg leading-tight text-ink">{titleToUse}</div>
         <div className="h-px bg-secondary" />
 
         <div className="flex flex-col gap-2.5">
-          {info.bullets.map((b) => (
+          {bulletsToUse.map((b) => (
             <div key={b} className="flex items-start gap-2.5">
               <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <span className="text-xs leading-snug">{b}</span>
@@ -271,12 +282,30 @@ export function InfografiaView({
 
         <div className="flex gap-2">
           <div className="flex h-8 flex-1 items-center justify-center rounded-md bg-primary/10 font-mono text-[10px] font-semibold text-primary">
-            {info.footer[0]}
+            {footerPng}
           </div>
           <div className="flex h-8 flex-1 items-center justify-center rounded-md bg-success/12 font-mono text-[10px] font-semibold text-success">
-            {info.footer[1]}
+            {footerPdf}
           </div>
         </div>
+
+        {/* On-demand Generation Button */}
+        {routeId && (
+          <div className="mt-2 border-t pt-3 flex flex-col gap-2 w-full">
+            {regenerating ? (
+              <Button disabled className="w-full text-xs gap-1.5 h-8">
+                <Loader2 className="size-3.5 animate-spin" /> Generando con IA...
+              </Button>
+            ) : (
+              <Button
+                className="w-full text-xs gap-1.5 h-8"
+                onClick={() => handleRegenerate('auto')}
+              >
+                <Sparkles className="size-3.5" /> Crear infografía
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

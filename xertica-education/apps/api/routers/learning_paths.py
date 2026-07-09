@@ -466,50 +466,9 @@ async def approve_sourcing(
         _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
     )
 
-    # 4) Generación de la infografía
-    # Generate stable component_id
-    h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
-    component_id = UUID(h)
-    
-    # Extract customer company name or fallback
-    cust_ctx = route.get("customerContext", {}) or {}
-    company_name = cust_ctx.get("companyName") or cust_ctx.get("company") or cust_ctx.get("industry") or "Google"
-    
-    # Extract word budget or fallback
-    word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
-    
-    # Extract aspect_ratio from payload or default to auto
-    aspect_ratio = (payload or {}).get("aspect_ratio", "auto")
-    
-    # Call infographic service
-    res = await infographic_service.generate_infographic(
-        component_id=component_id,
-        sources=route.get("sources", []),
-        company_name=company_name,
-        word_budget=word_budget,
-        aspect_ratio=aspect_ratio
-    )
-    
-    # Update the pack with infographic data
-    pack = route.get("pack", {}) or {}
-    pack["infografia"] = {
-        "title": f"Infografía - {route.get('name', 'Curso')}",
-        "bullets": [
-            "Branding corporativo integrado automáticamente por gpt-image-2.",
-            "Paleta de colores y logos oficiales de la compañía inferidos.",
-            "Visualización de conceptos clave en alta resolución.",
-            f"Basado en fuentes verídicas con presupuesto de {word_budget} palabras."
-        ],
-        "footer": ["Descargar PNG", "Descargar PDF"],
-        "imageUrl": res.get("local_png_url"),
-        "pdfUrl": res.get("local_pdf_url"),
-        "aspectRatio": aspect_ratio
-    }
-
-    # 5) Update route status to 'generado' and include both RAG job details and infographic pack
+    # 4) Update route status to 'generado'
     updated = await route_service.update_route(route_id, {
         "status": "generado",
-        "pack": pack
     })
 
     if isinstance(updated, dict):
@@ -539,9 +498,21 @@ async def regenerate_infographic(
     h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
     component_id = UUID(h)
     
-    # Extract customer company name or fallback
+    # Extract customer company name: explicit field → domain from URL → industry → fallback
     cust_ctx = route.get("customerContext", {}) or {}
-    company_name = cust_ctx.get("companyName") or cust_ctx.get("company") or cust_ctx.get("industry") or "Google"
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        # Try to infer from URL (e.g. "Apple.com" → "Apple")
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            # Strip www. and TLD → "www.apple.com" → "apple"
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
     
     # Extract word budget or fallback
     word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
@@ -549,7 +520,7 @@ async def regenerate_infographic(
     # Call infographic service with user_prompt and aspect_ratio
     res = await infographic_service.generate_infographic(
         component_id=component_id,
-        sources=route.get("sources", []),
+        sources=route.get("modules", []),
         company_name=company_name,
         word_budget=word_budget,
         user_prompt=user_prompt,
@@ -570,7 +541,7 @@ async def regenerate_infographic(
             "Branding corporativo integrado automáticamente por gpt-image-2.",
             "Paleta de colores y logos oficiales de la compañía inferidos.",
             "Visualización de conceptos clave en alta resolución.",
-            f"Basado en fuentes verídicas con presupuesto de {word_budget} palabras."
+            f"Basado en la estructura del syllabus con presupuesto de {word_budget} palabras."
         ],
         "footer": ["Descargar PNG", "Descargar PDF"],
         "imageUrl": local_png_url,
@@ -582,3 +553,78 @@ async def regenerate_infographic(
         "pack": pack
     })
     return updated
+
+from services.quiz.service import QuizService
+from config.dependencies import get_quiz_service
+
+@router.post("/{route_id}/modules/{module_id}/quiz/regenerate", response_model=Dict[str, Any])
+async def regenerate_quiz(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    quiz_service: QuizService = Depends(get_quiz_service)
+):
+    """
+    Generates or regenerates a quiz for a specific module of a learning path.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    modules = route.get("modules", [])
+    target_module = None
+    for m in modules:
+        if m.get("id") == module_id:
+            target_module = m
+            break
+            
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+        
+    user_prompt = payload.get("user_prompt")
+    
+    # Extract customer company name: explicit field → domain from URL → industry → fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+
+    # Resolve ID
+    resolved_route_id = route_service._resolve_id(route_id)
+
+    # Call quiz service
+    res = await quiz_service.generate_quiz(
+        route_id=resolved_route_id,
+        module_id=module_id,
+        module_name=target_module.get("name", "Módulo"),
+        module_description=target_module.get("description", "Descripción") or target_module.get("descripcion", ""),
+        company_name=company_name,
+        user_prompt=user_prompt
+    )
+    
+    # Update module's quiz pack content
+    target_module["quiz"] = {
+        "pdfUrl": res.get("pdfUrl"),
+        "txtUrl": res.get("txtUrl"),
+        "questions": res.get("questions")
+    }
+    
+    # Also update module's quiz content ref status to 'generado'
+    for c in target_module.get("contents", []):
+        if c.get("kind") == "quiz":
+            c["status"] = "generado"
+            
+    updated = await route_service.update_route(route_id, {
+        "modules": modules
+    })
+    return updated
+

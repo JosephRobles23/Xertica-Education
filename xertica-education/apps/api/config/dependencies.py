@@ -5,6 +5,7 @@ from services.kb.interface import KnowledgeBaseInterface
 from services.kb.service import KBService
 from services.video.service import VideoService
 from services.infographic.service import InfographicService
+from services.quiz.service import QuizService
 from config.settings import settings
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
@@ -54,6 +55,8 @@ _linker = _build_linker()
 _route_structurer = _build_route_structurer()
 _infographic_service = InfographicService()
 _approved_research_source_repository = _build_approved_research_source_repository()
+from adapters.llm.openrouter import OpenRouterLLMAdapter
+_quiz_service = QuizService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
 
 def get_jobs_service() -> JobsService:
     return _jobs_service
@@ -93,3 +96,6 @@ def get_video_service() -> VideoService:
 
 def get_infographic_service() -> InfographicService:
     return _infographic_service
+
+def get_quiz_service() -> QuizService:
+    return _quiz_service

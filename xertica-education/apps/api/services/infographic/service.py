@@ -23,7 +23,7 @@ from supabase import create_client
 
 def extract_grounded_points(sources: List[Dict[str, Any]], word_budget: int) -> List[str]:
     """
-    Extracts text points from sources up to a maximum word budget for prompt styling.
+    Extracts text points from sources or modules up to a maximum word budget for prompt styling.
     """
     points = []
     current_word_count = 0
@@ -33,12 +33,27 @@ def extract_grounded_points(sources: List[Dict[str, Any]], word_budget: int) -> 
     for src in sources:
         text_blocks = []
         if isinstance(src, dict):
-            title = src.get("title") or src.get("titulo")
-            quote = src.get("quote") or src.get("contenido") or src.get("summary")
-            if title:
-                text_blocks.append(title)
-            if quote:
-                text_blocks.append(quote)
+            # Check if it's a module
+            name = src.get("name") or src.get("title") or src.get("titulo")
+            desc = src.get("description") or src.get("descripcion") or src.get("desc")
+            if not desc and src.get("contents"):
+                contents = src.get("contents")
+                if isinstance(contents, list) and len(contents) > 0 and isinstance(contents[0], dict):
+                    desc = contents[0].get("summary")
+            
+            # If it's a module structure, combine them as a single syllabus point
+            if name and (desc or src.get("num")):
+                if not desc:
+                    desc = "Módulo de aprendizaje."
+                combined = f"{name}: {desc}"
+                text_blocks.append(combined)
+            else:
+                title = src.get("title") or src.get("titulo")
+                quote = src.get("quote") or src.get("contenido") or src.get("summary")
+                if title:
+                    text_blocks.append(title)
+                if quote:
+                    text_blocks.append(quote)
         elif isinstance(src, str):
             text_blocks.append(src)
             
@@ -61,54 +76,117 @@ def extract_grounded_points(sources: List[Dict[str, Any]], word_budget: int) -> 
         points = ["Fundamentos y mejores prácticas del tema del curso."]
     return points
 
+# Companies whose brand colors and logo gpt-image-2 can reliably infer
+# (globally recognized brands). For anything not in this set, we use
+# generic colors and explicitly forbid logo generation to avoid hallucination.
+WELL_KNOWN_BRANDS = {
+    "google", "microsoft", "amazon", "apple", "meta", "facebook",
+    "netflix", "spotify", "uber", "airbnb", "tesla", "nvidia",
+    "ibm", "oracle", "salesforce", "adobe", "samsung", "sony",
+    "coca-cola", "coca cola", "pepsi", "nike", "adidas",
+    "bancolombia", "bbva", "santander", "itaú", "itau",
+    "mercado libre", "mercadolibre", "rappi", "nubank",
+    "aws", "azure", "gcp", "google cloud",
+    "xertica", "globant", "endava", "openai"
+}
+
+def _is_well_known(company_name: str) -> bool:
+    """Returns True if the company is globally recognizable enough for the
+    model to infer brand colors and logo without hallucinating."""
+    return company_name.strip().lower() in WELL_KNOWN_BRANDS
+
+
 def build_image_prompt(points: List[str], company_name: str, user_prompt: str | None = None) -> str:
     """
-    Builds the target prompt for image generation, demanding brand colors and logo.
+    Builds the target prompt for image generation.
+    - Well-known companies: use their real brand colors + logo.
+    - Unknown companies: use elegant generic colors and NO logo at all.
     """
     points_text = "\n".join([f"- {p}" for p in points])
+
+    if _is_well_known(company_name):
+        branding_block = (
+            f"- Identidad Visual y Branding: Aplica la paleta de colores corporativos oficiales "
+            f"y la estética visual de '{company_name}'. Integra su logotipo oficial en la cabecera o esquina.\n"
+        )
+    else:
+        branding_block = (
+            f"- Identidad Visual y Branding: El curso es para la empresa '{company_name}'. "
+            f"NO inventes ni incluyas ningún logotipo ni texto de marcador de posición para logo. "
+            f"Simplemente no pongas nada donde iría un logo. "
+            f"Usa una paleta de colores profesional y genérica (violetas, azules oscuros o turquesas) "
+            f"que se vea premium y corporativa.\n"
+        )
+
     prompt = (
         f"Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
         f"que sirva como el syllabus del curso.\n"
         f"El tema principal debe estar alineado con el siguiente contenido:\n"
         f"{points_text}\n\n"
         f"Requisitos de Estilo y Visualización:\n"
-        f"- Identidad Visual y Branding: El modelo debe inferir y aplicar la paleta de colores corporativos oficiales, "
-        f"la estética visual y el logotipo oficial de la compañía '{company_name}'. Integra el logotipo en la cabecera o esquina.\n"
-        f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), con acentos de color vibrantes e identitarios de la marca, y degradados elegantes.\n"
-        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. Cada sección o módulo del curso debe estar representado en una tarjeta con un número grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D (3D glassmorphism/neon icon).\n"
-        f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
+        f"{branding_block}"
+        f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), "
+        f"con acentos de color vibrantes y degradados elegantes.\n"
+        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. "
+        f"Cada sección o módulo del curso debe estar representado en una tarjeta con un número "
+        f"grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D "
+        f"(3D glassmorphism/neon icon).\n"
+        f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, "
+        f"NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
         f"- Relación de aspecto vertical apta para impresión en una página.\n"
-        f"- Asegúrate de que el texto en español sea nítido y legible."
+        f"- Asegúrate de que el texto en español sea nítido y legible.\n"
+        f"- REGLA ESTRICTA: NO inventes logotipos. Si no conoces con certeza el logo real "
+        f"de la empresa, NO incluyas ninguno. Es preferible dejar el espacio vacío."
     )
-    
+
     if user_prompt:
         prompt += f"\n\nInstrucción adicional del usuario (prioridad alta): {user_prompt}"
-        
+
     return prompt
+
 
 def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str | None = None) -> str:
     """
-    Builds a fallback prompt excluding explicit logo requirements to bypass content/trademark safety filters.
+    Fallback prompt: never includes logo (for safety filter bypass), always
+    uses generic colors for unknown brands and brand colors for known ones.
     """
     points_text = "\n".join([f"- {p}" for p in points])
+
+    if _is_well_known(company_name):
+        branding_block = (
+            f"- Identidad Visual y Branding: Aplica la paleta de colores corporativos oficiales "
+            f"de '{company_name}'. NO incluyas el logotipo para evitar filtros de propiedad de terceros.\n"
+        )
+    else:
+        branding_block = (
+            f"- Identidad Visual y Branding: El curso es para la empresa '{company_name}'. "
+            f"NO inventes ni incluyas ningún logotipo, marca gráfica, ni texto como 'tu logo aquí'. "
+            f"Usa una paleta de colores profesional y genérica (violetas, azules oscuros o turquesas).\n"
+        )
+
     prompt = (
         f"Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
         f"que sirva como el syllabus del curso.\n"
         f"El tema principal debe estar alineado con el siguiente contenido:\n"
         f"{points_text}\n\n"
         f"Requisitos de Estilo y Visualización:\n"
-        f"- Identidad Visual y Branding: El modelo debe inferir y aplicar la paleta de colores corporativos oficiales "
-        f"e identitarios de la marca '{company_name}'. No incluyas el logotipo de forma explícita para evitar filtros de propiedad de terceros.\n"
-        f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), con acentos de color vibrantes e identitarios de la marca, y degradados elegantes.\n"
-        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. Cada sección o módulo del curso debe estar representado en una tarjeta con un número grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D (3D glassmorphism/neon icon).\n"
-        f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
+        f"{branding_block}"
+        f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), "
+        f"con acentos de color vibrantes y degradados elegantes.\n"
+        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. "
+        f"Cada sección o módulo del curso debe estar representado en una tarjeta con un número "
+        f"grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D "
+        f"(3D glassmorphism/neon icon).\n"
+        f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, "
+        f"NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
         f"- Relación de aspecto vertical apta para impresión en una página.\n"
-        f"- Asegúrate de que el texto en español sea nítido y legible."
+        f"- Asegúrate de que el texto en español sea nítido y legible.\n"
+        f"- REGLA ESTRICTA: NO inventes logotipos de ninguna empresa."
     )
-    
+
     if user_prompt:
         prompt += f"\n\nInstrucción adicional del usuario (prioridad alta): {user_prompt}"
-        
+
     return prompt
 
 class InfographicService(InfographicServiceInterface):

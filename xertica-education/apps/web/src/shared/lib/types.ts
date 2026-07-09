@@ -64,12 +64,15 @@ export interface InfografiaContent {
 
 export interface QuizQuestion {
   q: string
-  opts: readonly [string, string, string]
-  correct: 0 | 1 | 2
+  opts: readonly string[]
+  correct: number
+  explanation?: string
 }
 
 export interface QuizContent {
   questions: readonly QuizQuestion[]
+  pdfUrl?: string
+  txtUrl?: string
 }
 
 export interface LabStep {
@@ -108,6 +111,9 @@ export interface RouteModule {
   type: string
   status: ContentStatus
   contents: readonly ModuleContentRef[]
+  lesson?: LessonContent
+  quiz?: QuizContent
+  lab?: LabContent
 }
 
 export interface SourceVideoPreview {
