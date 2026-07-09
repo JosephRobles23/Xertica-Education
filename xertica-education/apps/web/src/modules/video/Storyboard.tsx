@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Check, Info, RefreshCcw, SquarePen, Film, CheckCircle2, AlertTriangle, Loader2, Link2, Scissors } from 'lucide-react'
+import { ArrowRight, Check, Info, RefreshCcw, SquarePen, Film, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Progress } from '@/shared/ui/progress'
 import { Textarea } from '@/shared/ui/textarea'
-import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHeader'
+import { PageDescription, PageTitle } from '@/shared/components/PageHeader'
 import { getRoute } from '@/shared/data/routes'
 import type { LearningRoute } from '@/shared/lib/types'
 import { useStore } from '@/shared/store'
@@ -19,7 +19,7 @@ import { api } from '@/shared/lib/api'
 export type VisualType = 'text_card' | 'hero_title' | 'stat_card' | 'callout' | 'comparison' | 'bar_chart' | 'line_chart' | 'pie_chart' | 'kpi_grid' | 'progress_bar' | 'terminal_scene' | 'screenshot_scene' | 'ai_video' | 'ai_illustration'
 
 type GroundingStatus = 'kb_grounded' | 'module_grounded'
-type StoryboardSource = 'backend' | 'fallback_invalid_target' | 'fallback_error' | 'fallback_empty'
+type StoryboardSource = 'idle' | 'backend' | 'fallback_invalid_target' | 'fallback_error' | 'fallback_empty'
 type RenderedVideoAsset = {
   storage_path?: string | null
   video_url?: string | null
@@ -34,6 +34,15 @@ type RenderPhase =
   | 'validate'
   | 'upload'
   | 'done'
+
+type RenderPhaseMeta = {
+  phase: RenderPhase
+  shortLabel: string
+  label: string
+  start: number
+  end: number
+  description: string
+}
 
 export type StoryboardScene = {
   scene_number: number
@@ -61,12 +70,33 @@ export type ReviewScene = {
   groundingStatus: GroundingStatus
 }
 
+const RENDER_PHASES: RenderPhaseMeta[] = [
+  { phase: 'queueing', shortLabel: 'En cola', label: 'Encolando render en la nube...', start: 0, end: 4, description: 'Preparando el job y reservando el pipeline.' },
+  { phase: 'tts', shortLabel: 'Narración', label: 'Sintetizando narración por escena...', start: 5, end: 24, description: 'Generando el audio de narración para cada escena.' },
+  { phase: 'visuals', shortLabel: 'Visuales', label: 'Preparando visuales y capturas...', start: 25, end: 34, description: 'Creando imágenes, videos y capturas según el storyboard.' },
+  { phase: 'music', shortLabel: 'Música', label: 'Buscando música de fondo...', start: 35, end: 44, description: 'Buscando y descargando la cama musical del video.' },
+  { phase: 'timeline', shortLabel: 'Timeline', label: 'Armando el plan de edición...', start: 45, end: 64, description: 'Uniendo narración, visuales y decisiones de edición.' },
+  { phase: 'render', shortLabel: 'Render', label: 'Renderizando video final en Remotion...', start: 65, end: 84, description: 'Componiendo el MP4 final del video.' },
+  { phase: 'validate', shortLabel: 'Validación', label: 'Validando duración y archivo final...', start: 85, end: 94, description: 'Verificando duración, tamaño y salida final.' },
+  { phase: 'upload', shortLabel: 'Subida', label: 'Subiendo el MP4 final...', start: 95, end: 99, description: 'Publicando el archivo final en storage.' },
+  { phase: 'done', shortLabel: 'Listo', label: '¡Generación Completada!', start: 100, end: 100, description: 'El video ya quedó generado y disponible.' },
+]
+
+const SLOW_VISUAL_TYPES: readonly VisualType[] = ['ai_video', 'ai_illustration', 'screenshot_scene']
+
 const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const isValidUuid = (value: string | undefined): value is string => Boolean(value && UUID_PATTERN.test(value))
 export const hasRenderTargetModuleId = (moduleId: string | undefined): moduleId is string => Boolean(moduleId && moduleId.trim().length > 0)
-export const canRenderAiStoryboard = (storyboardSource: StoryboardSource) => storyboardSource === 'backend'
+export const canRenderAiStoryboard = (storyboardSource: StoryboardSource) => storyboardSource !== 'fallback_invalid_target'
+export const renderActionLabel = (
+  renderingState: 'idle' | 'rendering' | 'success' | 'failed',
+  hasExistingRender: boolean,
+) => {
+  if (renderingState === 'rendering') return 'Renderizando video…'
+  return hasExistingRender ? 'Regenerar Video' : 'Renderizar Video'
+}
 
 export const renderPhaseFromProgress = (progress: number): RenderPhase => {
   if (progress >= 100) return 'done'
@@ -82,25 +112,66 @@ export const renderPhaseFromProgress = (progress: number): RenderPhase => {
 
 export const renderPhaseLabel = (progress: number): string => {
   const phase = renderPhaseFromProgress(progress)
-  switch (phase) {
-    case 'tts':
-      return 'Sintetizando narración por escena...'
-    case 'visuals':
-      return 'Preparando visuales y capturas...'
-    case 'music':
-      return 'Buscando música de fondo...'
-    case 'timeline':
-      return 'Armando el plan de edición...'
-    case 'render':
-      return 'Renderizando video final en Remotion...'
-    case 'validate':
-      return 'Validando duración y archivo final...'
-    case 'upload':
-      return 'Subiendo el MP4 final...'
-    case 'done':
-      return '¡Generación Completada!'
-    default:
-      return 'Encolando render en la nube...'
+  return RENDER_PHASES.find((item) => item.phase === phase)?.label ?? 'Encolando render en la nube...'
+}
+
+const renderPhaseMetaForProgress = (progress: number): RenderPhaseMeta =>
+  RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress)) ?? RENDER_PHASES[0]
+
+const stagePercentWithinRange = (progress: number, start: number, end: number): number => {
+  if (end <= start) return progress >= end ? 100 : 0
+  const clamped = Math.min(end, Math.max(start, progress))
+  return Math.round(((clamped - start) / (end - start)) * 100)
+}
+
+const stageDisplayPercent = (progress: number, meta: RenderPhaseMeta, isCurrent: boolean): number => {
+  const pct = stagePercentWithinRange(progress, meta.start, meta.end)
+  if (isCurrent && pct >= 100 && meta.phase !== 'done') {
+    return 99
+  }
+  return pct
+}
+
+const estimatedSceneIndex = (progressPct: number, totalScenes: number): number => {
+  if (totalScenes <= 0) return 0
+  if (progressPct <= 0) return 1
+  return Math.min(totalScenes, Math.max(1, Math.ceil((progressPct / 100) * totalScenes)))
+}
+
+const renderPhaseNarrative = (progress: number, scenes: ReviewScene[]) => {
+  const meta = renderPhaseMetaForProgress(progress)
+  const currentPhasePct = stagePercentWithinRange(progress, meta.start, meta.end)
+
+  if (meta.phase === 'tts') {
+    const sceneIndex = estimatedSceneIndex(currentPhasePct, scenes.length)
+    const scene = scenes[sceneIndex - 1]
+    return {
+      headline: scene ? `Narración estimada: escena ${sceneIndex} de ${scenes.length}` : 'Narración en progreso',
+      detail: scene ? `${scene.tag}: sintetizando el audio de esta escena.` : meta.description,
+    }
+  }
+
+  if (meta.phase === 'visuals') {
+    const sceneIndex = estimatedSceneIndex(currentPhasePct, scenes.length)
+    const scene = scenes[sceneIndex - 1]
+    const slowScenes = scenes
+      .filter((item) => SLOW_VISUAL_TYPES.includes(item.visualType))
+      .map((item) => VISUAL_META[item.visualType]?.tag ?? item.visualType)
+    const slowHint = slowScenes.length > 0
+      ? ` En este storyboard hay visuales más lentos: ${Array.from(new Set(slowScenes)).join(', ')}.`
+      : ''
+    const remotionHint = ' Los charts, comparisons, callouts, progress bars y terminales aparecen más tarde en la etapa de Render, no como archivos sueltos aquí.'
+    return {
+      headline: scene ? `Visual estimado: escena ${sceneIndex} de ${scenes.length}` : 'Visuales en progreso',
+      detail: scene
+        ? `${scene.tag} (${scene.visualType}): generando el asset visual de esta escena.${slowHint}${remotionHint}`
+        : `${meta.description}${slowHint}${remotionHint}`,
+    }
+  }
+
+  return {
+    headline: meta.shortLabel,
+    detail: meta.description,
   }
 }
 
@@ -147,6 +218,17 @@ export const updateSceneNarration = (scene: ReviewScene, narration: string): Rev
   ...scene,
   narration,
 })
+
+export const updateSceneVisualType = (scene: ReviewScene, visualType: VisualType): ReviewScene => {
+  const meta = VISUAL_META[visualType] ?? VISUAL_META.text_card
+  return {
+    ...scene,
+    visualType,
+    tag: meta.tag,
+    budget: meta.budget,
+    visualConfig: {},
+  }
+}
 
 export const buildReviewedStoryboard = (title: string, totalWordBudget: number, scenes: ReviewScene[]) => ({
   title,
@@ -316,7 +398,7 @@ export default function Storyboard() {
   const [isEditing, setIsEditing] = useState(false)
   const [storyboardLoading, setStoryboardLoading] = useState(false)
   const [storyboardSource, setStoryboardSource] = useState<StoryboardSource>(
-    hasValidRenderTarget ? 'fallback_error' : 'fallback_invalid_target',
+    hasValidRenderTarget ? 'idle' : 'fallback_invalid_target',
   )
   const [storyboardGrounding, setStoryboardGrounding] = useState<{
     status: GroundingStatus | null
@@ -359,14 +441,14 @@ export default function Storyboard() {
       }
 
       setStoryboardSource('fallback_empty')
-      toast.error('El backend no devolvió escenas renderizables. Se bloquea el render para evitar un video genérico.', {
+      toast.error('El backend no devolvió escenas renderizables. Se mantiene el borrador actual para que puedas renderizar o volver a intentar.', {
         id: 'storyboard-fetch',
       })
       return false
     } catch {
       setStoryboardSource('fallback_error')
       setStoryboardGrounding({ status: null, chunkCount: 0 })
-      toast.error('No se pudo cargar el storyboard real. Se bloquea el render para evitar un video genérico.', {
+      toast.error('No se pudo cargar el storyboard del backend. Se mantiene el borrador actual para que puedas renderizar o volver a intentar.', {
         id: 'storyboard-fetch',
       })
       return false
@@ -375,26 +457,6 @@ export default function Storyboard() {
     }
   }
 
-  // Fetch a KB-grounded storyboard from /videos/storyboard when a module_id is
-  // present in the URL (ADR-0015). Falls back to local default script on error
-  // or when no module context is available, so the page stays usable.
-  useEffect(() => {
-    let active = true
-    const fetchStoryboard = async () => {
-      if (!route || !active) return
-      const loaded = await loadStoryboard(false)
-      if (!active || !loaded) return
-      toast.success('Guion generado con base de conocimiento', { id: 'storyboard-fetch' })
-    }
-    void fetchStoryboard()
-    return () => { active = false }
-  }, [route?.id, moduleId, hasValidRenderTarget])
-
-  // Video reuse / segmentation states
-  const [existingVideoUrl, setExistingVideoUrl] = useState('')
-  const [segmenting, setSegmenting] = useState(false)
-  const [segments, setSegments] = useState<any[]>([])
-  const [selectedSegment, setSelectedSegment] = useState<any>(null)
   const savedVideoUrl = route ? storyboardVideoUrlOf(route.id) : ''
   const savedJobId = route ? storyboardJobIdOf(route.id) : undefined
   const resolvedVideoUrl = videoUrl || savedVideoUrl
@@ -432,11 +494,9 @@ export default function Storyboard() {
     setRenderingState('idle')
     setRenderProgress(0)
     setVideoUrl('')
-    setSegments([])
-    setSelectedSegment(null)
-    setStoryboardSource(hasValidRenderTarget ? 'fallback_error' : 'fallback_invalid_target')
+    setStoryboardSource(hasValidRenderTarget ? 'idle' : 'fallback_invalid_target')
     setStoryboardGrounding({ status: null, chunkCount: 0 })
-  }, [defaultReviewScenes, route?.id])
+  }, [defaultReviewScenes, route?.id, hasValidRenderTarget])
 
   useEffect(() => {
     if (!route) return
@@ -525,47 +585,14 @@ export default function Storyboard() {
   const totalBudget = reviewScenes.reduce((sum, scene) => sum + scene.budget, 0)
   const totalWords = reviewScenes.reduce((sum, scene) => sum + wordCount(scene.narration), 0)
   const canRenderCurrentStoryboard = canRenderAiStoryboard(storyboardSource)
-  const storyboardScenes = reviewScenes.map((scene, index) => {
-    const routeSegment = route.pack.video.segments[index]
-    return {
-      index,
-      title: scene.tag,
-      at: routeSegment?.at ?? `00:${String(index * 24).padStart(2, '0')}`,
-      excerpt: scene.narration,
-      visualType: scene.visualType,
-      teachingPoint: scene.teachingPoint,
-      pedagogicalIntent: scene.pedagogicalIntent,
-      teachingPattern: scene.teachingPattern,
-      visualRationale: scene.visualRationale,
-      groundingStatus: scene.groundingStatus,
-    }
-  })
-
-  const runSegmentation = async () => {
-    if (!existingVideoUrl) {
-      toast.error('Por favor ingresa una URL de video válida')
-      return
-    }
-    setSegmenting(true)
-    toast.loading('Analizando y segmentando video de entrenamiento...', { id: 'segment-job' })
-    
-    try {
-      const data = await api.request<{ segments: any[] }>('/videos/segment', {
-        method: 'POST',
-        body: JSON.stringify({ video_url: existingVideoUrl })
-      })
-      setSegments(data.segments)
-      toast.success('¡Video segmentado con éxito!', { id: 'segment-job' })
-    } catch (e) {
-      toast.error('No se pudo procesar el video de entrenamiento', { id: 'segment-job' })
-    } finally {
-      setSegmenting(false)
-    }
-  }
+  const hasExistingRender = Boolean(resolvedVideoUrl || savedJobId || renderingState === 'success' || renderingState === 'failed')
+  const currentRenderPhase = renderPhaseFromProgress(renderProgress)
+  const currentRenderMeta = renderPhaseMetaForProgress(renderProgress)
+  const currentRenderNarrative = renderPhaseNarrative(renderProgress, reviewScenes)
 
   const startRender = async () => {
     if (!canRenderCurrentStoryboard) {
-      toast.error('Primero carga un storyboard real desde el backend. El render local está bloqueado para evitar un video genérico.')
+      toast.error('Este módulo todavía no tiene un render target válido para lanzar el video.')
       return
     }
     setRenderingState('rendering')
@@ -626,106 +653,18 @@ export default function Storyboard() {
   const approve = () => {
     approveStoryboard(route.id)
     toast.success('Guion y storyboard aprobados', {
-      description: selectedSegment 
-        ? `Reutilizando segmento: ${selectedSegment.title}`
-        : 'El video quedó guardado y listo en la ruta.',
+      description: 'El video quedó guardado y listo en la ruta.',
     })
     router.push(`/ruta/${route.id}`)
   }
 
   return (
     <div className="mx-auto max-w-[860px]">
-      <Eyebrow tone="primary">
-        Ruta {route.id} · Video · Configuración de Asset
-      </Eyebrow>
       <PageTitle>Configurar material audiovisual</PageTitle>
       <PageDescription className="mb-6">
-        Selecciona si deseas generar un video interactivo con IA o reutilizar material pregrabado de entrenamiento.
+        Genera y revisa el storyboard del módulo antes de lanzar el render final.
       </PageDescription>
-
-      {/* SECTION 1: INGEST EXISTING TRAINING VIDEO */}
-      <Card className="mb-8 p-5 border-secondary bg-background gap-4">
-        <h3 className="font-display text-base font-semibold text-ink flex items-center gap-2">
-          <Link2 className="size-4 text-primary" /> Reutilizar Video de Entrenamiento Existente
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          Pega el link de una sesión grabada de Meet, Drive o YouTube. El agente extraerá el audio, lo transcribirá y lo segmentará por temas para que elijas qué sección recortar.
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={existingVideoUrl}
-            onChange={(e) => setExistingVideoUrl(e.target.value)}
-            placeholder="Ej: https://drive.google.com/file/d/... o enlace Meet"
-            className="flex-1 rounded-lg border border-input bg-background px-3 py-1.75 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-          <Button disabled={segmenting} onClick={runSegmentation} variant="outline" className="shrink-0 gap-1.5">
-            {segmenting ? <Loader2 className="size-3.5 animate-spin" /> : <Scissors className="size-3.5" />}
-            Segmentar Video
-          </Button>
-        </div>
-
-        {/* Display Segmented Topics */}
-        {segments.length > 0 && (
-          <div className="mt-4 flex flex-col gap-2.5">
-            <h4 className="font-display text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Temas detectados para recorte:
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {segments.map((seg) => {
-                const isSelected = selectedSegment?.id === seg.id
-                return (
-                  <Card
-                    key={seg.id}
-                    onClick={() => setSelectedSegment(seg)}
-                    className={`cursor-pointer p-4 transition-all hover:scale-[1.01] ${
-                      isSelected 
-                        ? 'border-success bg-success/4 ring-1 ring-success' 
-                        : 'border-secondary hover:border-accent'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="font-display text-xs font-semibold text-ink leading-snug">
-                        {seg.title}
-                      </span>
-                      <Badge variant={isSelected ? 'default' : 'outline'} className="font-mono text-[9px] px-1.5 py-0.5">
-                        {seg.start} - {seg.end}
-                      </Badge>
-                    </div>
-                    <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                      {seg.summary}
-                    </p>
-                  </Card>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Selected Segment Banner */}
-      {selectedSegment && (
-        <Card className="mb-8 p-4.5 border-success bg-success/8 flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="size-5 text-success shrink-0" />
-            <div>
-              <div className="text-[13px] font-semibold text-success">
-                Segmento de video seleccionado
-              </div>
-              <p className="text-[11.5px] text-muted-foreground leading-relaxed">
-                «{selectedSegment.title}» ({selectedSegment.start} a {selectedSegment.end}) se guardará como el video del módulo.
-              </p>
-            </div>
-          </div>
-          <Button onClick={() => setSelectedSegment(null)} size="sm" variant="outline" className="border-success/30 text-success hover:bg-success/10 text-xs py-1 h-7">
-            Quitar
-          </Button>
-        </Card>
-      )}
-
-      {/* SECTION 2: AI STORYBOARD & RENDER */}
-      {!selectedSegment && (
-        <>
+      <>
           {renderingState !== 'idle' && (
             <Card className="mb-8 p-5 border-primary bg-primary/4 flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -746,6 +685,55 @@ export default function Storyboard() {
               
               <Progress value={renderProgress} indicatorClassName="bg-primary animate-pulse" className="h-2" />
 
+              {renderingState === 'rendering' && (
+                <div className="grid gap-3 sm:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-xl border border-primary/20 bg-background/70 p-4">
+                    <div className="text-[13px] font-semibold text-ink">
+                      {currentRenderNarrative.headline}
+                    </div>
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                      {currentRenderNarrative.detail}
+                    </p>
+                    {savedJobId && (
+                      <div className="mt-3 text-[11px] text-muted-foreground">
+                        Job ID: <span className="font-mono">{savedJobId}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-primary/20 bg-background/70 p-4">
+                    <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Pipeline
+                    </div>
+                    <div className="space-y-2">
+                      {RENDER_PHASES.filter((item) => item.phase !== 'done').map((item) => {
+                        const isDone = item.end < renderProgress
+                        const isCurrent = item.phase === currentRenderPhase
+                        return (
+                          <div
+                            key={item.phase}
+                            className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[12px] ${
+                              isCurrent
+                                ? 'bg-primary/10 text-ink'
+                                : isDone
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-muted/40 text-muted-foreground'
+                            }`}
+                          >
+                            <span className="font-medium">{item.shortLabel}</span>
+                            <span className="font-mono">
+                              {isDone ? 'ok' : isCurrent ? `${stageDisplayPercent(renderProgress, item, isCurrent)}%` : '...'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                      {currentRenderMeta.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {renderingState === 'success' && resolvedVideoUrl && (
                 <div className="mt-2 rounded-lg overflow-hidden border border-secondary bg-black aspect-video flex flex-col justify-center items-center">
                   <video src={resolvedVideoUrl} controls className="w-full h-full object-cover" />
@@ -759,32 +747,87 @@ export default function Storyboard() {
             </Card>
           )}
 
-          <h2 className="mb-1 font-display text-lg font-medium text-ink">Guion segmentado por IA</h2>
-          <p className="mb-4 text-[13px] text-muted-foreground">
-            {storyboardSource === 'backend' ? 'Guion ligado a la ruta real.' : 'Borrador local de referencia.'} Objetivo {route.pack.video.duration || '02:00'} · {totalWords} palabras totales.
-          </p>
-          {storyboardSource === 'backend' && storyboardGrounding.status === 'kb_grounded' && (
-            <Card className="mb-4 flex-row items-start gap-3 border-emerald-300/60 bg-emerald-50/70 p-4">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="mb-1 font-display text-lg font-medium text-ink">Storyboard del video</h2>
+              <p className="text-[13px] text-muted-foreground">
+                {storyboardSource === 'backend' ? 'Versión ligada a la ruta real.' : 'Borrador listo para usar.'} Objetivo {route.pack.video.duration || '02:00'} · {totalWords} palabras totales.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-start gap-3 sm:justify-end">
+              <Button
+                variant={storyboardSource === 'backend' ? 'outline' : 'default'}
+                onClick={async () => {
+                  setIsEditing(false)
+                  if (!route || !hasValidRenderTarget) {
+                    toast.warning('Este render target sigue siendo local. Abre un módulo persistido para generar el storyboard real.')
+                    return
+                  }
+                  await loadStoryboard(storyboardSource === 'backend')
+                }}
+                disabled={storyboardLoading}
+                className="gap-2"
+              >
+                {storyboardLoading ? <Loader2 className="animate-spin" /> : <RefreshCcw />}
+                {storyboardLoading ? 'Generando storyboard…' : storyboardSource === 'backend' ? 'Regenerar storyboard' : 'Generar storyboard'}
+              </Button>
+              <Button variant="outline" onClick={() => setIsEditing((value) => !value)} className="gap-2">
+                <SquarePen /> {isEditing ? 'Listo' : 'Editar storyboard'}
+              </Button>
+              <Button
+                onClick={startRender}
+                disabled={storyboardLoading || !canRenderCurrentStoryboard || renderingState === 'rendering'}
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {renderingState === 'rendering' ? <Loader2 className="animate-spin" /> : <Film />}
+                {storyboardLoading
+                  ? 'Cargando storyboard…'
+                  : canRenderCurrentStoryboard
+                    ? renderActionLabel(renderingState, hasExistingRender)
+                    : 'Requiere módulo real'}
+              </Button>
+              <Button onClick={approve} disabled={renderingState === 'rendering'} className="gap-2">
+                <Check /> Guardar y Volver <ArrowRight />
+              </Button>
+            </div>
+          </div>
+          {storyboardLoading && (
+            <Card className="mb-4 flex-row items-start gap-3 border-primary/20 bg-primary/5 p-4">
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
               <div>
                 <div className="text-[13px] font-semibold text-ink">
-                  Storyboard KB-grounded activo
+                  Generando storyboard
                 </div>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                  El backend devolvió un storyboard real con {storyboardGrounding.chunkCount} chunk{storyboardGrounding.chunkCount === 1 ? '' : 's'} de grounding para este módulo.
+                  Estamos llamando al backend del módulo. Cuando termine, aquí verás el storyboard listo para revisión.
                 </p>
               </div>
             </Card>
           )}
-          {storyboardSource === 'backend' && storyboardGrounding.status === 'module_grounded' && (
-            <Card className="mb-4 flex-row items-start gap-3 border-amber-300/60 bg-amber-50/70 p-4">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          {!storyboardLoading && storyboardSource === 'idle' && hasValidRenderTarget && (
+            <Card className="mb-4 flex-row items-start gap-3 border-primary/20 bg-primary/5 p-4">
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
               <div>
                 <div className="text-[13px] font-semibold text-ink">
-                  Storyboard real, pero sin grounding útil de KB
+                  Borrador listo para renderizar
                 </div>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                  El backend sí generó el storyboard del módulo, pero no encontró chunks útiles en la KB. Por ADR, eso normalmente significa que esta ruta no tiene documentos Vía 2 ingeridos para este tema.
+                  Ya puedes renderizar este borrador inmediatamente. Si quieres reemplazarlo con una versión específica del backend para este módulo, usa <span className="font-mono">POST /videos/storyboard</span> con el botón de arriba.
+                </p>
+              </div>
+            </Card>
+          )}
+          {storyboardSource === 'backend' && (
+            <Card className="mb-4 flex-row items-start gap-3 border-emerald-300/60 bg-emerald-50/70 p-4">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+              <div>
+                <div className="text-[13px] font-semibold text-ink">
+                  Storyboard listo
+                </div>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                  {storyboardGrounding.status === 'kb_grounded'
+                    ? `El backend devolvió un storyboard real con ${storyboardGrounding.chunkCount} chunk${storyboardGrounding.chunkCount === 1 ? '' : 's'} de grounding para este módulo.`
+                    : 'El backend devolvió un storyboard real para este módulo. Ya puedes revisarlo y lanzar el render cuando quede bien.'}
                 </p>
               </div>
             </Card>
@@ -808,10 +851,10 @@ export default function Storyboard() {
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div>
                 <div className="text-[13px] font-semibold text-ink">
-                  Storyboard real no disponible
+                  No se pudo cargar el storyboard del backend
                 </div>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                  La llamada a <span className="font-mono">POST /videos/storyboard</span> falló. El render queda bloqueado para no producir un video genérico desconectado de la KB y del módulo real.
+                  La llamada a <span className="font-mono">POST /videos/storyboard</span> falló. Puedes seguir con el borrador actual o volver a intentarlo.
                 </p>
               </div>
             </Card>
@@ -821,10 +864,10 @@ export default function Storyboard() {
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div>
                 <div className="text-[13px] font-semibold text-ink">
-                  El backend no produjo escenas renderizables
+                  El backend no produjo escenas nuevas
                 </div>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                  Se mantiene un borrador local de referencia, pero el render queda bloqueado hasta que exista un storyboard real del backend.
+                  Se mantiene el borrador actual para que puedas renderizarlo o volver a pedir una versión del backend.
                 </p>
               </div>
             </Card>
@@ -865,18 +908,44 @@ export default function Storyboard() {
                     </div>
                   </div>
                   {isEditing ? (
-                    <Textarea
-                      value={scene.narration}
-                      onChange={(event) => {
-                        setReviewScenes((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index ? updateSceneNarration(item, event.target.value) : item
+                    <>
+                      <div className="flex items-center gap-3">
+                        <label className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                          Tipo visual:
+                        </label>
+                        <select
+                          value={scene.visualType}
+                          onChange={(e) => {
+                            setReviewScenes((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? updateSceneVisualType(item, e.target.value as VisualType)
+                                  : item,
+                              ),
+                            )
+                          }}
+                          className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          {(Object.keys(VISUAL_META) as VisualType[]).map((type) => (
+                            <option key={type} value={type}>
+                              {VISUAL_META[type].tag} — {type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Textarea
+                        value={scene.narration}
+                        onChange={(event) => {
+                          setReviewScenes((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? updateSceneNarration(item, event.target.value) : item
+                            )
                           )
-                        )
-                      }}
-                      rows={5}
-                      className="text-sm leading-relaxed"
-                    />
+                        }}
+                        rows={5}
+                        className="text-sm leading-relaxed"
+                      />
+                    </>
                   ) : (
                     <p className="text-sm leading-relaxed">{scene.narration}</p>
                   )}
@@ -886,102 +955,19 @@ export default function Storyboard() {
             })}
           </div>
 
-          <h2 className="mb-1 font-display text-lg font-medium text-ink">Storyboard Propuesto</h2>
-          <p className="mb-4 text-[13px] text-muted-foreground">
-            {storyboardScenes.length} escenas · orden claro antes del render.
-          </p>
-          <div className="mb-8 flex flex-col gap-3.5">
-            {storyboardScenes.map((scene) => (
-              <Card key={`${scene.at}-${scene.title}`} className="gap-3 p-4.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-mono text-[12px] font-semibold text-primary">
-                      {String(scene.index + 1).padStart(2, '0')}
-                    </div>
-                    <div>
-                      <div className="font-display text-[14px] font-medium text-ink">{scene.title}</div>
-                      <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground">
-                        {scene.at}
-                      </div>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {scene.visualType}
-                  </Badge>
-                </div>
-                <p className="text-[13px] leading-relaxed text-muted-foreground">
-                  {scene.excerpt}
-                </p>
-                <div className="grid gap-2 rounded-lg bg-muted/20 p-3 text-[11.5px] leading-relaxed sm:grid-cols-2">
-                  <div>
-                    <span className="font-semibold text-ink">Enseña: </span>
-                    <span className="text-muted-foreground">{scene.teachingPoint}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-ink">Grounding: </span>
-                    <span className="font-mono text-muted-foreground">{scene.groundingStatus}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-ink">Patrón: </span>
-                    <span className="text-muted-foreground">{scene.teachingPattern}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-ink">Razón visual: </span>
-                    <span className="text-muted-foreground">{scene.visualRationale}</span>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
+      </>
 
       <Card className="mb-6 flex-row items-start gap-3.5 border-accent bg-primary/8 p-4.5">
         <Info className="mt-0.5 size-4 shrink-0 text-primary" />
         <div>
           <div className="mb-1 text-[13.5px] font-semibold text-ink">
-            {selectedSegment ? 'Configuración de Reutilización Lista' : 'Generación Híbrida Inteligente'}
+            Generación Híbrida Inteligente
           </div>
           <p className="text-[13px] leading-relaxed">
-            {selectedSegment 
-              ? 'Has seleccionado reutilizar un video existente. Haz clic en "Confirmar y Volver" para aplicar este asset.'
-              : 'Revisa el guion y el storyboard. Puedes iniciar la renderización de audio premium WaveNet e imágenes/capturas animadas desde aquí, o guardar la propuesta aprobada.'}
+            Este storyboard editable es el mismo que se envía al pipeline de render. Si generas una versión desde el backend, reemplaza este borrador con esa propuesta antes de renderizar.
           </p>
         </div>
       </Card>
-
-      <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" onClick={() => setIsEditing((value) => !value)}>
-          <SquarePen /> {isEditing ? 'Listo' : 'Editar guion'}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            setIsEditing(false)
-            if (!route || !hasValidRenderTarget) {
-              toast.warning('Este render target sigue siendo local. Abre un módulo persistido para regenerar el storyboard real.')
-              return
-            }
-            await loadStoryboard(true)
-          }}
-        >
-          <RefreshCcw /> Regenerar
-        </Button>
-
-        {selectedSegment ? (
-          <Button onClick={approve} className="bg-success text-success-foreground hover:bg-success/90">
-            <Check /> Confirmar y Volver
-          </Button>
-        ) : renderingState === 'idle' ? (
-          <Button onClick={startRender} disabled={storyboardLoading || !canRenderCurrentStoryboard} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Film /> {storyboardLoading ? 'Cargando guion KB…' : canRenderCurrentStoryboard ? 'Renderizar Video' : 'Requiere storyboard real'}
-          </Button>
-        ) : (
-          <Button onClick={approve} disabled={renderingState === 'rendering'}>
-            <Check /> Guardar y Volver <ArrowRight />
-          </Button>
-        )}
-      </div>
     </div>
   )
 }

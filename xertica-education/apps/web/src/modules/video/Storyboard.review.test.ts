@@ -3,6 +3,7 @@ import {
   canRenderAiStoryboard,
   hasRenderTargetModuleId,
   isValidUuid,
+  renderActionLabel,
   renderPhaseLabel,
   sceneToReviewScene,
   updateSceneNarration,
@@ -57,12 +58,28 @@ if (hasRenderTargetModuleId(undefined)) {
   throw new Error('Sin module_id no debe intentarse cargar un Render Target real.')
 }
 
-if (canRenderAiStoryboard('fallback_error')) {
-  throw new Error('El render IA debe bloquearse cuando no existe storyboard real del backend.')
+if (!canRenderAiStoryboard('fallback_error')) {
+  throw new Error('Si el backend falla, el render debe seguir disponible con el borrador actual.')
+}
+
+if (!canRenderAiStoryboard('idle')) {
+  throw new Error('El render IA debe permitir usar el borrador inicial antes de pedir una versión del backend.')
+}
+
+if (canRenderAiStoryboard('fallback_invalid_target')) {
+  throw new Error('Sin render target válido, el render sí debe seguir bloqueado.')
 }
 
 if (!canRenderAiStoryboard('backend')) {
-  throw new Error('El render IA solo debe permitirse con storyboard real del backend.')
+  throw new Error('El storyboard real del backend también debe poder renderizarse.')
+}
+
+if (renderActionLabel('success', true) !== 'Regenerar Video') {
+  throw new Error('Si ya existe un video, la CTA debe permitir regenerarlo.')
+}
+
+if (renderActionLabel('idle', false) !== 'Renderizar Video') {
+  throw new Error('Sin video previo, la CTA debe invitar a renderizar por primera vez.')
 }
 
 if (renderPhaseLabel(6) !== 'Sintetizando narración por escena...') {

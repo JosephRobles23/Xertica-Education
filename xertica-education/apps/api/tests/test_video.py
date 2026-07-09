@@ -473,9 +473,20 @@ class TestVideoAPI(unittest.TestCase):
                         "steps": [
                             "cursor_move: 0.3 0.5",
                             "click_pulse: 0.3 0.5",
+                            "type_into: 0.15 0.2 0.4 0.08 mario kart competitivo",
                             "highlight_box: 0.2 0.2 0.5 0.2",
                             "callout_balloon: 0.4 0.4 Revisa esta zona",
+                            "typing_dots: 0.6 0.7",
                         ],
+                    },
+                },
+                {
+                    "scene_number": 4,
+                    "narration": "Despues vemos la tendencia.",
+                    "visual_type": "line_chart",
+                    "visual_config": {
+                        "title": "Curva de mejora",
+                        "chartSeries": [{"name": "Velocidad", "data": [10, 25, 45, 70, 90]}],
                     },
                 },
             ],
@@ -485,17 +496,17 @@ class TestVideoAPI(unittest.TestCase):
             transform_storyboard_to_edit_decisions(
                 storyboard=storyboard,
                 audio_paths=[],
-                durations=[2.0, 3.0, 4.0],
-                visual_paths=["", "", "/tmp/screenshot.png"],
-                visual_is_video=[False, False, False],
+                durations=[2.0, 3.0, 4.0, 4.0],
+                visual_paths=["", "", "/tmp/screenshot.png", ""],
+                visual_is_video=[False, False, False, False],
                 music_path=None,
                 captions=None,
-                total_duration=9.0,
+                total_duration=13.0,
                 job_id="job-1",
             )
         )
 
-        text_cut, terminal_cut, screenshot_cut = edit_decisions["cuts"]
+        text_cut, terminal_cut, screenshot_cut, line_cut = edit_decisions["cuts"]
         self.assertEqual(text_cut["subtitle"], "Punto A • Punto B")
         self.assertEqual(terminal_cut["terminalTitle"], "CLI demo")
         self.assertEqual(terminal_cut["steps"][0], {"kind": "cmd", "text": "gcloud projects list"})
@@ -503,8 +514,86 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(terminal_cut["steps"][2], {"kind": "pause", "seconds": 1.0})
         self.assertEqual(screenshot_cut["screenshotSteps"][0]["kind"], "cursor_move")
         self.assertEqual(screenshot_cut["screenshotSteps"][0]["to"], [0.3, 0.5])
-        self.assertEqual(screenshot_cut["screenshotSteps"][2]["region"], {"x": 0.2, "y": 0.2, "w": 0.5, "h": 0.2})
-        self.assertEqual(screenshot_cut["screenshotSteps"][3]["text"], "Revisa esta zona")
+        self.assertEqual(screenshot_cut["screenshotSteps"][2]["kind"], "type_into")
+        self.assertEqual(screenshot_cut["screenshotSteps"][2]["region"], {"x": 0.15, "y": 0.2, "w": 0.4, "h": 0.08})
+        self.assertEqual(screenshot_cut["screenshotSteps"][4]["text"], "Revisa esta zona")
+        self.assertEqual(screenshot_cut["screenshotSteps"][5]["kind"], "typing_dots")
+        self.assertEqual(line_cut["chartSeries"][0]["label"], "Velocidad")
+        self.assertEqual(line_cut["chartSeries"][0]["data"][0], {"x": 1.0, "y": 10.0})
+        self.assertEqual(line_cut["chartSeries"][0]["data"][4], {"x": 5.0, "y": 90.0})
+
+    def test_custom_storyboard_render_hydrates_sparse_visual_configs(self):
+        """Direct render payloads should get usable defaults for non-LLM-authored visual configs."""
+        service = VideoService()
+        storyboard = {
+            "title": "Domina Mario Kart: Estrategias para Ganar",
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "narration": "Veamos esto en el entorno real.",
+                    "visual_type": "screenshot_scene",
+                    "visual_config": {},
+                    "teaching_point": "Anclar la estrategia en una accion observable.",
+                },
+                {
+                    "scene_number": 2,
+                    "narration": "Resumimos los indicadores clave.",
+                    "visual_type": "kpi_grid",
+                    "visual_config": {},
+                },
+                {
+                    "scene_number": 3,
+                    "narration": "Distribuimos el foco de entrenamiento.",
+                    "visual_type": "pie_chart",
+                    "visual_config": {},
+                },
+                {
+                    "scene_number": 4,
+                    "narration": "Seguimos la curva de mejora por intento.",
+                    "visual_type": "line_chart",
+                    "visual_config": {
+                        "chartSeries": [{"name": "Velocidad", "data": [12, 28, 49, 73]}],
+                    },
+                },
+                {
+                    "scene_number": 5,
+                    "narration": "Representamos la estrategia como un diagrama técnico aplicable al juego.",
+                    "visual_type": "ai_illustration",
+                    "visual_config": {},
+                    "teaching_point": "Mostrar el modelo mental de la estrategia con una ilustración concreta.",
+                },
+            ],
+        }
+
+        hydrated = service._hydrate_storyboard_for_render(copy.deepcopy(storyboard))
+
+        screenshot_config = hydrated["scenes"][0]["visual_config"]
+        self.assertEqual(screenshot_config["url"], "")
+        self.assertEqual(screenshot_config["steps"][0]["kind"], "cursor_move")
+        self.assertEqual(screenshot_config["steps"][2]["kind"], "type_into")
+
+        kpi_config = hydrated["scenes"][1]["visual_config"]
+        self.assertEqual(kpi_config["columns"], 3)
+        self.assertGreater(len(kpi_config["chartData"]), 0)
+        self.assertIn("value", kpi_config["chartData"][0])
+
+        pie_config = hydrated["scenes"][2]["visual_config"]
+        self.assertTrue(pie_config["donut"])
+        self.assertEqual(pie_config["centerValue"], "100%")
+        self.assertGreater(len(pie_config["chartData"]), 0)
+
+        line_config = hydrated["scenes"][3]["visual_config"]
+        self.assertEqual(line_config["chartSeries"][0]["label"], "Velocidad")
+        self.assertEqual(line_config["chartSeries"][0]["data"][0], {"x": 1, "y": 12})
+        self.assertEqual(line_config["chartSeries"][0]["data"][3], {"x": 4, "y": 73})
+        self.assertEqual(line_config["xLabel"], "Iteracion")
+        self.assertEqual(line_config["yLabel"], "Valor")
+
+        illustration_config = hydrated["scenes"][4]["visual_config"]
+        self.assertIn("prompt", illustration_config)
+        self.assertIn("estrategia", illustration_config["prompt"].lower())
+        self.assertIn("avoid biology", illustration_config["prompt"].lower())
+        self.assertGreater(len(illustration_config["bullets"]), 0)
 
     def test_generate_video_uses_reviewed_storyboard_as_render_source_of_truth(self):
         """POST /videos/generate renders from the reviewed storyboard and retains provenance."""
@@ -927,7 +1016,9 @@ class TestVideoAPI(unittest.TestCase):
         self.assertIn("decisiones de negocio", storyboard["title"].lower())
         self.assertGreaterEqual(len(storyboard["scenes"]), 5)
         self.assertLessEqual(len(storyboard["scenes"]), 7)
-        self.assertNotEqual(storyboard["scenes"][0]["visual_type"], "ai_video")
+        self.assertEqual(storyboard["scenes"][0]["visual_type"], "ai_video")
+        visual_types = [scene["visual_type"] for scene in storyboard["scenes"]]
+        self.assertIn("ai_illustration", visual_types)
 
         for scene in storyboard["scenes"]:
             self.assertEqual(scene["grounding_status"], "kb_grounded")
@@ -1110,7 +1201,10 @@ class TestVideoAPI(unittest.TestCase):
         self.assertLessEqual(visual_types.count("ai_video"), 1)
         self.assertNotIn("bar_chart", visual_types)
         self.assertNotIn("screenshot_scene", visual_types)
-        self.assertNotIn("ai_illustration", visual_types)
+        # One ai_illustration is enforced via fallback
+        self.assertEqual(visual_types.count("ai_illustration"), 1)
+        # Verify index 5 (original bad ai_illustration) was repaired
+        self.assertNotEqual(storyboard["scenes"][5]["visual_type"], "ai_illustration")
 
         repaired_scene = storyboard["scenes"][4]
         self.assertIn(repaired_scene["visual_type"], {"callout", "text_card", "comparison", "terminal_scene"})

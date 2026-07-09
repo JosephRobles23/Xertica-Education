@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import asyncio
+import copy
 from pathlib import Path
 from uuid import UUID
 from typing import Optional, Dict, Any, List
@@ -32,6 +33,7 @@ class RenderExecutor:
     async def execute(self, plan: RenderPlan) -> None:
         job_id = plan.job_id
         storyboard = plan.storyboard.model_dump() if hasattr(plan.storyboard, "model_dump") else plan.storyboard
+        storyboard = self.video_service._hydrate_storyboard_for_render(copy.deepcopy(storyboard))
         scenes = storyboard.get("scenes", [])
         temp_dir = f"/tmp/render_{job_id}"
         os.makedirs(temp_dir, exist_ok=True)

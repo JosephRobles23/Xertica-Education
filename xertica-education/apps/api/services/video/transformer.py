@@ -105,7 +105,18 @@ def _build_cut(
         }
 
     elif visual_type == "line_chart":
-        return {**base, "type": "line_chart", "title": config.get("title", ""), "chartSeries": config.get("chartSeries", [])}
+        return {
+            **base,
+            "type": "line_chart",
+            "title": config.get("title", ""),
+            "chartSeries": _normalize_line_chart_series(config.get("chartSeries", [])),
+            "showGrid": config.get("showGrid", True),
+            "showMarkers": config.get("showMarkers", True),
+            "showLegend": config.get("showLegend", False),
+            "xLabel": config.get("xLabel", ""),
+            "yLabel": config.get("yLabel", ""),
+            "chartColors": CHART_COLORS,
+        }
 
     elif visual_type == "pie_chart":
         return {
@@ -214,6 +225,33 @@ def _normalize_screenshot_steps(steps: list) -> list[dict]:
                 "anchor": [_float_or(parts[0]), _float_or(parts[1])],
                 "text": " ".join(parts[2:]),
             })
+        elif kind == "type_into" and len(parts) >= 5:
+            normalized.append({
+                "kind": "type_into",
+                "region": {
+                    "x": _float_or(parts[0]),
+                    "y": _float_or(parts[1]),
+                    "w": _float_or(parts[2]),
+                    "h": _float_or(parts[3]),
+                },
+                "text": " ".join(parts[4:]),
+            })
+        elif kind == "bubble_append" and len(parts) >= 5:
+            normalized.append({
+                "kind": "bubble_append",
+                "region": {
+                    "x": _float_or(parts[0]),
+                    "y": _float_or(parts[1]),
+                    "w": _float_or(parts[2]),
+                    "h": _float_or(parts[3]),
+                },
+                "text": " ".join(parts[4:]),
+            })
+        elif kind == "typing_dots" and len(parts) >= 2:
+            normalized.append({
+                "kind": "typing_dots",
+                "at": [_float_or(parts[0]), _float_or(parts[1])],
+            })
         elif kind == "pause" and parts:
             normalized.append({"kind": "pause", "seconds": _float_or(parts[0], 1.0)})
     return normalized
@@ -229,6 +267,28 @@ def _normalize_progress_steps(steps: list) -> list[dict]:
             normalized.append(step)
         elif isinstance(step, str):
             normalized.append({"label": step, "value": share})
+    return normalized
+
+
+def _normalize_line_chart_series(series: list) -> list[dict]:
+    if not isinstance(series, list):
+        return []
+
+    normalized = []
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label") or item.get("name") or "Serie"
+        raw_points = item.get("data") or []
+        points = []
+        if isinstance(raw_points, list):
+            for index, point in enumerate(raw_points, start=1):
+                if isinstance(point, dict) and "x" in point and "y" in point:
+                    points.append({"x": _float_or(point.get("x")), "y": _float_or(point.get("y"))})
+                elif isinstance(point, (int, float)):
+                    points.append({"x": float(index), "y": float(point)})
+        if points:
+            normalized.append({"label": label, "data": points})
     return normalized
 
 
