@@ -4,16 +4,19 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
   CircleCheck,
+  Clapperboard,
   ExternalLink,
+  FileText,
   FlaskConical,
-  Info,
   Link2,
   Loader2,
   Search,
+  ShieldCheck,
   Sparkles,
   Upload as UploadIcon,
   Wand2,
@@ -24,6 +27,7 @@ import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Separator } from '@/shared/ui/separator'
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
@@ -458,6 +462,130 @@ function VideoRecommendationPanel({
   )
 }
 
+function CorpusSection({ route }: { route: LearningRoute }) {
+  const { approveCorpus, discardSource, discardedSources, isCorpusApproved } = useStore()
+  const [approving, setApproving] = useState(false)
+  const discarded = discardedSources(route.id)
+  const visibleSources = route.sources.filter((_, index) => !discarded.includes(index))
+  const approved = isCorpusApproved(route.id)
+  const approvedCount = visibleSources.filter(
+    (source) => source.verified || source.status === 'approved',
+  ).length
+  const reviewCount = visibleSources.filter(
+    (source) => !source.verified && source.status !== 'approved' && source.status !== 'rejected',
+  ).length
+
+  const approve = async () => {
+    setApproving(true)
+    try {
+      await approveCorpus(route.id)
+      toast.success('Corpus aprobado', {
+        description: 'La ruta queda lista para construir la base de conocimiento.',
+      })
+    } catch {
+      toast.error('No se pudo aprobar el corpus')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  return (
+    <Card className="mb-7 gap-4 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
+            Gate 1 · Corpus
+          </div>
+          <h2 className="mt-1 font-display text-xl font-medium text-ink">Fuentes de la ruta</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={approved ? 'success' : 'outline'}>
+            {approved ? <ShieldCheck className="size-3" /> : <AlertTriangle className="size-3" />}
+            {approved ? 'aprobado' : 'pendiente'}
+          </Badge>
+          <Badge variant="muted">{approvedCount}/{visibleSources.length} validadas</Badge>
+          {reviewCount > 0 && <Badge variant="outline">{reviewCount} por revisar</Badge>}
+        </div>
+      </div>
+
+      {visibleSources.length > 0 ? (
+        <div className="grid gap-2">
+          {visibleSources.slice(0, 5).map((source, visibleIndex) => {
+            const sourceIndex = route.sources.indexOf(source)
+            const Icon = isYoutubeSource(source) ? Clapperboard : FileText
+
+            return (
+              <div
+                key={`${source.url ?? source.title}-${sourceIndex}`}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-[1.5px] border-input bg-background/70 px-3 py-2.5"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                  <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium text-ink">
+                      {source.title || `Fuente ${visibleIndex + 1}`}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground">
+                      <span>{source.plat || source.vendor || 'Fuente'}</span>
+                      {source.relevanceScore !== undefined && <span>{source.relevanceScore}% match</span>}
+                      {source.verified || source.status === 'approved' ? (
+                        <span className="text-success">validada</span>
+                      ) : (
+                        <span>requiere revisión</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {source.url && (
+                    <Button asChild variant="ghost" size="sm" className="h-7 px-2">
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        Abrir <ExternalLink className="size-3.5" />
+                      </a>
+                    </Button>
+                  )}
+                  {!approved && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-muted-foreground"
+                      onClick={() => discardSource(route.id, sourceIndex)}
+                    >
+                      Descartar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {visibleSources.length > 5 && (
+            <div className="rounded-lg bg-secondary px-3 py-2 text-[12px] text-muted-foreground">
+              +{visibleSources.length - 5} fuentes adicionales vinculadas a la ruta.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border-[1.5px] border-dashed border-input px-3 py-3 text-[12.5px] text-muted-foreground">
+          Todavía no hay fuentes visibles para esta ruta.
+        </div>
+      )}
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant={approved ? 'success' : 'default'}
+          disabled={approved || approving || visibleSources.length === 0}
+          onClick={approve}
+        >
+          {approving ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
+          {approved ? 'Corpus aprobado' : 'Aprobar corpus'}
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
 function SourceApprovalPanel({
   route,
   module,
@@ -660,6 +788,7 @@ function ContentReviewPanel({
     isLabGuideApproved,
     storyboardVideoUrlOf,
     replaceRouteSources,
+    fetchRoutes,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
@@ -834,7 +963,34 @@ function ContentReviewPanel({
           {approveButton}
           <RefinePopover
             label={label}
-            onRefine={() => refineContent(route.id, module.id, content.kind)}
+            onRefine={async (prompt) => {
+              if (content.kind === 'infografia') {
+                const toastId = toast.loading('Regenerando infografía con tu feedback…', {
+                  description: 'Generando con gpt-image-2. Esto puede tardar entre 2 y 3 minutos.',
+                })
+                try {
+                  const currentRatio = route.pack?.infografia?.aspectRatio || 'auto'
+                  await api.request(`/learning-paths/${route.id}/infographic/regenerate`, {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                      user_prompt: prompt,
+                      aspect_ratio: currentRatio
+                    }),
+                  })
+                  refineContent(route.id, module.id, content.kind)
+                  await fetchRoutes()
+                  toast.success('Infografía regenerada con éxito', { id: toastId })
+                } catch (e) {
+                  console.error(e)
+                  toast.error('Error al regenerar la infografía', {
+                    id: toastId,
+                    description: e instanceof Error ? e.message : 'Error desconocido',
+                  })
+                }
+              } else {
+                refineContent(route.id, module.id, content.kind)
+              }
+            }}
           >
             <Button variant="outline-primary" size="sm">
               <Sparkles /> Refinar
@@ -893,7 +1049,17 @@ function ContentReviewPanel({
 
       {!isVideo && (
         <div className="mb-4">
-          <ContentPreview kind={content.kind} pack={route.pack} />
+          <ContentPreview
+            kind={content.kind}
+            pack={{
+              ...route.pack,
+              quiz: module.quiz || route.pack.quiz || { questions: [] },
+              lesson: module.lesson || route.pack.lesson,
+              lab: module.lab || route.pack.lab,
+            }}
+            routeId={route.id}
+            moduleId={module.id}
+          />
         </div>
       )}
     </div>
@@ -950,10 +1116,6 @@ export default function Ruta() {
     selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
   const isFirstModule = selectedModuleIndex === 0
   const isLastModule = selectedModuleIndex >= route.modules.length - 1
-  const approvedOrVerifiedSourceCount = route.sources.filter(
-    (source) => source.verified || source.status === 'approved',
-  ).length
-  const pendingReviewSourceCount = manualReviewSources(route.sources).length
 
   const goToModule = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
@@ -995,15 +1157,69 @@ export default function Ruta() {
         <Eyebrow>
           Ruta {routeOrderNo} · {route.name}
         </Eyebrow>
-        <PageTitle className="mb-5 text-[31px]">{route.name}</PageTitle>
 
-        {/* Objetivo */}
-        <Card className="mb-7 gap-2 border-l-[3px] border-l-primary p-5">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
-            TL;DR · Objetivo de la ruta
-          </div>
-          <p className="text-[14.5px] leading-relaxed">{route.objective}</p>
-        </Card>
+        {/* Contexto del Cliente */}
+        {route.customerContext && (route.customerContext.companyName || route.customerContext.url || route.customerContext.industry || route.customerContext.area) && (
+          <Card className="mb-7 gap-2.5 border-l-[3px] border-l-accent p-5">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-accent-foreground">
+              Contexto del Cliente
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-muted-foreground">
+              {/* Show companyName; if absent, infer from URL domain */}
+              {(route.customerContext.companyName || route.customerContext.url) && (
+                <span>
+                  <span className="font-semibold text-ink">Empresa:</span>{' '}
+                  {route.customerContext.companyName
+                    || (() => {
+                        try {
+                          const raw = route.customerContext.url || ''
+                          const url = raw.startsWith('http') ? raw : `https://${raw}`
+                          const host = new URL(url).hostname.replace('www.', '')
+                          const name = host.split('.')[0] || ''
+                          if (!name) return raw
+                          return name.charAt(0).toUpperCase() + name.slice(1)
+                        } catch { return route.customerContext.url }
+                      })()
+                  }
+                </span>
+              )}
+              {route.customerContext.industry && (
+                <span>
+                  <span className="font-semibold text-ink">Industria:</span>{' '}
+                  {route.customerContext.industry}
+                </span>
+              )}
+              {route.customerContext.area && (
+                <span>
+                  <span className="font-semibold text-ink">Área:</span>{' '}
+                  {route.customerContext.area}
+                </span>
+              )}
+              {route.customerContext.audienceLevel && (
+                <span>
+                  <span className="font-semibold text-ink">Nivel:</span>{' '}
+                  {route.customerContext.audienceLevel}
+                </span>
+              )}
+              {route.customerContext.url && (
+                <span>
+                  <span className="font-semibold text-ink">URL:</span>{' '}
+                  <a
+                    href={route.customerContext.url.startsWith('http') ? route.customerContext.url : `https://${route.customerContext.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    {route.customerContext.url}
+                  </a>
+                </span>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Corpus encima de Módulos */}
+        <CorpusSection route={route} />
 
         {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">
@@ -1151,36 +1367,8 @@ export default function Ruta() {
           </span>
           {generateButton}
         </div>
+        
       </div>
-
-      {/* Provenance */}
-      <Card className="sticky top-20 gap-4 p-5">
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          Provenance · Ruta
-        </div>
-        <div>
-          <div className="mb-1 text-[11px] text-muted-foreground">Modelo de generación</div>
-          <div className="font-mono text-[13.5px] text-ink">Gemini 2.5 · Veo 3</div>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-success" />
-          <span className="text-[13px]">
-            <b className="text-ink">{approvedOrVerifiedSourceCount}</b> fuentes aprobadas
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-destructive" />
-          <span className="text-[13px]">
-            <b className="text-ink">{pendingReviewSourceCount}</b> pendientes de revisión
-          </span>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Info className="size-3.5" />
-          Cada asset registra modelo y fuentes usadas.
-        </div>
-      </Card>
     </div>
   )
 }
