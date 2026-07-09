@@ -98,7 +98,9 @@ const compactCustomerContext = (context: CustomerContext): CustomerContext => {
     usesGoogleWorkspace: context.usesGoogleWorkspace,
     audienceLevel: emptyToUndefined(context.audienceLevel ?? ''),
     baseMaterialFile: context.baseMaterialFile,
+    companyProposalFile: context.companyProposalFile,
     inferredFrom: context.inferredFrom?.length ? context.inferredFrom : undefined,
+    companyName: emptyToUndefined(context.companyName ?? ''),
   }
 
   return Object.fromEntries(
@@ -129,11 +131,13 @@ export default function NuevaRuta() {
   const [dialogOpen, setDialogOpen] = useState(false)
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
   const [materialFiles, setMaterialFiles] = useState<File[]>([])
+  const [companyProposalFiles, setCompanyProposalFiles] = useState<File[]>([])
   const [driveFiles, setDriveFiles] = useState<GoogleDriveSelection[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
   const baseMaterialInputRef = useRef<HTMLInputElement>(null)
+  const companyProposalInputRef = useRef<HTMLInputElement>(null)
 
   const updateCustomerContext = (patch: CustomerContext) => {
     setCustomerContext({ ...customerContext, ...patch })
@@ -206,6 +210,40 @@ export default function NuevaRuta() {
     syncPrimaryMeta(next)
   }
 
+  const syncCompanyProposalMeta = (files: File[]) => {
+    const first = files[0]
+    updateCustomerContext({
+      companyProposalFile: first
+        ? {
+            name: first.name,
+            type: first.type || first.name.split('.').pop()?.toUpperCase() || 'archivo',
+            sizeKb: Math.max(1, Math.round(first.size / 1024)),
+          }
+        : undefined,
+    })
+  }
+
+  const attachCompanyProposal = (incoming: FileList | File[] | null) => {
+    const files = incoming ? Array.from(incoming) : []
+    if (!files.length) return
+    const merged = [...companyProposalFiles]
+    for (const f of files) {
+      if (!merged.some((m) => m.name === f.name && m.size === f.size)) merged.push(f)
+    }
+    setCompanyProposalFiles(merged)
+    syncCompanyProposalMeta(merged)
+    toast.success(
+      files.length > 1 ? `${files.length} propuestas adjuntadas` : 'Propuesta adjuntada',
+      { description: 'Se usará para ajustar la audiencia y el enfoque de la ruta.' },
+    )
+  }
+
+  const removeCompanyProposal = (index: number) => {
+    const next = companyProposalFiles.filter((_, i) => i !== index)
+    setCompanyProposalFiles(next)
+    syncCompanyProposalMeta(next)
+  }
+
   const attachDriveMaterial = async () => {
     try {
       const selected = await pickGoogleDriveFile()
@@ -274,6 +312,20 @@ export default function NuevaRuta() {
         }
       }
 
+      for (const file of companyProposalFiles) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, file)
+          toast.loading('Propuesta de compañía subida · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          toast.error(`No se pudo subir ${file.name}`, {
+            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          })
+        }
+      }
+
       for (const file of driveFiles) {
         try {
           const uploaded = await api.uploadDriveDocument(newPath.id, file)
@@ -332,7 +384,7 @@ export default function NuevaRuta() {
       </PageDescription>
 
       <Card className="gap-5 p-6">
-        {/* Contexto del cliente */}
+        {/* Contexto de la compañía */}
         <div className="rounded-xl border-[1.5px] border-input bg-background/70 p-4">
           <button
             type="button"
@@ -344,7 +396,7 @@ export default function NuevaRuta() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13.5px] font-semibold text-ink">
-                Contexto del cliente
+                Contexto de la compañía
               </span>
               <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
                 Opcional. Personaliza ejemplos, labs y fuentes desde URL, brief o material base.
@@ -466,6 +518,62 @@ export default function NuevaRuta() {
                       onChange={(e) => updateCustomerContext({ audienceLevel: e.target.value })}
                     />
                   </div>
+                  <div className="flex flex-col gap-2">
+                    <Label>Propuesta de la compañía</Label>
+                    <input
+                      ref={companyProposalInputRef}
+                      type="file"
+                      multiple
+                      accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
+                      className="hidden"
+                      onClick={(e) => {
+                        ;(e.currentTarget as HTMLInputElement).value = ''
+                      }}
+                      onChange={(e) => attachCompanyProposal(e.target.files)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => companyProposalInputRef.current?.click()}
+                      className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                    >
+                      <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+                      <div className="text-[13px]">Adjuntar propuesta para esta audiencia</div>
+                      <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                        DOCX · PDF · PPTX · XLSX · TXT
+                      </div>
+                    </button>
+                    {companyProposalFiles.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {companyProposalFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.size}`}
+                            className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                          >
+                            <FileText className="size-4 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[13px] text-ink">{file.name}</div>
+                              <div className="font-mono text-[10.5px] text-muted-foreground">
+                                {Math.max(1, Math.round(file.size / 1024))} KB · propuesta de compañía
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={() => removeCompanyProposal(index)}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        Adjunta la propuesta comercial o briefing de la compañía para perfilar mejor la audiencia.
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -479,6 +587,7 @@ export default function NuevaRuta() {
                   customerContext.area === 'Educacion' ? 'Educación' : customerContext.area,
                   customerContext.usesGoogleWorkspace === 'yes' ? 'Google Workspace' : undefined,
                   customerContext.audienceLevel,
+                  customerContext.companyProposalFile ? `Propuesta: ${customerContext.companyProposalFile.name}` : undefined,
                 ].filter(Boolean) as string[]).map((item) => (
                   <span
                     key={item}
