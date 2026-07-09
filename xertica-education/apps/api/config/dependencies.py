@@ -5,6 +5,7 @@ from services.kb.interface import KnowledgeBaseInterface
 from services.kb.service import KBService
 from services.video.service import VideoService
 from services.infographic.service import InfographicService
+from config.settings import settings
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
 from repositories.kb import get_kb_chunk_repository
@@ -15,6 +16,10 @@ from services.route_structurer import get_route_structurer as _build_route_struc
 from adapters.embeddings import get_embedder
 from adapters.linker import get_linker as _build_linker
 from adapters.storage import get_storage_adapter as _build_storage_adapter
+from adapters.research import GoogleSearchGroundingClient
+from repositories.approved_research_sources import (
+    get_approved_research_source_repository as _build_approved_research_source_repository,
+)
 
 # Instantiate repositories and services
 _jobs_repository = SupabaseJobRepository()
@@ -22,7 +27,13 @@ _jobs_service = JobsService(_jobs_repository)
 
 _route_repository = SupabaseLearningPathRepository()
 _route_service = RouteService(_route_repository)
-_research_service = ResearchService()
+_research_service = ResearchService(
+    documentation_client=GoogleSearchGroundingClient(
+        project=settings.google_cloud_project,
+        location=settings.research_location,
+        model=settings.research_model,
+    )
+)
 _video_service = VideoService()
 
 # KB / RAG (ADR-0006): embedder y store se auto-seleccionan (mock ↔ real).
@@ -42,6 +53,7 @@ _linker = _build_linker()
 # Estructura Propuesta (ADR-0014): generador route_structurer (mock ↔ LLM Haiku 4.5).
 _route_structurer = _build_route_structurer()
 _infographic_service = InfographicService()
+_approved_research_source_repository = _build_approved_research_source_repository()
 
 def get_jobs_service() -> JobsService:
     return _jobs_service
@@ -51,6 +63,9 @@ def get_route_service() -> RouteService:
 
 def get_research_service() -> ResearchService:
     return _research_service
+
+def get_approved_research_source_repository():
+    return _approved_research_source_repository
 
 def get_knowledge_base() -> KnowledgeBaseInterface:
     return _knowledge_base

@@ -210,11 +210,15 @@ export default function NuevaRuta() {
     })
 
     try {
+      // Título/tema provisionales derivados del brief; la IA (generate-structure)
+      // los reemplaza con un nombre y tema definitivos al completar el Job.
+      const provisionalTitle =
+        (briefText.trim().split('\n')[0] ?? '').trim().slice(0, 60) || 'Nueva ruta de aprendizaje'
       const newPath = await api.request<{ id: string }>('/learning-paths/', {
         method: 'POST',
         body: JSON.stringify({
-          titulo: 'Ruta de Inteligencia Avanzada',
-          tema: 'Razonamiento',
+          titulo: provisionalTitle,
+          tema: '',
           brief: briefText,
           customerContext: routeCustomerContext,
         }),

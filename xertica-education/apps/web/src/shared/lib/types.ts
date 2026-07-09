@@ -134,6 +134,7 @@ export interface Source {
   suggestedUse?: 'lesson' | 'video' | 'lab' | 'quiz' | 'general'
   status?: 'approved' | 'requires-review' | 'rejected'
   videoPreview?: SourceVideoPreview
+  metadata?: Record<string, unknown>
 }
 
 export type CustomerArea = 'RRHH' | 'Finanzas' | 'TI' | 'Educacion' | 'Salud' | 'General'

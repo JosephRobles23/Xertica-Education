@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     embedding_dimension: int = 1536
     # Linker Source↔Módulo (ADR-0012). Chat vía OpenRouter; placeholder → MockLinker.
     linker_model: str = "openai/gpt-4o-mini"
+    research_model: str = "gemini-2.5-flash"
+    research_location: str = "global"
     # Google Cloud settings for Vertex AI (Imagen 3 + Veo 3.1)
     google_cloud_project: str = "placeholder-project"
     google_cloud_location: str = "us-central1"
