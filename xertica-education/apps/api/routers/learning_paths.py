@@ -295,7 +295,7 @@ async def review_research_source(
         (
             source
             for source in route.get("sources", [])
-            if source.get("url") == url and source.get("kind") in {"documentation", "article"}
+            if source.get("url") == url and source.get("kind") in {"documentation", "article", "youtube"}
         ),
         None,
     )
