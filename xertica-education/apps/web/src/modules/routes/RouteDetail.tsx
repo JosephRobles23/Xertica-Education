@@ -10,7 +10,6 @@ import {
   CircleCheck,
   ExternalLink,
   FlaskConical,
-  Info,
   Link2,
   Loader2,
   Search,
@@ -24,6 +23,7 @@ import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Separator } from '@/shared/ui/separator'
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
@@ -660,6 +660,7 @@ function ContentReviewPanel({
     isLabGuideApproved,
     storyboardVideoUrlOf,
     replaceRouteSources,
+    fetchRoutes,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
@@ -834,7 +835,34 @@ function ContentReviewPanel({
           {approveButton}
           <RefinePopover
             label={label}
-            onRefine={() => refineContent(route.id, module.id, content.kind)}
+            onRefine={async (prompt) => {
+              if (content.kind === 'infografia') {
+                const toastId = toast.loading('Regenerando infografía con tu feedback…', {
+                  description: 'Generando con gpt-image-2. Esto puede tardar entre 2 y 3 minutos.',
+                })
+                try {
+                  const currentRatio = route.pack?.infografia?.aspectRatio || 'auto'
+                  await api.request(`/learning-paths/${route.id}/infographic/regenerate`, {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                      user_prompt: prompt,
+                      aspect_ratio: currentRatio
+                    }),
+                  })
+                  refineContent(route.id, module.id, content.kind)
+                  await fetchRoutes()
+                  toast.success('Infografía regenerada con éxito', { id: toastId })
+                } catch (e) {
+                  console.error(e)
+                  toast.error('Error al regenerar la infografía', {
+                    id: toastId,
+                    description: e instanceof Error ? e.message : 'Error desconocido',
+                  })
+                }
+              } else {
+                refineContent(route.id, module.id, content.kind)
+              }
+            }}
           >
             <Button variant="outline-primary" size="sm">
               <Sparkles /> Refinar
@@ -893,7 +921,17 @@ function ContentReviewPanel({
 
       {!isVideo && (
         <div className="mb-4">
-          <ContentPreview kind={content.kind} pack={route.pack} />
+          <ContentPreview
+            kind={content.kind}
+            pack={{
+              ...route.pack,
+              quiz: module.quiz || route.pack.quiz || { questions: [] },
+              lesson: module.lesson || route.pack.lesson,
+              lab: module.lab || route.pack.lab,
+            }}
+            routeId={route.id}
+            moduleId={module.id}
+          />
         </div>
       )}
     </div>
@@ -950,10 +988,6 @@ export default function Ruta() {
     selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
   const isFirstModule = selectedModuleIndex === 0
   const isLastModule = selectedModuleIndex >= route.modules.length - 1
-  const approvedOrVerifiedSourceCount = route.sources.filter(
-    (source) => source.verified || source.status === 'approved',
-  ).length
-  const pendingReviewSourceCount = manualReviewSources(route.sources).length
 
   const goToModule = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
@@ -995,15 +1029,66 @@ export default function Ruta() {
         <Eyebrow>
           Ruta {routeOrderNo} · {route.name}
         </Eyebrow>
-        <PageTitle className="mb-5 text-[31px]">{route.name}</PageTitle>
 
-        {/* Objetivo */}
-        <Card className="mb-7 gap-2 border-l-[3px] border-l-primary p-5">
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-primary">
-            TL;DR · Objetivo de la ruta
-          </div>
-          <p className="text-[14.5px] leading-relaxed">{route.objective}</p>
-        </Card>
+        {/* Contexto del Cliente */}
+        {route.customerContext && (route.customerContext.companyName || route.customerContext.url || route.customerContext.industry || route.customerContext.area) && (
+          <Card className="mb-7 gap-2.5 border-l-[3px] border-l-accent p-5">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-accent-foreground">
+              Contexto del Cliente
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-muted-foreground">
+              {/* Show companyName; if absent, infer from URL domain */}
+              {(route.customerContext.companyName || route.customerContext.url) && (
+                <span>
+                  <span className="font-semibold text-ink">Empresa:</span>{' '}
+                  {route.customerContext.companyName
+                    || (() => {
+                        try {
+                          const raw = route.customerContext.url || ''
+                          const url = raw.startsWith('http') ? raw : `https://${raw}`
+                          const host = new URL(url).hostname.replace('www.', '')
+                          const name = host.split('.')[0] || ''
+                          if (!name) return raw
+                          return name.charAt(0).toUpperCase() + name.slice(1)
+                        } catch { return route.customerContext.url }
+                      })()
+                  }
+                </span>
+              )}
+              {route.customerContext.industry && (
+                <span>
+                  <span className="font-semibold text-ink">Industria:</span>{' '}
+                  {route.customerContext.industry}
+                </span>
+              )}
+              {route.customerContext.area && (
+                <span>
+                  <span className="font-semibold text-ink">Área:</span>{' '}
+                  {route.customerContext.area}
+                </span>
+              )}
+              {route.customerContext.audienceLevel && (
+                <span>
+                  <span className="font-semibold text-ink">Nivel:</span>{' '}
+                  {route.customerContext.audienceLevel}
+                </span>
+              )}
+              {route.customerContext.url && (
+                <span>
+                  <span className="font-semibold text-ink">URL:</span>{' '}
+                  <a
+                    href={route.customerContext.url.startsWith('http') ? route.customerContext.url : `https://${route.customerContext.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    {route.customerContext.url}
+                  </a>
+                </span>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Módulo activo */}
         <div className="mb-3.5 flex items-center justify-between">
@@ -1151,36 +1236,8 @@ export default function Ruta() {
           </span>
           {generateButton}
         </div>
+        
       </div>
-
-      {/* Provenance */}
-      <Card className="sticky top-20 gap-4 p-5">
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-          Provenance · Ruta
-        </div>
-        <div>
-          <div className="mb-1 text-[11px] text-muted-foreground">Modelo de generación</div>
-          <div className="font-mono text-[13.5px] text-ink">Gemini 2.5 · Veo 3</div>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-success" />
-          <span className="text-[13px]">
-            <b className="text-ink">{approvedOrVerifiedSourceCount}</b> fuentes aprobadas
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-destructive" />
-          <span className="text-[13px]">
-            <b className="text-ink">{pendingReviewSourceCount}</b> pendientes de revisión
-          </span>
-        </div>
-        <Separator className="bg-secondary" />
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Info className="size-3.5" />
-          Cada asset registra modelo y fuentes usadas.
-        </div>
-      </Card>
     </div>
   )
 }
