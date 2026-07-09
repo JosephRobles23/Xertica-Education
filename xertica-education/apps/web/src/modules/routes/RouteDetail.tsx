@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
+import { Input } from '@/shared/ui/input'
 import { Separator } from '@/shared/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
@@ -50,12 +51,37 @@ const isDocumentationSource = (source: Source) =>
   source.kind === 'documentation' || source.kind === 'article' || (!isYoutubeSource(source) && Boolean(source.url))
 
 const hasSpecificYoutubeVideo = (source: Source) =>
-  Boolean(source.videoPreview?.youtubeId) || Boolean(source.url?.includes('youtube.com/watch'))
+  Boolean(source.videoPreview?.youtubeId) ||
+  Boolean(source.url?.includes('youtube.com/watch')) ||
+  Boolean(source.url?.includes('youtu.be/'))
 
 const youtubeVideoIdOf = (source: Source) => {
   if (source.videoPreview?.youtubeId) return source.videoPreview.youtubeId
-  const match = source.url?.match(/[?&]v=([^&]+)/)
-  return match?.[1]
+  if (!source.url) return undefined
+  const watchMatch = source.url.match(/[?&]v=([^&]+)/)
+  if (watchMatch?.[1]) return watchMatch[1]
+  const shortMatch = source.url.match(/youtu\.be\/([^?&/]+)/)
+  return shortMatch?.[1]
+}
+
+const youtubeVideoIdFromUrl = (url: string) => {
+  const trimmed = url.trim()
+  const watchMatch = trimmed.match(/[?&]v=([^&]+)/)
+  if (watchMatch?.[1]) return watchMatch[1]
+  const shortMatch = trimmed.match(/youtu\.be\/([^?&/]+)/)
+  if (shortMatch?.[1]) return shortMatch[1]
+  const embedMatch = trimmed.match(/youtube(?:-nocookie)?\.com\/embed\/([^?&/]+)/)
+  return embedMatch?.[1]
+}
+
+const isLikelyVideoUrl = (url: string) => {
+  const trimmed = url.trim().toLowerCase()
+  return (
+    Boolean(youtubeVideoIdFromUrl(trimmed)) ||
+    /\.(mp4|webm|ogg|mov)(\?.*)?$/.test(trimmed) ||
+    trimmed.includes('drive.google.com') ||
+    trimmed.includes('meet.google.com')
+  )
 }
 
 const moduleText = (module: RouteModule, content?: ModuleContentRef) =>
@@ -67,7 +93,7 @@ function recommendedYoutubeCandidates(route: LearningRoute, module: RouteModule,
     .filter(
       (source) =>
         isYoutubeSource(source) &&
-        source.verified &&
+        source.status !== 'rejected' &&
         hasSpecificYoutubeVideo(source),
     )
     .map((source) => {
@@ -84,7 +110,7 @@ function recommendedYoutubeCandidates(route: LearningRoute, module: RouteModule,
           relevance +
           (source.suggestedUse === 'video' ? 45 : 0) +
           (source.videoPreview?.youtubeId ? 100 : 0) +
-          (source.verified ? 35 : 0) +
+          (source.verified ? 35 : -10) +
           (contextualMatch ? 20 : 0),
       }
     })
@@ -150,6 +176,20 @@ function findSecondaryYoutubeSource(route: LearningRoute, module: RouteModule, c
   return candidates[0]?.source
 }
 
+function makePreviewForSource(source: Source) {
+  const youtubeId = youtubeVideoIdOf(source)
+  return (
+    source.videoPreview ?? {
+      channel: source.plat || 'YouTube',
+      duration: '--:--',
+      gradient: 'from-zinc-500 via-slate-500 to-stone-500',
+      emoji: '▶',
+      youtubeId,
+      videoTitle: source.title,
+    }
+  )
+}
+
 function VideoRecommendationPanel({
   route,
   content,
@@ -158,6 +198,7 @@ function VideoRecommendationPanel({
   onFindAnother,
   findingAnother,
   onUseAiVideo,
+  onSelectYoutube,
   onRelink,
   relinking,
   linkOrigin,
@@ -170,6 +211,7 @@ function VideoRecommendationPanel({
   onFindAnother: () => void
   findingAnother: boolean
   onUseAiVideo: () => void
+  onSelectYoutube: (source: Source) => Promise<void>
   onRelink: () => void
   relinking: boolean
   linkOrigin?: 'llm' | 'heuristic' | null
@@ -178,8 +220,15 @@ function VideoRecommendationPanel({
   const [videoOpen, setVideoOpen] = useState(Boolean(recommendedSource?.videoPreview?.youtubeId))
   const [selectedMode, setSelectedMode] = useState<'youtube' | 'ai' | 'own' | null>(null)
   const [ownVideoName, setOwnVideoName] = useState<string | null>(null)
+  const [ownVideoUrl, setOwnVideoUrl] = useState('')
+  const [submittedOwnVideoUrl, setSubmittedOwnVideoUrl] = useState<string | null>(null)
+  const [approvingYoutube, setApprovingYoutube] = useState(false)
+  const youtubeSource = recommendedSource ?? secondarySource
+  const youtubePreview = youtubeSource ? makePreviewForSource(youtubeSource) : undefined
+  const customYoutubeId = submittedOwnVideoUrl ? youtubeVideoIdFromUrl(submittedOwnVideoUrl) : undefined
   const ownAssetName =
     ownVideoName ??
+    submittedOwnVideoUrl ??
     (route.customerContext?.baseMaterialFile?.type?.toLowerCase().startsWith('video')
       ? route.customerContext.baseMaterialFile.name
       : null)
@@ -189,10 +238,10 @@ function VideoRecommendationPanel({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[13px] font-semibold text-ink">
-            {recommendedSource ? 'Video recomendado por IA' : 'Opciones de video'}
+            {youtubeSource ? 'Video recomendado por IA' : 'Opciones de video'}
           </div>
           <p className="mt-0.5 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
-            {recommendedSource
+            {youtubeSource
               ? 'Elige la fuente de video para este asset durante la revisión del módulo.'
               : 'No encontramos un YouTube verificado; puedes usar el video IA, buscar otro o subir el tuyo.'}
           </p>
@@ -211,20 +260,23 @@ function VideoRecommendationPanel({
         </div>
       </div>
 
-      {recommendedSource?.videoPreview ? (
+      {youtubeSource && youtubePreview ? (
         <div className="mb-3 rounded-lg bg-background/80 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="font-display text-[14px] font-medium text-ink">
-              {recommendedSource.title}
+              {youtubeSource.title}
             </span>
-            {recommendedSource.relevanceScore !== undefined && (
+            <Badge variant={youtubeSource.verified ? 'success' : 'outline'}>
+              {youtubeSource.verified ? 'verificado' : 'requiere aprobación'}
+            </Badge>
+            {youtubeSource.relevanceScore !== undefined && (
               <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-                {recommendedSource.relevanceScore}% match
+                {youtubeSource.relevanceScore}% match
               </span>
             )}
           </div>
           <SourceVideoPreview
-            preview={recommendedSource.videoPreview}
+            preview={youtubePreview}
             open={videoOpen}
             onOpenChange={setVideoOpen}
           />
@@ -263,20 +315,81 @@ function VideoRecommendationPanel({
         </div>
       )}
 
+      {submittedOwnVideoUrl && selectedMode === 'own' && (
+        <div className="mb-3 rounded-lg bg-background/80 p-3">
+          {customYoutubeId ? (
+            <SourceVideoPreview
+              preview={{
+                channel: 'YouTube',
+                duration: '--:--',
+                gradient: 'from-zinc-500 via-slate-500 to-stone-500',
+                emoji: '▶',
+                youtubeId: customYoutubeId,
+                videoTitle: submittedOwnVideoUrl,
+              }}
+              open
+              onOpenChange={() => {}}
+            />
+          ) : (
+            <ContentPreview kind="video" pack={route.pack} videoUrl={submittedOwnVideoUrl} />
+          )}
+        </div>
+      )}
+
+      {selectedMode === 'own' && (
+        <form
+          className="mb-3 flex flex-col gap-2 rounded-lg bg-background/80 p-3 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const trimmed = ownVideoUrl.trim()
+            if (!trimmed) return
+            if (!isLikelyVideoUrl(trimmed)) {
+              toast.warning('Revisa el link del video', {
+                description: 'Usa un enlace de YouTube, Drive, Meet o un archivo de video directo.',
+              })
+              return
+            }
+            setOwnVideoName(null)
+            setSubmittedOwnVideoUrl(trimmed)
+            toast.success('Link de video propio seleccionado', { description: trimmed })
+          }}
+        >
+          <Input
+            type="url"
+            value={ownVideoUrl}
+            onChange={(event) => setOwnVideoUrl(event.target.value)}
+            placeholder="Pega un link de YouTube, Drive, Meet o MP4"
+            className="h-8 text-[12.5px]"
+          />
+          <Button type="submit" size="sm" variant="outline-primary">
+            <Link2 /> Usar link
+          </Button>
+        </form>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           size="sm"
           variant={selectedMode === 'youtube' ? 'success' : 'outline-primary'}
-          disabled={!recommendedSource?.videoPreview}
-          onClick={() => {
-            setSelectedMode('youtube')
-            toast.success('Video de YouTube seleccionado', {
-              description: recommendedSource?.title ?? content.summary,
-            })
+          disabled={!youtubeSource || approvingYoutube}
+          onClick={async () => {
+            if (!youtubeSource) return
+            setApprovingYoutube(true)
+            try {
+              await onSelectYoutube(youtubeSource)
+              setSelectedMode('youtube')
+              toast.success(
+                youtubeSource.verified ? 'Video de YouTube seleccionado' : 'YouTube aprobado para este módulo',
+                { description: youtubeSource.title ?? content.summary },
+              )
+            } finally {
+              setApprovingYoutube(false)
+            }
           }}
         >
-          <Check /> Usar YouTube verificado
+          {approvingYoutube ? <Loader2 className="animate-spin" /> : <Check />}
+          {youtubeSource?.verified ? 'Usar YouTube verificado' : 'Aprobar y usar YouTube'}
         </Button>
         <Button
           type="button"
@@ -319,6 +432,7 @@ function VideoRecommendationPanel({
               const file = event.target.files?.[0]
               if (!file) return
               setOwnVideoName(file.name)
+              setSubmittedOwnVideoUrl(null)
               setSelectedMode('own')
               toast.success('Video propio seleccionado', { description: file.name })
             }}
@@ -346,6 +460,7 @@ function SourceApprovalPanel({
     (source) =>
       isDocumentationSource(source) &&
       !source.verified &&
+      source.status !== 'approved' &&
       source.status !== 'rejected' &&
       Boolean(source.url) &&
       !reviewedUrls.has(source.url ?? ''),
@@ -611,6 +726,29 @@ function ContentReviewPanel({
     }
   }
 
+  const selectYoutubeForModule = async (source: Source) => {
+    if (!source.url) return
+    try {
+      await api.request(`/learning-paths/${route.id}/research-sources/review`, {
+        method: 'POST',
+        body: JSON.stringify({ url: source.url, action: 'approve', moduleId: module.id }),
+      })
+      setLinkedUrl(source.url)
+      setLinkOrigin('heuristic')
+      replaceRouteSources(
+        route.id,
+        route.sources.map((item) =>
+          item.url === source.url ? { ...item, status: 'approved' as const } : item,
+        ),
+      )
+    } catch (err) {
+      toast.error('No se pudo aprobar el video', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+      throw err
+    }
+  }
+
   const approveButton = (
     <Button
       variant={status === 'aprobado' ? 'outline' : 'success'}
@@ -667,6 +805,7 @@ function ContentReviewPanel({
           findingAnother={findingAnotherVideo}
           storyboardVideoUrl={storyboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
+          onSelectYoutube={selectYoutubeForModule}
           onRelink={relinkWithAI}
           relinking={relinking}
           linkOrigin={linkOrigin}
@@ -764,6 +903,12 @@ export default function Ruta() {
     selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
   const isFirstModule = selectedModuleIndex === 0
   const isLastModule = selectedModuleIndex >= route.modules.length - 1
+  const approvedOrVerifiedSourceCount = route.sources.filter(
+    (source) => source.verified || source.status === 'approved',
+  ).length
+  const pendingReviewSourceCount = route.sources.filter(
+    (source) => !source.verified && source.status !== 'approved' && source.status !== 'rejected',
+  ).length
 
   const goToModule = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
@@ -976,15 +1121,13 @@ export default function Ruta() {
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-success" />
           <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => s.verified).length}</b> fuentes
-            verificadas
+            <b className="text-ink">{approvedOrVerifiedSourceCount}</b> fuentes aprobadas
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-destructive" />
           <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => !s.verified).length}</b> sin
-            verificar
+            <b className="text-ink">{pendingReviewSourceCount}</b> pendientes de revisión
           </span>
         </div>
         <Separator className="bg-secondary" />
