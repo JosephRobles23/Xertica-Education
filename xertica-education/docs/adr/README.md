@@ -21,8 +21,10 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0005](0005-full-spine-schema.md) | Schema del Spine completo desde el día 1 | Aceptado |
 | [0006](0006-kb-rag-ingestion-embeddings.md) · KB | Ingesta KB/RAG + embeddings vía OpenRouter | Aceptado |
 | [0006](0006-video-asset-source-of-truth.md) · Video ⚠️ | Video Asset como fuente de verdad | Aceptado |
+| [0006](0006-infography-structured-template.md) · Infografía | Infografía por Plantilla + Datos Estructurados | Supersedido por 0007 |
 | [0007](0007-source-route-centrica-sourcing.md) · KB | Sourcing route-céntrico (`sources.learning_path_id`) | Aceptado |
 | [0007](0007-declarative-render-plan.md) · Video ⚠️ | Render Plan declarativo | Aceptado |
+| [0007](0007-infographics-ai-generation-pivot.md) · Infografía | Infografías Generadas Directamente por IA (gpt-image-2) | Aceptado |
 | [0008](0008-document-parsing-via2-ingestion.md) · KB | Parsing e ingesta de documentos (Vía 2) | Aceptado · rev. por 0011/0013 |
 | [0008](0008-remotion-composition-engine.md) · Video ⚠️ | Remotion como motor de composición | Aceptado |
 | [0009](0009-expanded-visual-types.md) · Video | Tipos visuales expandidos (14) | Aceptado |
@@ -37,4 +39,5 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0016](0016-approved-research-sources.md) · Research | URLs aprobadas fuera de la KB | Aceptado |
 | [0017](0017-deep-research-source-review-policy.md) · Research | Política de revisión de fuentes de Deep Research | Aceptado |
 
-> ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.
+> ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video), `feature/KB-RAG` (KB) y `feature/infographics` (infografías) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.
+

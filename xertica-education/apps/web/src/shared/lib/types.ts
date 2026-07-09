@@ -51,20 +51,28 @@ export interface VideoContent {
   segments: readonly VideoSegment[]
 }
 
+export type AspectRatio = 'vertical' | 'horizontal' | 'square' | 'auto'
+
 export interface InfografiaContent {
   title: string
   bullets: readonly string[]
   footer: readonly [string, string]
+  imageUrl?: string
+  pdfUrl?: string
+  aspectRatio?: AspectRatio
 }
 
 export interface QuizQuestion {
   q: string
-  opts: readonly [string, string, string]
-  correct: 0 | 1 | 2
+  opts: readonly string[]
+  correct: number
+  explanation?: string
 }
 
 export interface QuizContent {
   questions: readonly QuizQuestion[]
+  pdfUrl?: string
+  txtUrl?: string
 }
 
 export interface LabStep {
@@ -103,6 +111,9 @@ export interface RouteModule {
   type: string
   status: ContentStatus
   contents: readonly ModuleContentRef[]
+  lesson?: LessonContent
+  quiz?: QuizContent
+  lab?: LabContent
 }
 
 export interface SourceVideoPreview {
@@ -147,6 +158,7 @@ export interface CustomerContext {
     sizeKb: number
   }
   inferredFrom?: readonly ('url' | 'brief' | 'material')[]
+  companyName?: string
 }
 
 export type RouteId = '01' | '02' | '03' | '04' | '05' | '06' | '07'

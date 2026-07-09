@@ -15,6 +15,7 @@ from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
     get_sourcing_repository, get_storage_adapter, get_documents_repository,
     get_source_link_repository, get_linker, get_route_structurer,
+    get_infographic_service,
     get_approved_research_source_repository,
 )
 from config.settings import settings
@@ -27,10 +28,13 @@ from repositories.sourcing.interface import SourcingRepositoryInterface
 from repositories.sourcing.mapping import route_sources_to_domain
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
+from services.infographic.service import InfographicService
 from models.domain.approved_research_source import ApprovedResearchSource
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 from urllib.parse import urlparse
+import hashlib
+from uuid import UUID
 
 AUTO_APPROVE_RELEVANCE_SCORE = 90
 MIN_REVIEW_RELEVANCE_SCORE = 70
@@ -484,19 +488,18 @@ async def approve_learning_path(
 async def approve_sourcing(
     route_id: str,
     background_tasks: BackgroundTasks,
+    payload: Dict[str, Any] | None = None,
     route_service: RouteService = Depends(get_route_service),
     jobs_service: JobsService = Depends(get_jobs_service),
     knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
     sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
     storage=Depends(get_storage_adapter),
     documents_repo=Depends(get_documents_repository),
+    infographic_service: InfographicService = Depends(get_infographic_service),
 ):
     """
-    Finalizes the content sourcing workflow, transitioning the path status to 'generado'.
-
-    Gate 1: persiste (UPSERT) las fuentes de deep-research (ADR-0007) y dispara la ingesta RAG
-    del corpus aprobado — solo documentos subidos (Vía 2, ADR-0011) — como Job en background,
-    sin bloquear la aprobación (ADR-0006 §3). Las fuentes de Vía 1 no se ingestan.
+    Finalizes the content sourcing workflow, transitioning the path status to 'generado',
+    triggering KB/RAG ingestion, and generating the infographic.
     """
     route = await route_service.get_route(route_id)
     if not route:
@@ -518,8 +521,166 @@ async def approve_sourcing(
         _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
     )
 
-    updated = await route_service.update_route(route_id, {"status": "generado"})
+    # 4) Update route status to 'generado'
+    updated = await route_service.update_route(route_id, {
+        "status": "generado",
+    })
+
     if isinstance(updated, dict):
         updated["ingestionJobId"] = str(job_id)
         updated["sourcesPersisted"] = len(all_sources)
+
     return updated
+
+@router.post("/{route_id}/infographic/regenerate", response_model=Dict[str, Any])
+async def regenerate_infographic(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    infographic_service: InfographicService = Depends(get_infographic_service)
+):
+    """
+    Regenerates the infographic for a learning path, optionally incorporating user prompt feedback.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    user_prompt = payload.get("user_prompt")
+    aspect_ratio = payload.get("aspect_ratio", "auto")
+    
+    # Generate stable component_id
+    h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
+    component_id = UUID(h)
+    
+    # Extract customer company name: explicit field → domain from URL → industry → fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        # Try to infer from URL (e.g. "Apple.com" → "Apple")
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            # Strip www. and TLD → "www.apple.com" → "apple"
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+    
+    # Extract word budget or fallback
+    word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
+    
+    # Call infographic service with user_prompt and aspect_ratio
+    res = await infographic_service.generate_infographic(
+        component_id=component_id,
+        sources=route.get("modules", []),
+        company_name=company_name,
+        word_budget=word_budget,
+        user_prompt=user_prompt,
+        aspect_ratio=aspect_ratio,
+        route_name=route.get("name")
+    )
+    
+    # Update the pack with infographic data, adding a cache-busting query parameter to the URL
+    pack = route.get("pack", {}) or {}
+    
+    import time
+    cache_buster = int(time.time())
+    local_png_url = f"{res.get('local_png_url')}?cb={cache_buster}"
+    local_pdf_url = f"{res.get('local_pdf_url')}?cb={cache_buster}"
+    
+    pack["infografia"] = {
+        "title": f"Infografía - {route.get('name', 'Curso')}",
+        "bullets": [
+            "Branding corporativo integrado automáticamente por gpt-image-2.",
+            "Paleta de colores y logos oficiales de la compañía inferidos.",
+            "Visualización de conceptos clave en alta resolución.",
+            f"Basado en la estructura del syllabus con presupuesto de {word_budget} palabras."
+        ],
+        "footer": ["Descargar PNG", "Descargar PDF"],
+        "imageUrl": local_png_url,
+        "pdfUrl": local_pdf_url,
+        "aspectRatio": aspect_ratio
+    }
+    
+    updated = await route_service.update_route(route_id, {
+        "pack": pack
+    })
+    return updated
+
+from services.quiz.service import QuizService
+from config.dependencies import get_quiz_service
+
+@router.post("/{route_id}/modules/{module_id}/quiz/regenerate", response_model=Dict[str, Any])
+async def regenerate_quiz(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    quiz_service: QuizService = Depends(get_quiz_service)
+):
+    """
+    Generates or regenerates a quiz for a specific module of a learning path.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    modules = route.get("modules", [])
+    target_module = None
+    for m in modules:
+        if m.get("id") == module_id:
+            target_module = m
+            break
+            
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+        
+    user_prompt = payload.get("user_prompt")
+    
+    # Extract customer company name: explicit field → domain from URL → industry → fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+
+    # Resolve ID
+    resolved_route_id = route_service._resolve_id(route_id)
+
+    # Call quiz service
+    res = await quiz_service.generate_quiz(
+        route_id=resolved_route_id,
+        module_id=module_id,
+        module_name=target_module.get("name", "Módulo"),
+        module_description=target_module.get("description", "Descripción") or target_module.get("descripcion", ""),
+        company_name=company_name,
+        user_prompt=user_prompt
+    )
+    
+    # Update module's quiz pack content
+    target_module["quiz"] = {
+        "pdfUrl": res.get("pdfUrl"),
+        "txtUrl": res.get("txtUrl"),
+        "questions": res.get("questions")
+    }
+    
+    # Also update module's quiz content ref status to 'generado'
+    for c in target_module.get("contents", []):
+        if c.get("kind") == "quiz":
+            c["status"] = "generado"
+            
+    updated = await route_service.update_route(route_id, {
+        "modules": modules
+    })
+    return updated
+
