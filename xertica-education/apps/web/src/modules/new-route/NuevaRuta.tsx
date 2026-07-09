@@ -7,6 +7,7 @@ import {
   Building2,
   CheckCircle2,
   FileText,
+  FolderOpen,
   Globe2,
   MonitorPlay,
   Sparkles,
@@ -26,6 +27,8 @@ import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHea
 import { UploadStructureDialog } from '@/modules/new-route/components/UploadStructureDialog'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
+import { pickGoogleDriveFile } from '@/shared/lib/googleDrive'
+import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
 import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage } from '@/shared/lib/types'
 
 
@@ -126,6 +129,7 @@ export default function NuevaRuta() {
   const [dialogOpen, setDialogOpen] = useState(false)
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
   const [materialFiles, setMaterialFiles] = useState<File[]>([])
+  const [driveFiles, setDriveFiles] = useState<GoogleDriveSelection[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
@@ -202,6 +206,34 @@ export default function NuevaRuta() {
     syncPrimaryMeta(next)
   }
 
+  const attachDriveMaterial = async () => {
+    try {
+      const selected = await pickGoogleDriveFile()
+      if (!selected) return
+      setDriveFiles((current) => {
+        if (current.some((file) => file?.file_id === selected.file_id)) return current
+        return [...current, selected]
+      })
+      if (!customerContext.baseMaterialFile) {
+        updateCustomerContext({
+          baseMaterialFile: {
+            name: selected.name,
+            type: selected.mime_type,
+            sizeKb: 1,
+          },
+          inferredFrom: Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material'])),
+        })
+      }
+      toast.success('Archivo de Drive seleccionado', {
+        description: selected.name,
+      })
+    } catch (err) {
+      toast.error('No se pudo abrir Google Drive', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    }
+  }
+
   const propose = async () => {
     setGenerating(true)
     const routeCustomerContext = compactCustomerContext(customerContext)
@@ -237,6 +269,20 @@ export default function NuevaRuta() {
           })
         } catch (uploadErr) {
           toast.error(`No se pudo subir ${file.name}`, {
+            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          })
+        }
+      }
+
+      for (const file of driveFiles) {
+        try {
+          const uploaded = await api.uploadDriveDocument(newPath.id, file)
+          toast.loading('Documento de Drive importado · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          toast.error(`No se pudo importar ${file.name}`, {
             description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
           })
         }
@@ -409,45 +455,6 @@ export default function NuevaRuta() {
                       onChange={(e) => updateCustomerContext({ audienceLevel: e.target.value })}
                     />
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <Label>Propuesta del cliente</Label>
-                    <button
-                      type="button"
-                      onClick={() => baseMaterialInputRef.current?.click()}
-                      className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                    >
-                      <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-                      <div className="text-[13px]">Adjunta propuesta, temario o material base</div>
-                      <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                        DOCX · PDF · PPTX · XLSX · TXT
-                      </div>
-                    </button>
-                    {customerContext.baseMaterialFile && (
-                      <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-                        <FileText className="size-4 shrink-0 text-primary" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[13px] text-ink">
-                            {customerContext.baseMaterialFile.name}
-                          </div>
-                          <div className="font-mono text-[10.5px] text-muted-foreground">
-                            {customerContext.baseMaterialFile.sizeKb} KB · propuesta del cliente
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          onClick={() => {
-                            setMaterialFiles([])
-                            updateCustomerContext({ baseMaterialFile: undefined })
-                          }}
-                        >
-                          <X className="size-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
@@ -574,6 +581,9 @@ export default function NuevaRuta() {
               DOCX · PDF · PPTX · XLSX · TXT
             </div>
           </button>
+          <Button type="button" variant="outline-primary" onClick={attachDriveMaterial}>
+            <FolderOpen /> Seleccionar desde Google Drive
+          </Button>
           {materialFiles.length > 0 ? (
             <div className="flex flex-col gap-2">
               {materialFiles.map((file, index) => (
@@ -604,6 +614,33 @@ export default function NuevaRuta() {
             <span className="font-mono text-[11px] text-muted-foreground">
               Adjunta uno o varios archivos: informan la estructura y alimentan la base de conocimiento.
             </span>
+          )}
+          {driveFiles.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {driveFiles.map((file, index) => (
+                <div
+                  key={file.file_id}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FolderOpen className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      Google Drive · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => setDriveFiles((current) => current.filter((_, i) => i !== index))}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

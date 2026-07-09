@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowRight, CircleCheck, FileImage, FlaskConical, ListChecks, RefreshCcw, ShieldCheck, Video as VideoIcon, X } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, CircleCheck, ExternalLink, FileImage, FlaskConical, FolderUp, ListChecks, RefreshCcw, ShieldCheck, Video as VideoIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
@@ -15,6 +16,8 @@ import { QuizView } from '@/shared/content/QuizView'
 import { LabView } from '@/shared/content/LabView'
 import { getRoute } from '@/shared/data/routes'
 import { useStore } from '@/shared/store'
+import { api } from '@/shared/lib/api'
+import { authorizeGoogleDrive } from '@/shared/lib/googleDrive'
 
 export default function AssetFinal() {
   const { id } = useParams<{ id: string }>()
@@ -22,6 +25,8 @@ export default function AssetFinal() {
   const { routes, storyboardVideoUrlOf } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
   const videoUrl = route ? storyboardVideoUrlOf(route.id) : ''
+  const [savingDrive, setSavingDrive] = useState(false)
+  const [driveLink, setDriveLink] = useState<string | null>(null)
 
   if (!route) {
     return (
@@ -37,6 +42,32 @@ export default function AssetFinal() {
   const approve = () => {
     toast.success('Asset aprobado', { description: 'Publicando a Google Classroom…' })
     router.push(`/ruta/${route.id}/publicado`)
+  }
+
+  const saveToDrive = async () => {
+    if (!route) return
+    setSavingDrive(true)
+    const toastId = toast.loading('Guardando asset final en Google Drive...')
+    try {
+      const accessToken = await authorizeGoogleDrive()
+      const uploaded = await api.saveRouteToGoogleDrive(
+        route.id,
+        accessToken,
+        `${route.name || route.id} - asset final.md`,
+      )
+      setDriveLink(uploaded.web_view_link ?? null)
+      toast.success('Asset guardado en Google Drive', {
+        id: toastId,
+        description: uploaded.name,
+      })
+    } catch (err) {
+      toast.error('No se pudo guardar en Drive', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    } finally {
+      setSavingDrive(false)
+    }
   }
 
   return (
@@ -83,6 +114,16 @@ export default function AssetFinal() {
 
         <Separator className="mt-7 mb-5" />
         <div className="flex items-center justify-end gap-3">
+          {driveLink && (
+            <Button variant="outline-primary" asChild>
+              <a href={driveLink} target="_blank" rel="noreferrer">
+                <ExternalLink /> Open in Drive
+              </a>
+            </Button>
+          )}
+          <Button variant="outline-primary" onClick={saveToDrive} disabled={savingDrive}>
+            <FolderUp /> {savingDrive ? 'Guardando...' : 'Save to Google Drive'}
+          </Button>
           <Button
             variant="outline-destructive"
             onClick={() => toast.error('Asset rechazado', { description: 'El pipeline volverá a la etapa de generación.' })}
