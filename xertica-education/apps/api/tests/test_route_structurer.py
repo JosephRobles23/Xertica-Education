@@ -45,10 +45,18 @@ def test_normalize_raises_when_nothing_valid():
 
 # ── mock ───────────────────────────────────────────────────────────────────
 def test_mock_produces_valid_structure():
-    mods = asyncio.run(MockRouteStructurer().generate("brief", {"area": "TI"}, ["doc"]))
+    result = asyncio.run(MockRouteStructurer().generate("Ruta de nanobanana para marketing", {"area": "TI"}, ["doc"]))
+    assert result["title"] and result["tema"] and result["objective"]
+    mods = result["modules"]
     assert len(mods) == 2
     assert all("id" in m and "num" in m and m["contents"] for m in mods)
     assert all(c["status"] == "borrador" for m in mods for c in m["contents"])
+
+
+def test_mock_title_derives_from_brief():
+    result = asyncio.run(MockRouteStructurer().generate("Nano Banana para Marketing", {"industry": "Retail"}, []))
+    assert "Nano Banana" in result["title"]
+    assert result["tema"] == "Retail"
 
 
 # ── LLM service ────────────────────────────────────────────────────────────
@@ -67,11 +75,24 @@ def test_extract_json_handles_fences_and_prose():
 
 
 def test_llm_structurer_parses_and_normalizes():
+    reply = json.dumps({"title": "Ruta Nano Banana", "tema": "Marketing",
+                        "objective": "El estudiante creará campañas visuales con Nano Banana.", "modules": [
+        {"name": "Fundamentos", "type": "intro", "components": [{"kind": "lesson", "summary": "s"}]},
+    ]})
+    result = asyncio.run(LLMRouteStructurer(_FakeLLM(reply)).generate("b", {}, ["material"]))
+    assert result["title"] == "Ruta Nano Banana" and result["tema"] == "Marketing"
+    assert result["objective"] == "El estudiante creará campañas visuales con Nano Banana."
+    assert result["modules"][0]["name"] == "Fundamentos" and result["modules"][0]["id"] == "r1m1"
+
+
+def test_llm_structurer_falls_back_when_fields_missing():
     reply = json.dumps({"modules": [
         {"name": "Fundamentos", "type": "intro", "components": [{"kind": "lesson", "summary": "s"}]},
     ]})
-    mods = asyncio.run(LLMRouteStructurer(_FakeLLM(reply)).generate("b", {}, ["material"]))
-    assert mods[0]["name"] == "Fundamentos" and mods[0]["id"] == "r1m1"
+    result = asyncio.run(LLMRouteStructurer(_FakeLLM(reply)).generate("Curso de Veo 3", {"industry": "Media"}, []))
+    assert result["title"] == "Curso de Veo 3"   # fallback: primera línea del brief
+    assert result["tema"] == "Media"              # fallback: industria del contexto
+    assert result["objective"] == "Curso de Veo 3"  # fallback: el brief tal cual
 
 
 def test_llm_structurer_raises_on_garbage():
