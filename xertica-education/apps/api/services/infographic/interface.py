@@ -13,7 +13,8 @@ class InfographicServiceInterface(ABC):
         company_name: str,
         word_budget: int,
         user_prompt: str | None = None,
-        aspect_ratio: AspectRatio = "auto"
+        aspect_ratio: AspectRatio = "auto",
+        route_name: str | None = None
     ) -> Dict[str, Any]:
         """
         Generates infographic PNG (using gpt-image-2 via OpenAI API Key) and wraps it as a single-page PDF.

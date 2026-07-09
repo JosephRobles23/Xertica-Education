@@ -270,14 +270,6 @@ function CorpusSection({ route }: { route: LearningRoute }) {
   const sources = route.sources.filter((_, i) => !discarded.includes(i))
   const verified = sources.filter((s) => s.verified).length
   const [approvingCorpus, setApprovingCorpus] = useState(false)
-  const [initialAspectRatio, setInitialAspectRatio] = useState<string>('vertical')
-  const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
-    const key = source.toolName || 'Fuentes generales'
-    groups[key] = [...(groups[key] ?? []), { source, index: route.sources.indexOf(source) }]
-    return groups
-  }, {})
-  const detectedTools = Object.keys(groupedSources)
-
   return (
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
@@ -305,61 +297,9 @@ function CorpusSection({ route }: { route: LearningRoute }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {detectedTools.map((tool) => (
-          <div key={tool} className="rounded-xl border-[1.5px] border-secondary p-3">
-            <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div>
-                <h3 className="font-display text-[15px] font-medium text-ink">{tool}</h3>
-                <p className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
-                  {groupedSources[tool]?.length ?? 0} fuentes candidatas
-                </p>
-              </div>
-              <Badge variant="outline">
-                {groupedSources[tool]?.filter((item) => item.source.verified).length ?? 0} verificadas
-              </Badge>
-            </div>
-            <div className="flex flex-col gap-3">
-              {groupedSources[tool]?.map(({ source, index }) => (
-                <SourceCard
-                  key={`${source.title}-${index}`}
-                  source={source}
-                  approved={approved}
-                  onDiscard={() => {
-                    discardSource(route.id, index)
-                    toast.info('Fuente descartada', { description: source.title })
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {!approved && (
         <div className="mt-4 rounded-xl border border-secondary/50 bg-muted/30 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <FileImage className="size-3.5 text-muted-foreground" />
-                <span className="text-[12px] font-medium text-muted-foreground">Formato de infografía:</span>
-                <select
-                  value={initialAspectRatio}
-                  onChange={(e) => setInitialAspectRatio(e.target.value)}
-                  disabled={approvingCorpus}
-                  className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-                >
-                  <option value="vertical">Vertical (1024×1792)</option>
-                  <option value="horizontal">Horizontal (1792×1024)</option>
-                  <option value="square">Cuadrada (1024×1024)</option>
-                  <option value="auto">Automático (Vertical)</option>
-                </select>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                <Clock className="size-3" />
-                ~2-3 min · gpt-image-2
-              </span>
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <Button
               disabled={approvingCorpus}
               onClick={async () => {
@@ -369,7 +309,7 @@ function CorpusSection({ route }: { route: LearningRoute }) {
                   description: 'Esto puede tardar entre 2 y 3 minutos. No cierres esta página.',
                 })
                 try {
-                  await approveCorpus(route.id, initialAspectRatio)
+                  await approveCorpus(route.id, 'auto')
                   toast.success('Fuentes aprobadas e infografía generada ✨', {
                     id: 'approve-sourcing',
                     description: `${verified} fuentes verificadas alimentan la base de conocimiento. La infografía está lista para revisión.`,
@@ -424,6 +364,7 @@ function VideoRecommendationPanel({
   onFindAnother: () => void
   findingAnother: boolean
   onUseAiVideo: () => void
+  onSelectYoutube: (source: Source) => void
   onRelink: () => void
   relinking: boolean
   linkOrigin?: 'llm' | 'heuristic' | null
@@ -524,6 +465,9 @@ function VideoRecommendationPanel({
           variant={selectedMode === 'youtube' ? 'success' : 'outline-primary'}
           disabled={!recommendedSource?.videoPreview}
           onClick={() => {
+            if (recommendedSource) {
+              onSelectYoutube(recommendedSource)
+            }
             setSelectedMode('youtube')
             toast.success('Video de YouTube seleccionado', {
               description: recommendedSource?.title ?? content.summary,
@@ -600,6 +544,7 @@ function SourceApprovalPanel({
     (source) =>
       isDocumentationSource(source) &&
       !source.verified &&
+      source.status !== 'approved' &&
       source.status !== 'rejected' &&
       Boolean(source.url) &&
       !reviewedUrls.has(source.url ?? ''),
@@ -752,6 +697,7 @@ function ContentReviewPanel({
     isLabGuideApproved,
     storyboardVideoUrlOf,
     replaceRouteSources,
+    fetchRoutes,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
@@ -865,6 +811,29 @@ function ContentReviewPanel({
     }
   }
 
+  const selectYoutubeForModule = async (source: Source) => {
+    if (!source.url) return
+    try {
+      await api.request(`/learning-paths/${route.id}/research-sources/review`, {
+        method: 'POST',
+        body: JSON.stringify({ url: source.url, action: 'approve', moduleId: module.id }),
+      })
+      setLinkedUrl(source.url)
+      setLinkOrigin('heuristic')
+      replaceRouteSources(
+        route.id,
+        route.sources.map((item) =>
+          item.url === source.url ? { ...item, status: 'approved' as const } : item,
+        ),
+      )
+    } catch (err) {
+      toast.error('No se pudo aprobar el video', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+      throw err
+    }
+  }
+
   const approveButton = (
     <Button
       variant={status === 'aprobado' ? 'outline' : 'success'}
@@ -903,7 +872,34 @@ function ContentReviewPanel({
           {approveButton}
           <RefinePopover
             label={label}
-            onRefine={() => refineContent(route.id, module.id, content.kind)}
+            onRefine={async (prompt) => {
+              if (content.kind === 'infografia') {
+                const toastId = toast.loading('Regenerando infografía con tu feedback…', {
+                  description: 'Generando con gpt-image-2. Esto puede tardar entre 2 y 3 minutos.',
+                })
+                try {
+                  const currentRatio = route.pack?.infografia?.aspectRatio || 'auto'
+                  await api.request(`/learning-paths/${route.id}/infographic/regenerate`, {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                      user_prompt: prompt,
+                      aspect_ratio: currentRatio
+                    }),
+                  })
+                  refineContent(route.id, module.id, content.kind)
+                  await fetchRoutes()
+                  toast.success('Infografía regenerada con éxito', { id: toastId })
+                } catch (e) {
+                  console.error(e)
+                  toast.error('Error al regenerar la infografía', {
+                    id: toastId,
+                    description: e instanceof Error ? e.message : 'Error desconocido',
+                  })
+                }
+              } else {
+                refineContent(route.id, module.id, content.kind)
+              }
+            }}
           >
             <Button variant="outline-primary" size="sm">
               <Sparkles /> Refinar
@@ -921,6 +917,7 @@ function ContentReviewPanel({
           findingAnother={findingAnotherVideo}
           storyboardVideoUrl={storyboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
+          onSelectYoutube={selectYoutubeForModule}
           onRelink={relinkWithAI}
           relinking={relinking}
           linkOrigin={linkOrigin}
@@ -1028,6 +1025,12 @@ export default function Ruta() {
     selectedModuleContents.length > 0 && approvedAssets === selectedModuleContents.length
   const isFirstModule = selectedModuleIndex === 0
   const isLastModule = selectedModuleIndex >= route.modules.length - 1
+  const approvedOrVerifiedSourceCount = route.sources.filter(
+    (source) => source.verified || source.status === 'approved',
+  ).length
+  const pendingReviewSourceCount = route.sources.filter(
+    (source) => !source.verified && source.status !== 'approved' && source.status !== 'rejected',
+  ).length
 
   const goToModule = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
@@ -1303,15 +1306,13 @@ export default function Ruta() {
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-success" />
           <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => s.verified).length}</b> fuentes
-            verificadas
+            <b className="text-ink">{approvedOrVerifiedSourceCount}</b> fuentes aprobadas/verificadas
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-destructive" />
           <span className="text-[13px]">
-            <b className="text-ink">{route.sources.filter((s) => !s.verified).length}</b> sin
-            verificar
+            <b className="text-ink">{pendingReviewSourceCount}</b> pendientes de revisión
           </span>
         </div>
         <Separator className="bg-secondary" />

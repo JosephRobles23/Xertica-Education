@@ -24,7 +24,7 @@ export function ContentPreview({
     case 'video':
       return <VideoFrame video={pack.video} videoUrl={videoUrl} compact />
     case 'infografia':
-      return <InfografiaView info={pack.infografia} compact className="justify-start" routeId={routeId} />
+      return <InfografiaView info={pack.infografia} className="justify-start" routeId={routeId} />
     case 'quiz':
       return <QuizView quiz={pack.quiz} routeId={routeId} moduleId={moduleId} />
     case 'lab':

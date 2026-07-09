@@ -524,7 +524,8 @@ async def regenerate_infographic(
         company_name=company_name,
         word_budget=word_budget,
         user_prompt=user_prompt,
-        aspect_ratio=aspect_ratio
+        aspect_ratio=aspect_ratio,
+        route_name=route.get("name")
     )
     
     # Update the pack with infographic data, adding a cache-busting query parameter to the URL

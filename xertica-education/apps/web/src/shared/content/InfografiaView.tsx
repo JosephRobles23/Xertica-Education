@@ -161,7 +161,7 @@ export function InfografiaView({
           <div className={cn('flex flex-col gap-3.5 rounded-lg border-[1.5px] border-input bg-card p-4 shadow-sm', containerWidth)}>
             <div className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
               <Sparkles className="size-4 text-primary" />
-              ¿Quieres ajustar el diseño o cambiar formato?
+              Refina la infografía generada por la IA
             </div>
             
             {/* Format selector */}
@@ -188,44 +188,13 @@ export function InfografiaView({
             </div>
 
             {/* Alerta de tiempo estimado para regeneración */}
-            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 dark:bg-amber-950/30 dark:border-amber-900/50">
-              <Clock className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-              <span className="text-[11px] leading-snug text-amber-700 dark:text-amber-400">
-                La generación con <span className="font-semibold">gpt-image-2</span> tarda entre <span className="font-semibold">2 y 3 minutos</span>.
+            <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2">
+              <Clock className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-[11.5px] leading-snug text-muted-foreground">
+                La generación con <span className="font-semibold text-ink">gpt-image-2</span> tarda entre <span className="font-semibold text-ink">2 y 3 minutos</span>.
               </span>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ajuste de contenido / prompt adicional:</span>
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Describe los cambios que te gustaría ver (colores, distribución, detalles) y la IA generará una nueva versión.
-              </p>
-              <Textarea
-                rows={2}
-                placeholder="Ej: Utiliza colores neón más llamativos y coloca el logotipo centrado..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                disabled={regenerating}
-                className="text-[12px] min-h-[50px] resize-none"
-              />
-              <div className="flex justify-end mt-1">
-                <Button
-                  size="sm"
-                  onClick={() => handleRegenerate()}
-                  disabled={regenerating || !feedback.trim()}
-                  className="text-xs"
-                >
-                  {regenerating ? (
-                    <>
-                      <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                      Regenerando...
-                    </>
-                  ) : (
-                    'Aplicar y Regenerar'
-                  )}
-                </Button>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -292,6 +261,20 @@ export function InfografiaView({
         {/* On-demand Generation Button */}
         {routeId && (
           <div className="mt-2 border-t pt-3 flex flex-col gap-2 w-full">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Formato:</span>
+              <select
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
+                disabled={regenerating}
+                className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              >
+                <option value="vertical">Vertical (1024×1792)</option>
+                <option value="horizontal">Horizontal (1792×1024)</option>
+                <option value="square">Cuadrada (1024×1024)</option>
+                <option value="auto">Automático (Vertical)</option>
+              </select>
+            </div>
             {regenerating ? (
               <Button disabled className="w-full text-xs gap-1.5 h-8">
                 <Loader2 className="size-3.5 animate-spin" /> Generando con IA...
@@ -299,9 +282,9 @@ export function InfografiaView({
             ) : (
               <Button
                 className="w-full text-xs gap-1.5 h-8"
-                onClick={() => handleRegenerate('auto')}
+                onClick={() => handleRegenerate(aspectRatio)}
               >
-                <Sparkles className="size-3.5" /> Crear infografía
+                <Sparkles className="size-3.5" /> Refinar
               </Button>
             )}
           </div>
