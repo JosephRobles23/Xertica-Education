@@ -35,7 +35,7 @@ class _FakeJobs:
     def __init__(self):
         self.status = None
 
-    async def update_job_status(self, job_id, status):
+    async def update_job_status(self, job_id, status, error=None):
         self.status = status
 
 

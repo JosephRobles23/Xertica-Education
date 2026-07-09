@@ -52,10 +52,14 @@ class JobsService:
         updated_job = await self.repository.update(job_id, updates)
         return updated_job
 
-    async def update_job_status(self, job_id: UUID, status: JobStatus) -> bool:
+    async def update_job_status(self, job_id: UUID, status: JobStatus, error: Optional[str] = None) -> bool:
         """Updates the status of a job directly."""
-        updated = await self.repository.update(job_id, {
+        data = {
             "status": status,
             "updated_at": datetime.now(timezone.utc)
-        })
+        }
+        if error is not None:
+            data["error"] = error
+        updated = await self.repository.update(job_id, data)
         return updated is not None
+
