@@ -33,5 +33,6 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0012](0012-pacing-y-densidad-visual-de-guion.md) · Video ⚠️ | Pacing y densidad visual de guión | Aceptado |
 | [0013](0013-parse-at-upload-parsed-md.md) · KB | Parse-at-upload (`documents.parsed_md`) | Aceptado |
 | [0014](0014-structure-generation-llm.md) · KB | Estructura Propuesta vía LLM (Gate 0) | Aceptado |
+| [0015](0015-approved-research-sources.md) · Research | URLs aprobadas fuera de la KB | Aceptado |
 
 > ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.
