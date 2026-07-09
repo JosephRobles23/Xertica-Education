@@ -1,242 +1,250 @@
+'use client'
+
 import { useState } from 'react'
-import { Check, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, Download, Loader2, RotateCcw, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
+import { Textarea } from '@/shared/ui/textarea'
 import { cn } from '@/shared/lib/utils'
-import type { QuizContent, QuizQuestion } from '@/shared/lib/types'
+import type { QuizContent } from '@/shared/lib/types'
+import { api } from '@/shared/lib/api'
+import { useStore } from '@/shared/store'
 
-export function QuizView({ quiz, className }: { quiz: QuizContent; className?: string }) {
-  const [questions, setQuestions] = useState<QuizQuestion[]>([...quiz.questions])
-  const [answers, setAnswers] = useState<Record<number, number>>({})
-  const [done, setDone] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [newQ, setNewQ] = useState('')
-  const [newOpts, setNewOpts] = useState(['', '', ''])
-  const [newCorrect, setNewCorrect] = useState(0)
+export function QuizView({
+  quiz,
+  className,
+  routeId,
+  moduleId,
+}: {
+  quiz: QuizContent
+  className?: string
+  routeId?: string
+  moduleId?: string
+}) {
+  const [feedback, setFeedback] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const { fetchRoutes } = useStore()
 
-  const total = questions.length
-  const answered = Object.keys(answers).length
-  const score = questions.reduce(
-    (n, q, i) => n + (answers[i] === q.correct ? 1 : 0),
-    0,
-  )
+  const hasQuiz = quiz && quiz.questions && quiz.questions.length > 0
 
-  const submit = () => {
-    setDone(true)
-    toast[score === total ? 'success' : 'info'](
-      `Resultado: ${score} de ${total} correctas`,
-      { description: score === total ? '¡Dominio completo!' : 'Revisa las marcadas en rojo y reintenta.' },
+  const handleGenerate = async () => {
+    if (!routeId || !moduleId) return
+    setGenerating(true)
+    const toastLabel = hasQuiz ? 'Regenerando Quiz con tu feedback…' : 'Creando Quiz por primera vez…'
+    const toastId = toast.loading(toastLabel, {
+      description: 'Generando el Quiz en PDF y TXT. Esto puede tardar unos segundos.',
+    })
+    try {
+      await api.request(`/learning-paths/${routeId}/modules/${moduleId}/quiz/regenerate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_prompt: feedback,
+        }),
+      })
+      await fetchRoutes()
+      toast.success('Quiz generado con éxito', { id: toastId })
+      setFeedback('')
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al generar el Quiz', {
+        id: toastId,
+        description: e instanceof Error ? e.message : 'Error desconocido',
+      })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const triggerDownload = async (url: string, filename: string, type: string) => {
+    setDownloading(type)
+    const toastId = toast.loading(`Preparando descarga de ${type.toUpperCase()}...`)
+    try {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Network response was not ok')
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+      toast.success(`${type.toUpperCase()} descargado con éxito`, { id: toastId })
+    } catch (e) {
+      console.error(e)
+      toast.error(`Error al descargar ${type.toUpperCase()}. Abriendo en nueva pestaña...`, { id: toastId })
+      window.open(url, '_blank')
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  if (!hasQuiz) {
+    return (
+      <div className={cn('flex flex-col items-center justify-center p-8 border-[1.5px] border-dashed border-input rounded-xl bg-card text-center gap-4', className)}>
+        <div className="max-w-md">
+          <h4 className="font-display text-[15px] font-medium text-ink mb-1">Este módulo no tiene un Quiz generado</h4>
+          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+            Genera un quiz de opción múltiple basado en el nombre y tema del módulo, descargable en PDF y TXT.
+          </p>
+        </div>
+        <Button onClick={handleGenerate} disabled={generating} size="sm">
+          {generating ? (
+            <>
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Generando...
+            </>
+          ) : (
+            <>
+              <Sparkles /> Generar Quiz
+            </>
+          )}
+        </Button>
+      </div>
     )
   }
 
-  const reset = () => {
-    setAnswers({})
-    setDone(false)
-  }
-
-  const refineQuestion = (qi: number) => {
-    toast.loading('Refinando pregunta con IA…', { id: `refine-${qi}` })
-    window.setTimeout(() => {
-      setQuestions((prev) => {
-        const next = [...prev]
-        const q = next[qi]
-        if (!q) return prev
-        next[qi] = { ...q, q: q.q + ' (refinada por IA)' }
-        return next
-      })
-      toast.success('Pregunta refinada', {
-        id: `refine-${qi}`,
-        description: 'La IA ajustó la redacción para mayor claridad.',
-      })
-    }, 800)
-  }
-
-  const addQuestion = () => {
-    if (!newQ.trim() || newOpts.some((o) => !o.trim())) {
-      toast.error('Completa todos los campos')
-      return
-    }
-    setQuestions((prev) => [
-      ...prev,
-      { q: newQ.trim(), opts: [newOpts[0]!.trim(), newOpts[1]!.trim(), newOpts[2]!.trim()], correct: newCorrect as 0 | 1 | 2 },
-    ])
-    setNewQ('')
-    setNewOpts(['', '', ''])
-    setNewCorrect(0)
-    setAdding(false)
-    setDone(false)
-    setAnswers({})
-    toast.success('Pregunta agregada')
-  }
-
-  const removeQuestion = (qi: number) => {
-    setQuestions((prev) => prev.filter((_, i) => i !== qi))
-    setAnswers({})
-    setDone(false)
-    toast.info('Pregunta eliminada')
-  }
-
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
-      {questions.map((q, qi) => (
-        <div key={qi} className="rounded-xl border-[1.5px] bg-card p-4.5">
-          <div className="mb-3 flex gap-2.5">
-            <span className="font-mono text-xs font-semibold text-primary">
-              {String(qi + 1).padStart(2, '0')}
-            </span>
-            <span className="flex-1 text-sm font-medium leading-snug text-ink">{q.q}</span>
-            {!done && (
-              <div className="flex shrink-0 gap-1">
-                <button
-                  type="button"
-                  onClick={() => refineQuestion(qi)}
-                  className="flex size-6 cursor-pointer items-center justify-center rounded-md text-primary transition-colors outline-none hover:bg-primary/10 focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                  title="Refinar con IA"
-                >
-                  <Sparkles className="size-3.5" />
-                </button>
-                {questions.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeQuestion(qi)}
-                    className="flex size-6 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors outline-none hover:bg-destructive/10 focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                    title="Eliminar pregunta"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
+    <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-6', className)}>
+      {/* Columna Izquierda: Previsualización de Preguntas en Pantalla */}
+      <div className="md:col-span-2 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+            Previsualización de Preguntas
+          </span>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {quiz.questions.length} Preguntas
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1">
+          {quiz.questions.map((q, qi) => (
+            <div key={qi} className="rounded-xl border-[1.5px] bg-card p-4">
+              <div className="mb-2.5 flex gap-2">
+                <span className="font-mono text-xs font-semibold text-primary">
+                  {String(qi + 1).padStart(2, '0')}
+                </span>
+                <span className="text-[13.5px] font-semibold leading-snug text-ink">{q.q}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5 pl-5">
+                {q.opts.map((opt, oi) => {
+                  const isCorrect = oi === q.correct
+                  return (
+                    <div
+                      key={oi}
+                      className={cn(
+                        'flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12.5px] border border-transparent',
+                        isCorrect
+                          ? 'bg-success/8 text-success font-medium border-success/20'
+                          : 'text-muted-foreground'
+                      )}
+                    >
+                      <span className={cn(
+                        'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold border',
+                        isCorrect
+                          ? 'bg-success text-success-foreground border-success'
+                          : 'bg-secondary text-muted-foreground border-border'
+                      )}>
+                        {isCorrect ? <Check className="size-2.5" strokeWidth={3} /> : String.fromCharCode(65 + oi)}
+                      </span>
+                      <span>{opt}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {q.explanation && (
+                <div className="mt-3 pl-5 text-[11.5px] text-muted-foreground leading-relaxed border-t border-secondary pt-2">
+                  <span className="font-semibold text-ink">Explicación:</span> {q.explanation}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Columna Derecha: Descargas y Regeneración */}
+      <div className="flex flex-col gap-4">
+        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+          Acciones y Descarga
+        </span>
+
+        <div className="rounded-xl border-[1.5px] bg-card p-4.5 flex flex-col gap-4 shadow-(--shadow-soft)">
+          <div>
+            <h4 className="text-[13px] font-semibold text-ink mb-1">Descargar Fichas</h4>
+            <p className="text-[11.5px] text-muted-foreground leading-snug">
+              Obtén el quiz formateado listo para imprimir o compartir con tus estudiantes.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {quiz.pdfUrl ? (
+              <button
+                type="button"
+                onClick={() => triggerDownload(quiz.pdfUrl!, `Quiz_${moduleId}.pdf`, 'pdf')}
+                disabled={downloading !== null}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary/10 font-mono text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center cursor-pointer disabled:opacity-50"
+              >
+                <Download className="size-3.5" /> Descargar PDF
+              </button>
+            ) : (
+              <div className="flex h-9 w-full items-center justify-center rounded-md bg-secondary font-mono text-[11px] font-semibold text-muted-foreground opacity-50">
+                PDF no disponible
+              </div>
+            )}
+
+            {quiz.txtUrl ? (
+              <button
+                type="button"
+                onClick={() => triggerDownload(quiz.txtUrl!, `Quiz_${moduleId}.txt`, 'txt')}
+                disabled={downloading !== null}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-success/12 font-mono text-[11px] font-semibold text-success transition-colors hover:bg-success/20 text-center cursor-pointer disabled:opacity-50"
+              >
+                <Download className="size-3.5" /> Descargar TXT
+              </button>
+            ) : (
+              <div className="flex h-9 w-full items-center justify-center rounded-md bg-secondary font-mono text-[11px] font-semibold text-muted-foreground opacity-50">
+                TXT no disponible
               </div>
             )}
           </div>
-          <div className="flex flex-col gap-2">
-            {q.opts.map((opt, oi) => {
-              const picked = answers[qi] === oi
-              const isCorrect = oi === q.correct
-              const showCorrect = done && isCorrect
-              const showWrong = done && picked && !isCorrect
-
-              return (
-                <button
-                  key={oi}
-                  type="button"
-                  disabled={done}
-                  onClick={() => setAnswers((a) => ({ ...a, [qi]: oi }))}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5 text-left text-[13.5px] transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
-                    'disabled:cursor-default',
-                    showCorrect
-                      ? 'border-success bg-success/10 text-ink'
-                      : showWrong
-                        ? 'border-destructive bg-destructive/8 text-ink'
-                        : picked
-                          ? 'border-primary bg-primary/8 text-ink'
-                          : 'border-border bg-card hover:border-input',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'flex size-5 shrink-0 items-center justify-center rounded-full border-[1.5px] font-mono text-[11px] font-bold',
-                      showCorrect
-                        ? 'border-success text-success'
-                        : showWrong
-                          ? 'border-destructive text-destructive'
-                          : picked
-                            ? 'border-primary text-primary'
-                            : 'border-input text-input',
-                    )}
-                  >
-                    {showCorrect ? (
-                      <Check className="size-3" strokeWidth={3} />
-                    ) : showWrong ? (
-                      <X className="size-3" strokeWidth={3} />
-                    ) : (
-                      String.fromCharCode(65 + oi)
-                    )}
-                  </span>
-                  {opt}
-                </button>
-              )
-            })}
-          </div>
         </div>
-      ))}
 
-      {/* Formulario para agregar pregunta */}
-      {adding && (
-        <div className="rounded-xl border-[1.5px] border-primary bg-primary/5 p-4.5">
-          <div className="mb-3 flex items-center gap-2">
-            <Plus className="size-4 text-primary" />
-            <span className="text-[13.5px] font-semibold text-ink">Nueva pregunta</span>
+        <div className="rounded-xl border-[1.5px] bg-card p-4.5 flex flex-col gap-3.5 shadow-(--shadow-soft)">
+          <div className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+            <Sparkles className="size-4 text-primary" />
+            ¿Quieres otras preguntas?
           </div>
-          <input
-            type="text"
-            placeholder="Escribe la pregunta…"
-            value={newQ}
-            onChange={(e) => setNewQ(e.target.value)}
-            className="mb-3 w-full rounded-lg border-[1.5px] border-border bg-card px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-          />
-          <div className="mb-3 flex flex-col gap-2">
-            {newOpts.map((opt, oi) => (
-              <div key={oi} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewCorrect(oi)}
-                  className={cn(
-                    'flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-[1.5px] font-mono text-[11px] font-bold transition-colors',
-                    newCorrect === oi
-                      ? 'border-success bg-success/15 text-success'
-                      : 'border-input text-input',
-                  )}
-                >
-                  {newCorrect === oi ? <Check className="size-3" strokeWidth={3} /> : String.fromCharCode(65 + oi)}
-                </button>
-                <input
-                  type="text"
-                  placeholder={`Opción ${String.fromCharCode(65 + oi)}`}
-                  value={opt}
-                  onChange={(e) => {
-                    const next = [...newOpts]
-                    next[oi] = e.target.value
-                    setNewOpts(next)
-                  }}
-                  className="flex-1 rounded-lg border-[1.5px] border-border bg-card px-3 py-2 text-[13px] outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-                />
-              </div>
-            ))}
-          </div>
-          <p className="mb-3 text-[11px] text-muted-foreground">
-            Haz clic en la letra para marcar la respuesta correcta.
+          <p className="text-[11.5px] text-muted-foreground leading-snug">
+            Describe los temas adicionales o el enfoque que deseas para regenerar el Quiz con nuevas preguntas.
           </p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={addQuestion}>
-              <Plus /> Agregar
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setAdding(false)}>
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      )}
 
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {done ? `Puntaje: ${score}/${total}` : `${answered}/${total} respondidas`}
-        </span>
-        <div className="flex gap-2">
-          {!done && !adding && (
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              <Plus /> Agregar pregunta
-            </Button>
-          )}
-          {done ? (
-            <Button variant="outline" size="sm" onClick={reset}>
-              <RotateCcw /> Reintentar
-            </Button>
-          ) : (
-            <Button size="sm" disabled={answered < total} onClick={submit}>
-              Enviar respuestas
-            </Button>
-          )}
+          <Textarea
+            rows={3}
+            placeholder="Ej: Incluye preguntas sobre buenas prácticas y haz énfasis en la diferencia entre listas y tuplas..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            disabled={generating}
+            className="text-[11.5px] resize-none"
+          />
+
+          <Button
+            onClick={handleGenerate}
+            disabled={generating || !feedback.trim()}
+            size="sm"
+            className="w-full text-xs"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Regenerando...
+              </>
+            ) : (
+              <>
+                <RotateCcw /> Regenerar con Feedback
+              </>
+            )}
+          </Button>
         </div>
       </div>
     </div>

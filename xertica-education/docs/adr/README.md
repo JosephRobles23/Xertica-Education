@@ -38,5 +38,7 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0016](0016-approved-research-sources.md) · Research | URLs aprobadas fuera de la KB | Aceptado |
 | [0016](0016-video-render-artifact-retention.md) · Video | Retención de artefactos de render de video | Aceptado |
 | [0017](0017-concept-explanation-video-quality-strategy.md) · Video | Estrategia de calidad para Videos de Explicación Conceptual | Aceptado |
+| [0017](0017-deep-research-source-review-policy.md) · Research | Política de revisión de fuentes de Deep Research | Aceptado |
+| [0018](0018-infografia-quiz-generation-flows.md) · Assets | Flujos de generacion de Infografia y Quiz | Aceptado |
 
 > ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.
