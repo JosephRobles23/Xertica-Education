@@ -12,7 +12,9 @@ import {
   ChevronRight,
   CircleCheck,
   Clapperboard,
+  Clock,
   ExternalLink,
+  FileImage,
   FileText,
   FlaskConical,
   Info,
@@ -266,6 +268,7 @@ function CorpusSection({ route }: { route: LearningRoute }) {
   const discarded = discardedSources(route.id)
   const sources = route.sources.filter((_, i) => !discarded.includes(i))
   const verified = sources.filter((s) => s.verified).length
+  const [approvingCorpus, setApprovingCorpus] = useState(false)
   const [initialAspectRatio, setInitialAspectRatio] = useState<string>('vertical')
   const groupedSources = sources.reduce<Record<string, { source: Source; index: number }[]>>((groups, source) => {
     const key = source.toolName || 'Fuentes generales'
@@ -333,36 +336,67 @@ function CorpusSection({ route }: { route: LearningRoute }) {
       </div>
 
       {!approved && (
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-4 bg-muted/30 p-3 rounded-xl border border-secondary/50">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-medium text-muted-foreground">Formato de infografía:</span>
-            <select
-              value={initialAspectRatio}
-              onChange={(e) => setInitialAspectRatio(e.target.value)}
-              className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="vertical">Vertical (1024x1792)</option>
-              <option value="horizontal">Horizontal (1792x1024)</option>
-              <option value="square">Cuadrada (1024x1024)</option>
-              <option value="auto">Automático (Vertical)</option>
-            </select>
-          </div>
-          <Button
-            onClick={async () => {
-              toast.loading('Aprobando fuentes y generando infografía...', { id: 'approve-sourcing' })
-              try {
-                await approveCorpus(route.id, initialAspectRatio)
-                toast.success('Fuentes aprobadas e infografía generada', {
+        <div className="mt-4 rounded-xl border border-secondary/50 bg-muted/30 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <FileImage className="size-3.5 text-muted-foreground" />
+                <span className="text-[12px] font-medium text-muted-foreground">Formato de infografía:</span>
+                <select
+                  value={initialAspectRatio}
+                  onChange={(e) => setInitialAspectRatio(e.target.value)}
+                  disabled={approvingCorpus}
+                  className="h-8 rounded-md border border-input bg-card px-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                >
+                  <option value="vertical">Vertical (1024×1792)</option>
+                  <option value="horizontal">Horizontal (1792×1024)</option>
+                  <option value="square">Cuadrada (1024×1024)</option>
+                  <option value="auto">Automático (Vertical)</option>
+                </select>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                <Clock className="size-3" />
+                ~2-3 min · gpt-image-2
+              </span>
+            </div>
+            <Button
+              disabled={approvingCorpus}
+              onClick={async () => {
+                setApprovingCorpus(true)
+                toast.loading('Aprobando fuentes y generando infografía…', {
                   id: 'approve-sourcing',
-                  description: `${verified} fuentes verificadas alimentan la base de conocimiento.`,
+                  description: 'Esto puede tardar entre 2 y 3 minutos. No cierres esta página.',
                 })
-              } catch (e) {
-                toast.error('Error al aprobar fuentes', { id: 'approve-sourcing' })
-              }
-            }}
-          >
-            Aprobar fuentes <ArrowRight />
-          </Button>
+                try {
+                  await approveCorpus(route.id, initialAspectRatio)
+                  toast.success('Fuentes aprobadas e infografía generada ✨', {
+                    id: 'approve-sourcing',
+                    description: `${verified} fuentes verificadas alimentan la base de conocimiento. La infografía está lista para revisión.`,
+                  })
+                } catch (e) {
+                  toast.error('Error al aprobar fuentes o generar infografía', {
+                    id: 'approve-sourcing',
+                    description: e instanceof Error ? e.message : 'Verifica que la API key de OpenAI esté activa y con créditos.',
+                  })
+                } finally {
+                  setApprovingCorpus(false)
+                }
+              }}
+            >
+              {approvingCorpus ? (
+                <>
+                  <Loader2 className="animate-spin" /> Generando infografía…
+                </>
+              ) : (
+                <>
+                  Aprobar fuentes <ArrowRight />
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            Al aprobar se generará la infografía del curso con IA. Podrás refinarla o cambiar formato después.
+          </p>
         </div>
       )}
     </section>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Download, Loader2, Sparkles } from 'lucide-react'
+import { CheckCircle2, Clock, Download, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import type { InfografiaContent, AspectRatio } from '@/shared/lib/types'
 import { useStore } from '@/shared/store'
@@ -32,8 +32,8 @@ export function InfografiaView({
     if (!routeId) return
     const ratioToUse = targetRatio || aspectRatio
     setRegenerating(true)
-    const toastId = toast.loading('Regenerando infografía con tu feedback...', {
-      description: `Llamando a OpenAI (gpt-image-2) con formato ${ratioToUse}...`,
+    const toastId = toast.loading('Regenerando infografía con tu feedback…', {
+      description: `Generando con gpt-image-2 en formato ${ratioToUse}. Esto puede tardar entre 2 y 3 minutos.`,
     })
     try {
       await api.request(`/learning-paths/${routeId}/infographic/regenerate`, {
@@ -171,7 +171,7 @@ export function InfografiaView({
                   <Button
                     key={ratio}
                     size="sm"
-                    variant={aspectRatio === ratio ? 'primary' : 'outline'}
+                    variant={aspectRatio === ratio ? 'default' : 'outline'}
                     className="capitalize text-[10.5px] h-7 px-2.5"
                     onClick={() => {
                       setAspectRatio(ratio)
@@ -186,7 +186,13 @@ export function InfografiaView({
               </div>
             </div>
 
-            <div className="h-px bg-secondary" />
+            {/* Alerta de tiempo estimado para regeneración */}
+            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 dark:bg-amber-950/30 dark:border-amber-900/50">
+              <Clock className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+                La generación con <span className="font-semibold">gpt-image-2</span> tarda entre <span className="font-semibold">2 y 3 minutos</span>.
+              </span>
+            </div>
 
             <div className="flex flex-col gap-2">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ajuste de contenido / prompt adicional:</span>

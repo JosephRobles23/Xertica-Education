@@ -470,6 +470,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       await fetchRoutes()
     } catch (e) {
       console.error('Failed to approve corpus', e)
+      throw e
     }
   }, [fetchRoutes])
 
