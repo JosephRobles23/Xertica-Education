@@ -32,6 +32,11 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 from urllib.parse import urlparse
 
+AUTO_APPROVE_RELEVANCE_SCORE = 90
+MIN_REVIEW_RELEVANCE_SCORE = 70
+MAX_MANUAL_REVIEW_SOURCES = 5
+REVIEWABLE_SOURCE_KINDS = {"documentation", "article"}
+
 
 def _to_approved_research_source(
     route_id: str,
@@ -56,6 +61,56 @@ def _to_approved_research_source(
         approved_at=datetime.now(timezone.utc),
         metadata=source.get("metadata") or {},
     )
+
+
+def _source_relevance_score(source: dict) -> int:
+    score = source.get("relevanceScore")
+    try:
+        return int(score)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _is_reviewable_source(source: dict) -> bool:
+    return source.get("kind") in REVIEWABLE_SOURCE_KINDS and bool(source.get("url"))
+
+
+def _prepare_research_sources_for_route(sources: list[dict]) -> tuple[list[dict], list[dict]]:
+    route_sources: list[dict] = []
+    auto_approved: list[dict] = []
+    manual_candidates: list[dict] = []
+
+    for source in sources:
+        if not _is_reviewable_source(source):
+            route_sources.append(source)
+            continue
+
+        score = _source_relevance_score(source)
+        if source.get("verified") or score > AUTO_APPROVE_RELEVANCE_SCORE:
+            approved_source = {
+                **source,
+                "verified": True,
+                "status": "approved",
+            }
+            route_sources.append(approved_source)
+            auto_approved.append(approved_source)
+        elif score < MIN_REVIEW_RELEVANCE_SCORE:
+            route_sources.append({**source, "status": "rejected"})
+        else:
+            manual_candidates.append({**source, "status": "requires-review"})
+
+    manual_candidates = sorted(
+        manual_candidates,
+        key=_source_relevance_score,
+        reverse=True,
+    )
+    route_sources.extend(manual_candidates[:MAX_MANUAL_REVIEW_SOURCES])
+    route_sources.extend(
+        {**source, "status": "rejected"}
+        for source in manual_candidates[MAX_MANUAL_REVIEW_SOURCES:]
+    )
+    return route_sources, auto_approved
+
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +275,10 @@ async def run_deep_research(
         "modules": route.get("modules", []),
         "customer_context": payload.get("customerContext") or route.get("customerContext", {}),
     })
+    reviewed_sources, automatic_source_candidates = _prepare_research_sources_for_route(
+        research["sources"]
+    )
+
     replace_url = payload.get("replaceSourceUrl") or payload.get("replace_source_url")
     if replace_url:
         merged_by_url = {
@@ -230,27 +289,23 @@ async def run_deep_research(
                     for source in route.get("sources", [])
                     if source.get("url") != replace_url
                 ],
-                *research["sources"],
+                *reviewed_sources,
             ]
             if source.get("url")
         }
         route_sources = list(merged_by_url.values())
     else:
-        route_sources = research["sources"]
+        route_sources = reviewed_sources
 
     updated = await route_service.update_route(route_id, {"sources": route_sources})
-    module_id = payload.get("moduleId") or payload.get("module_id")
     automatic_sources = [
         _to_approved_research_source(
             route_id,
             source,
-            module_id=module_id,
+            module_id=None,
             approval_source="automatic",
         )
-        for source in research["sources"]
-        if source.get("kind") in {"documentation", "article"}
-        and source.get("verified")
-        and source.get("url")
+        for source in automatic_source_candidates
     ]
     approved = await approved_sources_repo.upsert(automatic_sources)
 
@@ -307,7 +362,7 @@ async def review_research_source(
         source = _to_approved_research_source(
             route_id,
             candidate,
-            module_id=payload.get("moduleId") or payload.get("module_id"),
+            module_id=None,
             approval_source="manual",
             approved_by=payload.get("approvedBy") or payload.get("approved_by"),
         )
