@@ -44,11 +44,26 @@ import { cn } from '@/shared/lib/utils'
 const sourceText = (source: Source) =>
   [source.title, source.toolName, source.vendor, source.quote].filter(Boolean).join(' ').toLowerCase()
 
+const MAX_MANUAL_REVIEW_SOURCES = 5
+
 const isYoutubeSource = (source: Source) =>
   source.kind === 'youtube' || source.plat.toLowerCase() === 'youtube' || Boolean(source.videoPreview?.youtubeId)
 
 const isDocumentationSource = (source: Source) =>
   source.kind === 'documentation' || source.kind === 'article' || (!isYoutubeSource(source) && Boolean(source.url))
+
+const manualReviewSources = (sources: readonly Source[]) =>
+  sources
+    .filter(
+      (source) =>
+        isDocumentationSource(source) &&
+        !source.verified &&
+        source.status !== 'approved' &&
+        source.status !== 'rejected' &&
+        Boolean(source.url),
+    )
+    .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
+    .slice(0, MAX_MANUAL_REVIEW_SOURCES)
 
 const hasSpecificYoutubeVideo = (source: Source) =>
   Boolean(source.videoPreview?.youtubeId) ||
@@ -452,19 +467,39 @@ function SourceApprovalPanel({
 }) {
   const { replaceRouteSources } = useStore()
   const [reviewedUrls, setReviewedUrls] = useState<Set<string>>(new Set())
+  const [reviewBatchUrls, setReviewBatchUrls] = useState<readonly string[]>([])
   const [busyUrl, setBusyUrl] = useState<string | null>(null)
   const verifiedCount = route.sources.filter(
     (source) => isDocumentationSource(source) && source.verified,
   ).length
-  const suggestions = route.sources.filter(
-    (source) =>
-      isDocumentationSource(source) &&
-      !source.verified &&
-      source.status !== 'approved' &&
-      source.status !== 'rejected' &&
-      Boolean(source.url) &&
-      !reviewedUrls.has(source.url ?? ''),
-  )
+
+  useEffect(() => {
+    setReviewedUrls(new Set())
+    setReviewBatchUrls([])
+  }, [route.id])
+
+  useEffect(() => {
+    if (reviewBatchUrls.length > 0) return
+    const batchUrls = manualReviewSources(route.sources)
+      .map((source) => source.url)
+      .filter((url): url is string => Boolean(url))
+    if (batchUrls.length > 0) setReviewBatchUrls(batchUrls)
+  }, [reviewBatchUrls.length, route.sources])
+
+  const suggestions = route.sources
+    .filter(
+      (source) =>
+        Boolean(source.url) &&
+        reviewBatchUrls.includes(source.url!) &&
+        !reviewedUrls.has(source.url!) &&
+        !source.verified &&
+        source.status !== 'approved' &&
+        source.status !== 'rejected',
+    )
+    .sort(
+      (a, b) =>
+        reviewBatchUrls.indexOf(a.url ?? '') - reviewBatchUrls.indexOf(b.url ?? ''),
+    )
 
   if (!suggestions.length) return null
 
@@ -474,8 +509,20 @@ function SourceApprovalPanel({
     try {
       await api.request(`/learning-paths/${route.id}/research-sources/review`, {
         method: 'POST',
-        body: JSON.stringify({ url: source.url, action, moduleId: module.id }),
+        body: JSON.stringify({ url: source.url, action }),
       })
+      replaceRouteSources(
+        route.id,
+        route.sources.map((item) =>
+          item.url === source.url
+            ? {
+                ...item,
+                verified: action === 'approve' ? true : item.verified,
+                status: action === 'approve' ? 'approved' : 'rejected',
+              }
+            : item,
+        ),
+      )
       setReviewedUrls((current) => new Set(current).add(source.url!))
       toast.success(action === 'approve' ? 'Fuente aprobada' : 'Fuente rechazada', {
         description:
@@ -906,9 +953,7 @@ export default function Ruta() {
   const approvedOrVerifiedSourceCount = route.sources.filter(
     (source) => source.verified || source.status === 'approved',
   ).length
-  const pendingReviewSourceCount = route.sources.filter(
-    (source) => !source.verified && source.status !== 'approved' && source.status !== 'rejected',
-  ).length
+  const pendingReviewSourceCount = manualReviewSources(route.sources).length
 
   const goToModule = (nextIndex: number) => {
     const boundedIndex = Math.min(Math.max(nextIndex, 0), route.modules.length - 1)
