@@ -459,6 +459,29 @@ class ResearchService:
             },
         }
 
+    def _apply_reranking(self, sources: List[Dict[str, Any]], context: str) -> List[Dict[str, Any]]:
+        """Replace positional relevanceScore with LLM-judged scores and sort desc.
+
+        No-op (keeps positional scores and order) when the documentation client
+        is a mock/disabled or the ranking call fails, so the pipeline never breaks.
+        """
+        client = self.documentation_client
+        if not client or not getattr(client, "enabled", False):
+            return sources
+        if not hasattr(client, "rank_sources"):
+            return sources
+        try:
+            scores = client.rank_sources(sources, context)
+        except Exception as exc:
+            print(f"Source re-ranking failed: {exc}")
+            return sources
+        if not scores:
+            return sources
+        for index, source in enumerate(sources):
+            if index in scores:
+                source["relevanceScore"] = scores[index]
+        return sorted(sources, key=lambda source: source.get("relevanceScore", 0), reverse=True)
+
     def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         brief = payload.get("brief", "")
         modules = payload.get("modules", [])
@@ -574,6 +597,7 @@ class ResearchService:
                     )
                 )
         sources.extend(grounded_sources)
+        sources = self._apply_reranking(sources, text)
         return {
             "detected_tools": [
                 {

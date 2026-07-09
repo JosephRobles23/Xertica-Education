@@ -379,23 +379,34 @@ export default function NuevaRuta() {
               </Tabs>
 
               {contextStep === 0 && (
-                <div className="grid gap-3 sm:grid-cols-[1.25fr_0.75fr]">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="customer-url">URL del cliente</Label>
-                    <Input
-                      id="customer-url"
-                      value={customerContext.url ?? ''}
-                      placeholder="https://cliente.com"
-                      onChange={(e) => updateCustomerContext({ url: e.target.value })}
-                    />
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-[1.25fr_0.75fr]">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="customer-url">URL del cliente</Label>
+                      <Input
+                        id="customer-url"
+                        value={customerContext.url ?? ''}
+                        placeholder="https://cliente.com"
+                        onChange={(e) => updateCustomerContext({ url: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="customer-industry">Industria</Label>
+                      <Input
+                        id="customer-industry"
+                        value={customerContext.industry ?? ''}
+                        placeholder="Inferida o manual"
+                        onChange={(e) => updateCustomerContext({ industry: e.target.value })}
+                      />
+                    </div>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Label htmlFor="customer-industry">Industria</Label>
+                    <Label htmlFor="customer-company">Empresa / Compañía</Label>
                     <Input
-                      id="customer-industry"
-                      value={customerContext.industry ?? ''}
-                      placeholder="Inferida o manual"
-                      onChange={(e) => updateCustomerContext({ industry: e.target.value })}
+                      id="customer-company"
+                      value={customerContext.companyName ?? ''}
+                      placeholder="Ej. Google, Meta, Certica (aplica branding personalizado)"
+                      onChange={(e) => updateCustomerContext({ companyName: e.target.value })}
                     />
                   </div>
                 </div>
@@ -463,6 +474,7 @@ export default function NuevaRuta() {
                   <Sparkles /> Inferir contexto
                 </Button>
                 {([
+                  customerContext.companyName ? `Empresa: ${customerContext.companyName}` : undefined,
                   customerContext.industry,
                   customerContext.area === 'Educacion' ? 'Educación' : customerContext.area,
                   customerContext.usesGoogleWorkspace === 'yes' ? 'Google Workspace' : undefined,

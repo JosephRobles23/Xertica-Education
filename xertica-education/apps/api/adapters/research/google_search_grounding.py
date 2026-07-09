@@ -86,6 +86,58 @@ class GoogleSearchGroundingClient:
         except Exception:
             return url
 
+    def rank_sources(self, sources: list[dict[str, Any]], context: str) -> dict[int, int]:
+        """Score each candidate 0-100 on relevance to the route context.
+
+        Returns a {index: score} mapping. Empty dict when disabled or on any
+        failure, so the caller keeps the deterministic positional scores.
+        """
+        if not self.enabled or not sources:
+            return {}
+        from google.genai import types
+
+        catalog = [
+            {
+                "index": index,
+                "title": source.get("title", ""),
+                "url": source.get("url", ""),
+                "tool": source.get("toolName", ""),
+                "kind": source.get("kind", ""),
+            }
+            for index, source in enumerate(sources)
+        ]
+        response = self._get_client().models.generate_content(
+            model=self._model,
+            contents=(
+                "You rank candidate learning resources by their relevance to a training route. "
+                "For each candidate return a score from 0 (irrelevant) to 100 (highly relevant "
+                "and authoritative). Reward official documentation and specific, on-topic videos; "
+                "penalize generic channel or search-result pages and off-topic results. "
+                "Return a JSON array of objects with keys 'index' and 'score'.\n\n"
+                f"Route context:\n{context}\n\n"
+                f"Candidates:\n{json.dumps(catalog, ensure_ascii=False)}"
+            ),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0,
+            ),
+        )
+        try:
+            data = json.loads(response.text or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        rows = data if isinstance(data, list) else data.get("scores", [])
+        scores: dict[int, int] = {}
+        for row in rows:
+            try:
+                index = int(row["index"])
+                score = int(row["score"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if 0 <= index < len(sources):
+                scores[index] = max(0, min(100, score))
+        return scores
+
     def detect_technologies(self, context: str) -> list[str]:
         if not self.enabled:
             return []

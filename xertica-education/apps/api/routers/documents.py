@@ -5,6 +5,8 @@
 # (parse-at-upload · ADR-0013 → documents.parsed_md) y registra la fila `documents` + el
 # `Source` Vía 2. Todo upload entra a la KB por default (use_as_source deprecado).
 
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from typing import Dict, Any
 
@@ -16,6 +18,8 @@ from models.common import as_uuid
 from models.domain.document import Document
 from models.domain.source import Source
 from adapters.parser.simple import SimpleParserAdapter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/learning-paths", tags=["documents"])
 
@@ -55,10 +59,14 @@ async def upload_document(
     # Parse-at-upload (ADR-0013): verbatim → parsed_md. Best-effort: si falla, parsed_md
     # queda None y la ingesta de Gate 1 lo reintenta desde el binario (regla de oro 1).
     parsed_md = None
+    parse_error = None
     try:
         parsed_md = await SimpleParserAdapter().parse_document(data, file.filename)
-    except Exception:
-        parsed_md = None
+    except Exception as exc:
+        logger.exception(
+            "Document parsing failed for %s (route %s)", file.filename, route_id
+        )
+        parse_error = f"{type(exc).__name__}: {exc}"
 
     doc = await documents_repo.create(Document(
         learning_path_id=lp, storage_path=storage_path,
@@ -79,5 +87,6 @@ async def upload_document(
         "filename": doc.filename,
         "use_as_source": doc.use_as_source,
         "parsed": parsed_md is not None,
+        "parse_error": parse_error,
         "source_id": source_id,
     }

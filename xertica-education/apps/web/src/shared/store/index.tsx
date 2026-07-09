@@ -177,7 +177,7 @@ interface AppStore {
   routeProgressOf: (route: LearningRoute) => { done: number; total: number; pct: number }
 
   isCorpusApproved: (routeId: string) => boolean
-  approveCorpus: (routeId: string) => Promise<void>
+  approveCorpus: (routeId: string, aspect_ratio?: string) => Promise<void>
   discardedSources: (routeId: string) => readonly number[]
   discardSource: (routeId: string, index: number) => void
 
@@ -460,13 +460,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   /* ── Gates ────────────────────────────────────────────────── */
   const isCorpusApproved = useCallback((routeId: string) => corpusApproved[routeId] ?? false, [corpusApproved])
-  const approveCorpus = useCallback(async (routeId: string) => {
+  const approveCorpus = useCallback(async (routeId: string, aspect_ratio?: string) => {
     try {
-      await api.request(`/learning-paths/${routeId}/sourcing/approve`, { method: 'POST' })
+      await api.request(`/learning-paths/${routeId}/sourcing/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ aspect_ratio: aspect_ratio || 'auto' })
+      })
       setCorpusApproved((prev) => ({ ...prev, [routeId]: true }))
       await fetchRoutes()
     } catch (e) {
       console.error('Failed to approve corpus', e)
+      throw e
     }
   }, [fetchRoutes])
 
