@@ -21,6 +21,24 @@ class _NoYoutube:
     enabled = False
 
 
+class _RankingDocs:
+    """Grounded client that also re-ranks: forces the community URL above the official one."""
+
+    enabled = True
+
+    def search(self, technology: str, context: str):
+        return [
+            {"title": "Vertex AI docs", "url": "https://cloud.google.com/vertex-ai/docs"},
+            {"title": "Community guide", "url": "https://example.org/vertex-guide"},
+        ]
+
+    def rank_sources(self, sources, context):
+        return {
+            index: (95 if "example.org" in source.get("url", "") else 20)
+            for index, source in enumerate(sources)
+        }
+
+
 def test_grounded_documents_are_classified_and_youtube_is_excluded():
     result = ResearchService(
         youtube_client=_NoYoutube(),
@@ -30,6 +48,28 @@ def test_grounded_documents_are_classified_and_youtube_is_excluded():
     docs = [source for source in result["sources"] if source["kind"] != "youtube"]
     assert [source["verified"] for source in docs] == [True, False]
     assert all("youtube.com" not in source["url"] for source in docs)
+
+
+def test_llm_reranking_overrides_positional_scores_and_sorts():
+    result = ResearchService(
+        youtube_client=_NoYoutube(),
+        documentation_client=_RankingDocs(),
+    ).run({"brief": "Curso de Vertex AI"})
+
+    docs = [source for source in result["sources"] if source["kind"] != "youtube"]
+    # The re-ranker scored the community guide highest, so it sorts first.
+    assert docs[0]["url"] == "https://example.org/vertex-guide"
+    assert docs[0]["relevanceScore"] == 95
+
+
+def test_reranking_is_noop_without_rank_sources():
+    # A grounded client lacking rank_sources must keep positional order untouched.
+    result = ResearchService(
+        youtube_client=_NoYoutube(),
+        documentation_client=_GroundedDocs(),
+    ).run({"brief": "Curso de Vertex AI"})
+    docs = [source for source in result["sources"] if source["kind"] != "youtube"]
+    assert docs[0]["url"] == "https://cloud.google.com/vertex-ai/docs"
 
 
 def test_approved_repository_is_idempotent_and_module_scoped():
