@@ -496,10 +496,12 @@ function ContentReviewPanel({
     refineContent,
     isLabGuideApproved,
     storyboardVideoUrlOf,
+    setStoryboardVideoUrl,
     replaceRouteSources,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
+  const [backendVideoUrl, setBackendVideoUrl] = useState('')
   // Vinculación Source↔Módulo persistida (ADR-0012): si existe, prevalece sobre la heurística.
   const [linkedUrl, setLinkedUrl] = useState<string | null>(null)
   const [linkOrigin, setLinkOrigin] = useState<'llm' | 'heuristic' | null>(null)
@@ -511,6 +513,7 @@ function ContentReviewPanel({
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
   const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
+  const resolvedStoryboardVideoUrl = backendVideoUrl || storyboardVideoUrl
 
   // Carga la vinculación persistida de este módulo (si la hay).
   useEffect(() => {
@@ -533,6 +536,28 @@ function ContentReviewPanel({
       active = false
     }
   }, [isVideo, route.id, module.id])
+
+  useEffect(() => {
+    if (!isVideo) return
+    let active = true
+    const params = new URLSearchParams({
+      route_id: route.id,
+      module_id: module.id,
+      component_kind: 'video',
+    })
+    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
+      .then((asset) => {
+        if (!active) return
+        const finalUrl = asset.storage_path || asset.video_url || ''
+        if (!finalUrl) return
+        setBackendVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [isVideo, route.id, module.id, setStoryboardVideoUrl])
 
   const heuristicVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
   const linkedVideo =
@@ -664,7 +689,7 @@ function ContentReviewPanel({
           recommendedSource={recommendedVideo}
           secondarySource={secondaryYoutubeVideo}
           findingAnother={findingAnotherVideo}
-          storyboardVideoUrl={storyboardVideoUrl}
+          storyboardVideoUrl={resolvedStoryboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
           onRelink={relinkWithAI}
           relinking={relinking}

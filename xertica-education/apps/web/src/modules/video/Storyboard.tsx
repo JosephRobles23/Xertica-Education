@@ -20,6 +20,20 @@ export type VisualType = 'text_card' | 'hero_title' | 'stat_card' | 'callout' | 
 
 type GroundingStatus = 'kb_grounded' | 'module_grounded'
 type StoryboardSource = 'backend' | 'fallback_invalid_target' | 'fallback_error' | 'fallback_empty'
+type RenderedVideoAsset = {
+  storage_path?: string | null
+  video_url?: string | null
+}
+type RenderPhase =
+  | 'queueing'
+  | 'tts'
+  | 'visuals'
+  | 'music'
+  | 'timeline'
+  | 'render'
+  | 'validate'
+  | 'upload'
+  | 'done'
 
 export type StoryboardScene = {
   scene_number: number
@@ -51,8 +65,44 @@ const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).len
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const isValidUuid = (value: string | undefined): value is string => Boolean(value && UUID_PATTERN.test(value))
-export const isValidRenderTargetModuleId = (moduleId: string | undefined): moduleId is string => isValidUuid(moduleId)
+export const hasRenderTargetModuleId = (moduleId: string | undefined): moduleId is string => Boolean(moduleId && moduleId.trim().length > 0)
 export const canRenderAiStoryboard = (storyboardSource: StoryboardSource) => storyboardSource === 'backend'
+
+export const renderPhaseFromProgress = (progress: number): RenderPhase => {
+  if (progress >= 100) return 'done'
+  if (progress >= 95) return 'upload'
+  if (progress >= 85) return 'validate'
+  if (progress >= 65) return 'render'
+  if (progress >= 45) return 'timeline'
+  if (progress >= 35) return 'music'
+  if (progress >= 25) return 'visuals'
+  if (progress >= 5) return 'tts'
+  return 'queueing'
+}
+
+export const renderPhaseLabel = (progress: number): string => {
+  const phase = renderPhaseFromProgress(progress)
+  switch (phase) {
+    case 'tts':
+      return 'Sintetizando narración por escena...'
+    case 'visuals':
+      return 'Preparando visuales y capturas...'
+    case 'music':
+      return 'Buscando música de fondo...'
+    case 'timeline':
+      return 'Armando el plan de edición...'
+    case 'render':
+      return 'Renderizando video final en Remotion...'
+    case 'validate':
+      return 'Validando duración y archivo final...'
+    case 'upload':
+      return 'Subiendo el MP4 final...'
+    case 'done':
+      return '¡Generación Completada!'
+    default:
+      return 'Encolando render en la nube...'
+  }
+}
 
 // Visual-type → friendly tag + pacing budget (mirrors ADR-0012 pacing rules).
 const VISUAL_META: Record<VisualType, { tag: string; budget: number }> = {
@@ -113,6 +163,8 @@ export const buildReviewedStoryboard = (title: string, totalWordBudget: number, 
     grounding_status: scene.groundingStatus,
   })),
 })
+
+const videoUrlFromAsset = (asset: RenderedVideoAsset) => asset.storage_path || asset.video_url || ''
 
 // Prefers verified sources whose title or URL contains keywords from the route's
 // objective/topic. Falls back to any source URL, then customerContext, then google.com.
@@ -254,7 +306,7 @@ export default function Storyboard() {
   } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
   const defaultReviewScenes = useMemo(() => (route ? buildReviewScenes(route) : []), [route])
-  const hasValidRenderTarget = isValidUuid(route?.id) && isValidRenderTargetModuleId(moduleId)
+  const hasValidRenderTarget = hasRenderTargetModuleId(moduleId)
 
   // Video generation/render states
   const [renderingState, setRenderingState] = useState<'idle' | 'rendering' | 'success' | 'failed'>('idle')
@@ -348,6 +400,33 @@ export default function Storyboard() {
   const resolvedVideoUrl = videoUrl || savedVideoUrl
 
   useEffect(() => {
+    if (!route || !moduleId || !hasValidRenderTarget) return
+    let active = true
+    const params = new URLSearchParams({
+      route_id: route.id,
+      module_id: moduleId,
+      component_kind: 'video',
+    })
+
+    api.request<RenderedVideoAsset>(`/videos/assets?${params.toString()}`)
+      .then((asset) => {
+        if (!active) return
+        const finalUrl = videoUrlFromAsset(asset)
+        if (!finalUrl) return
+        setVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+        setRenderProgress(100)
+        setRenderingState('success')
+        clearStoryboardJobId(route.id)
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+    }
+  }, [route, moduleId, hasValidRenderTarget, setStoryboardVideoUrl, clearStoryboardJobId])
+
+  useEffect(() => {
     setReviewScenes(defaultReviewScenes)
     setIsEditing(false)
     setRenderingState('idle')
@@ -376,7 +455,7 @@ export default function Storyboard() {
       if (!savedJobId) return
 
       setRenderingState('rendering')
-      setRenderProgress(10)
+      setRenderProgress(5)
 
       const poll = async () => {
         if (!active) return
@@ -497,6 +576,9 @@ export default function Storyboard() {
       const res = await api.request<{ job_id: string }>('/videos/generate', {
         method: 'POST',
         body: JSON.stringify({
+          route_id: route.id,
+          module_id: moduleId,
+          component_kind: 'video',
           component_id: null,
           custom_storyboard: buildReviewedStoryboard(route.name, totalBudget, reviewScenes),
           use_mock: false
@@ -652,7 +734,7 @@ export default function Storyboard() {
                   {renderingState === 'success' && <CheckCircle2 className="size-5 text-success" />}
                   {renderingState === 'failed' && <AlertTriangle className="size-5 text-destructive" />}
                   <span className="font-display text-sm font-semibold text-ink">
-                    {renderingState === 'rendering' && 'Generando Video en la Nube (FFmpeg + Playwright)...'}
+                    {renderingState === 'rendering' && renderPhaseLabel(renderProgress)}
                     {renderingState === 'success' && '¡Generación Completada!'}
                     {renderingState === 'failed' && 'Error al Generar el Video'}
                   </span>
@@ -715,8 +797,8 @@ export default function Storyboard() {
                   Storyboard local: falta un Render Target real
                 </div>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                  El módulo recibido ({moduleId ?? 'sin module_id'}) no es un UUID válido, así que esta página no llama a
-                  <span className="font-mono"> POST /videos/storyboard</span>. Abre el video desde un módulo persistido para revisar el storyboard KB-grounded real.
+                  Esta página solo llama a
+                  <span className="font-mono"> POST /videos/storyboard</span> cuando la ruta es persistida y existe un <span className="font-mono">module_id</span>. Ruta: {route.id}. Módulo: {moduleId ?? 'sin module_id'}.
                 </p>
               </div>
             </Card>

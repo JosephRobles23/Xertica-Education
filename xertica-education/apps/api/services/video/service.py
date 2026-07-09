@@ -23,6 +23,7 @@ import os
 import shutil
 import asyncio
 import json
+import hashlib
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
@@ -277,6 +278,9 @@ class VideoService(VideoServiceInterface):
     async def generate_video(
         self,
         component_id: Optional[UUID] = None,
+        route_id: Optional[str] = None,
+        module_id: Optional[str] = None,
+        component_kind: Optional[str] = None,
         custom_storyboard: Optional[StoryboardRequest] = None,
         use_mock: bool = False
     ) -> UUID:
@@ -290,7 +294,29 @@ class VideoService(VideoServiceInterface):
         Returns a job_id that clients can poll via get_video_job_status().
         """
         if use_mock:
-            return await self.mock_service.generate_video(component_id, custom_storyboard, use_mock)
+            return await self.mock_service.generate_video(
+                component_id=component_id,
+                route_id=route_id,
+                module_id=module_id,
+                component_kind=component_kind,
+                custom_storyboard=custom_storyboard,
+                use_mock=use_mock,
+            )
+
+        render_target = None
+        if route_id and module_id:
+            render_target = {
+                "route_id": str(route_id),
+                "module_id": str(module_id),
+                "component_kind": component_kind or "video",
+            }
+            if component_id is None:
+                component_id = await self._resolve_video_component_id(
+                    route_id=str(route_id),
+                    module_id=str(module_id),
+                    component_kind=component_kind or "video",
+                    create_if_missing=True,
+                )
 
         job_id = uuid4()
         now_str = datetime.now(timezone.utc).isoformat()
@@ -328,16 +354,23 @@ class VideoService(VideoServiceInterface):
             # Default demo storyboard showcasing all visual types.
             storyboard = self._get_default_storyboard()
 
+        if component_id:
+            await self._ensure_video_asset_started(
+                component_id=component_id,
+                storyboard=storyboard,
+                storyboard_source=storyboard_source,
+            )
+
         # Spawn the rendering pipeline as a background task.
         asyncio.create_task(
-            self._run_render_job(job_id, component_id, storyboard, storyboard_source)
+            self._run_render_job(job_id, component_id, storyboard, storyboard_source, render_target)
         )
         return job_id
 
     async def generate_storyboard(
         self,
-        route_id: UUID,
-        module_id: UUID,
+        route_id: str,
+        module_id: str,
         component_kind: str = "video",
         component_id: Optional[UUID] = None,
         k: int = 8,
@@ -353,6 +386,7 @@ class VideoService(VideoServiceInterface):
         KB hits' own citations, so URL provenance matches the grounding.
         """
         # ── Pull Spine context: component → module → route ──
+        resolved_route_id = self._resolve_learning_path_id(route_id)
         context = await self._load_render_target_context(
             route_id, module_id, component_id
         )
@@ -367,7 +401,7 @@ class VideoService(VideoServiceInterface):
         grounded_chunks = []
         if kb is not None and query_text:
             try:
-                grounded_chunks = await kb.query(route_id, query_text, k=k)
+                grounded_chunks = await kb.query(resolved_route_id, query_text, k=k)
             except Exception as e:
                 print(f"[storyboard] KB query failed, degrading ungrounded: {e}")
                 grounded_chunks = []
@@ -678,8 +712,8 @@ class VideoService(VideoServiceInterface):
 
     async def _load_render_target_context(
         self,
-        route_id: UUID,
-        module_id: UUID,
+        route_id: str,
+        module_id: str,
         component_id: Optional[UUID],
     ) -> dict:
         """Reads component/module/route fields from Supabase for the given
@@ -695,7 +729,14 @@ class VideoService(VideoServiceInterface):
             "route_storytelling": None,
         }
         if not self._supabase:
+            route = await self._load_route_context_without_supabase(route_id, module_id)
+            if route:
+                ctx.update(route)
             return ctx
+
+        resolved_route_id = self._resolve_learning_path_id(route_id)
+        route_details = {}
+        actual_route_id = resolved_route_id
 
         try:
             if component_id:
@@ -707,28 +748,121 @@ class VideoService(VideoServiceInterface):
             print(f"[storyboard] component query error: {e}")
 
         try:
+            lp = self._supabase.table("learning_paths").select("*").eq("id", str(resolved_route_id)).execute()
+            if lp.data:
+                row = lp.data[0]
+                route_details = row.get("details") or {}
+                ctx["route_title"] = row.get("titulo", "")
+                ctx["route_tema"] = row.get("tema", "")
+                ctx["route_storytelling"] = (
+                    row.get("storytelling", "")
+                    or row.get("brief", "")
+                    or route_details.get("objective", "")
+                    or route_details.get("brief", "")
+                )
+        except Exception as e:
+            print(f"[storyboard] learning_path query error: {e}")
+
+        try:
             mod = self._supabase.table("modules").select("*").eq("id", str(module_id)).execute()
             if mod.data:
                 row = mod.data[0]
                 ctx["module_title"] = row.get("titulo")
                 ctx["module_type"] = row.get("tipo", "capsula")
                 ctx["module_description"] = row.get("descripcion", "")
-                actual_route_id = row.get("learning_path_id", route_id)
+                actual_route_id = row.get("learning_path_id", resolved_route_id)
+            else:
+                modules = route_details.get("modules") or []
+                matched = next(
+                    (module for module in modules if str(module.get("id")) == str(module_id)),
+                    None,
+                )
+                if matched:
+                    ctx["module_title"] = (
+                        matched.get("titulo")
+                        or matched.get("title")
+                        or matched.get("name")
+                    )
+                    ctx["module_type"] = matched.get("tipo") or matched.get("type") or "capsula"
+                    ctx["module_description"] = (
+                        matched.get("descripcion")
+                        or matched.get("description")
+                        or ""
+                    )
         except Exception as e:
             print(f"[storyboard] module query error: {e}")
-            actual_route_id = route_id
 
-        try:
-            lp = self._supabase.table("learning_paths").select("*").eq("id", str(actual_route_id)).execute()
-            if lp.data:
-                row = lp.data[0]
-                ctx["route_title"] = row.get("titulo", "")
-                ctx["route_tema"] = row.get("tema", "")
-                ctx["route_storytelling"] = row.get("storytelling", "") or row.get("brief", "")
-        except Exception as e:
-            print(f"[storyboard] learning_path query error: {e}")
+        if str(actual_route_id) != str(route_id):
+            try:
+                lp = self._supabase.table("learning_paths").select("*").eq("id", str(actual_route_id)).execute()
+                if lp.data:
+                    row = lp.data[0]
+                    details = row.get("details") or {}
+                    ctx["route_title"] = row.get("titulo", "")
+                    ctx["route_tema"] = row.get("tema", "")
+                    ctx["route_storytelling"] = (
+                        row.get("storytelling", "")
+                        or row.get("brief", "")
+                        or details.get("objective", "")
+                        or details.get("brief", "")
+                    )
+            except Exception as e:
+                print(f"[storyboard] learning_path refresh error: {e}")
 
         return ctx
+
+    def _resolve_learning_path_id(self, route_id: str) -> UUID:
+        try:
+            return UUID(str(route_id))
+        except ValueError:
+            try:
+                return UUID(int=int(str(route_id)))
+            except Exception:
+                import hashlib
+                return UUID(hashlib.md5(str(route_id).encode("utf-8")).hexdigest())
+
+    async def _load_route_context_without_supabase(self, route_id: str, module_id: str) -> Optional[dict]:
+        try:
+            from config.dependencies import get_route_service
+
+            route = await get_route_service().get_route(str(route_id))
+            if not route:
+                return None
+
+            modules = route.get("modules") or []
+            matched = next(
+                (module for module in modules if str(module.get("id")) == str(module_id)),
+                None,
+            )
+
+            return {
+                "route_title": route.get("name") or route.get("titulo") or "",
+                "route_tema": route.get("tema") or "",
+                "route_storytelling": route.get("objective") or route.get("brief") or "",
+                "module_title": (
+                    matched.get("titulo")
+                    or matched.get("title")
+                    or matched.get("name")
+                    if matched
+                    else None
+                ),
+                "module_type": (
+                    matched.get("tipo")
+                    or matched.get("type")
+                    if matched
+                    else None
+                ),
+                "module_description": (
+                    matched.get("descripcion")
+                    or matched.get("description")
+                    if matched
+                    else ""
+                ),
+                "component_title": None,
+            }
+        except Exception as e:
+            print(f"[storyboard] fallback route context error: {e}")
+            return None
 
     async def get_video_job_status(self, job_id: UUID) -> Optional[VideoJobResponse]:
         # Check mock registry first.
@@ -1100,6 +1234,7 @@ class VideoService(VideoServiceInterface):
         component_id: Optional[UUID],
         storyboard: dict,
         storyboard_source: str,
+        render_target: Optional[dict] = None,
     ):
         """Background rendering orchestrated by RenderPlan."""
         temp_dir = f"/tmp/render_{job_id}"
@@ -1136,7 +1271,13 @@ class VideoService(VideoServiceInterface):
             await self._update_job(job_id, JobStatus.COMPLETED, 100, result=result)
 
             if component_id:
-                await self._update_asset_completed(component_id, final_url, render_provenance)
+                await self._update_asset_completed(
+                    component_id,
+                    final_url,
+                    render_provenance,
+                    render_target=render_target,
+                    job_id=job_id,
+                )
 
         except Exception as e:
             print(f"[Job {job_id}] Critical error during video rendering: {e}")
@@ -1207,11 +1348,122 @@ class VideoService(VideoServiceInterface):
             },
         }
 
+    async def get_video_asset_for_render_target(
+        self,
+        route_id: str,
+        module_id: str,
+        component_kind: str = "video",
+    ) -> dict:
+        component_id = await self._resolve_video_component_id(
+            route_id=route_id,
+            module_id=module_id,
+            component_kind=component_kind,
+            create_if_missing=False,
+        )
+        if component_id:
+            asset = await self._get_video_asset(component_id)
+            if asset:
+                return asset
+
+        detail_asset = await self._get_route_detail_video_asset(route_id, module_id, component_kind)
+        return detail_asset or {}
+
+    async def _resolve_video_component_id(
+        self,
+        route_id: str,
+        module_id: str,
+        component_kind: str,
+        create_if_missing: bool,
+    ) -> UUID:
+        if self._supabase:
+            try:
+                res = (
+                    self._supabase.table("components")
+                    .select("*")
+                    .eq("modulo_id", str(module_id))
+                    .eq("tipo", component_kind)
+                    .execute()
+                )
+                if res.data:
+                    return UUID(res.data[0]["id"])
+            except Exception as e:
+                print(f"Supabase query video component error: {e}")
+
+            if create_if_missing:
+                try:
+                    module_uuid = UUID(str(module_id))
+                    component_id = uuid4()
+                    now_str = datetime.now(timezone.utc).isoformat()
+                    payload = {
+                        "id": str(component_id),
+                        "modulo_id": str(module_uuid),
+                        "titulo": "Video",
+                        "tipo": component_kind,
+                        "orden": 0,
+                        "created_at": now_str,
+                        "updated_at": now_str,
+                    }
+                    self._supabase.table("components").insert(payload).execute()
+                    return component_id
+                except Exception as e:
+                    print(f"Supabase create video component error, using render-target fallback: {e}")
+
+        return self._render_target_component_id(route_id, module_id, component_kind)
+
+    def _render_target_component_id(self, route_id: str, module_id: str, component_kind: str) -> UUID:
+        key = f"{route_id}:{module_id}:{component_kind}"
+        return UUID(hashlib.md5(key.encode("utf-8")).hexdigest())
+
+    async def _ensure_video_asset_started(
+        self,
+        component_id: UUID,
+        storyboard: dict,
+        storyboard_source: str,
+    ) -> None:
+        existing_asset = await self._get_video_asset(component_id)
+        existing_provenance = (
+            existing_asset.get("provenance")
+            if existing_asset and isinstance(existing_asset.get("provenance"), dict)
+            else {}
+        )
+        asset_id = existing_asset.get("id") if existing_asset else str(uuid4())
+        now_str = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "id": str(asset_id),
+            "componente_id": str(component_id),
+            "tipo": "video",
+            "estado": "draft",
+            "word_budget": storyboard.get("total_word_budget", 300),
+            "provenance": {
+                **existing_provenance,
+                **self._build_render_provenance(storyboard, storyboard_source),
+            },
+            "updated_at": now_str,
+        }
+        if not existing_asset:
+            payload["created_at"] = now_str
+
+        if self._supabase:
+            try:
+                if existing_asset:
+                    self._supabase.table("assets").update(payload).eq("id", str(asset_id)).execute()
+                else:
+                    self._supabase.table("assets").insert(payload).execute()
+                return
+            except Exception as e:
+                print(f"Supabase start video asset error, falling back to memory: {e}")
+
+        current_asset = self._fallback_assets.get(component_id, existing_asset or {})
+        current_asset.update(payload)
+        self._fallback_assets[component_id] = current_asset
+
     async def _update_asset_completed(
         self,
         component_id: UUID,
         video_url: str,
         render_provenance: Optional[dict] = None,
+        render_target: Optional[dict] = None,
+        job_id: Optional[UUID] = None,
     ):
         now_str = datetime.now(timezone.utc).isoformat()
         existing_asset = await self._get_video_asset(component_id)
@@ -1221,6 +1473,9 @@ class VideoService(VideoServiceInterface):
             else {}
         )
         payload = {
+            "id": str(existing_asset.get("id") or uuid4()),
+            "componente_id": str(component_id),
+            "tipo": "video",
             "estado": "generado",
             "storage_path": video_url,
             "updated_at": now_str,
@@ -1240,6 +1495,17 @@ class VideoService(VideoServiceInterface):
             current_asset.update(payload)
             self._fallback_assets[component_id] = current_asset
 
+        if render_target:
+            await self._persist_route_detail_video_asset(
+                route_id=render_target["route_id"],
+                module_id=render_target["module_id"],
+                component_kind=render_target["component_kind"],
+                asset={
+                    **payload,
+                    "job_id": str(job_id) if job_id else None,
+                },
+            )
+
     async def _get_video_asset(self, component_id: UUID) -> dict:
         if self._supabase:
             try:
@@ -1255,3 +1521,51 @@ class VideoService(VideoServiceInterface):
             except Exception as e:
                 print(f"Supabase get asset error in VideoService: {e}")
         return self._fallback_assets.get(component_id, {})
+
+    async def _persist_route_detail_video_asset(
+        self,
+        route_id: str,
+        module_id: str,
+        component_kind: str,
+        asset: dict,
+    ) -> None:
+        if not self._supabase:
+            return
+        try:
+            resolved_route_id = self._resolve_learning_path_id(route_id)
+            res = self._supabase.table("learning_paths").select("*").eq("id", str(resolved_route_id)).execute()
+            if not res.data:
+                return
+            row = res.data[0]
+            details = row.get("details") or {}
+            video_assets = details.get("video_assets") or {}
+            video_assets[self._route_detail_asset_key(module_id, component_kind)] = asset
+            details["video_assets"] = video_assets
+            self._supabase.table("learning_paths").update({"details": details}).eq("id", str(resolved_route_id)).execute()
+        except Exception as e:
+            print(f"Supabase route-detail video asset fallback error: {e}")
+
+    async def _get_route_detail_video_asset(
+        self,
+        route_id: str,
+        module_id: str,
+        component_kind: str,
+    ) -> dict:
+        if not self._supabase:
+            return {}
+        try:
+            resolved_route_id = self._resolve_learning_path_id(route_id)
+            res = self._supabase.table("learning_paths").select("*").eq("id", str(resolved_route_id)).execute()
+            if not res.data:
+                return {}
+            details = res.data[0].get("details") or {}
+            return (details.get("video_assets") or {}).get(
+                self._route_detail_asset_key(module_id, component_kind),
+                {},
+            )
+        except Exception as e:
+            print(f"Supabase get route-detail video asset error: {e}")
+            return {}
+
+    def _route_detail_asset_key(self, module_id: str, component_kind: str) -> str:
+        return f"{module_id}:{component_kind}"

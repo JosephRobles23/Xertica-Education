@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from uuid import UUID
 from config.dependencies import get_video_service, get_knowledge_base
 from services.video.service import VideoService
@@ -19,6 +19,9 @@ async def generate_video(
     """
     job_id = await video_service.generate_video(
         component_id=request.component_id,
+        route_id=request.route_id,
+        module_id=request.module_id,
+        component_kind=request.component_kind,
         custom_storyboard=request.custom_storyboard,
         use_mock=request.use_mock
     )
@@ -62,6 +65,23 @@ async def get_video_job(
         raise HTTPException(status_code=404, detail="Video rendering job not found")
     return status
 
+@router.get("/assets")
+async def get_video_asset(
+    route_id: str = Query(...),
+    module_id: str = Query(...),
+    component_kind: str = Query("video"),
+    video_service: VideoService = Depends(get_video_service),
+):
+    """Returns the persisted Video Asset for a Render Target."""
+    asset = await video_service.get_video_asset_for_render_target(
+        route_id=route_id,
+        module_id=module_id,
+        component_kind=component_kind,
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Video asset not found")
+    return asset
+
 from pydantic import BaseModel
 
 class SegmentVideoRequest(BaseModel):
@@ -88,4 +108,3 @@ async def segment_existing_video(
     """
     segments = await video_service.segment_video(request.video_url)
     return {"segments": segments}
-

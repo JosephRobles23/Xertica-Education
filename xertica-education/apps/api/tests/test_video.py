@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import os
+import time
 import unittest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
@@ -10,6 +11,8 @@ from config.dependencies import get_knowledge_base, get_video_service
 from models.dto.requests import StoryboardRequest
 from models.domain.kb import Citation, GroundedChunk
 from services.video.service import VideoService
+from services.video.executor import RenderExecutor
+from services.video.transformer import transform_storyboard_to_edit_decisions
 
 
 class _FakeTableQuery:
@@ -226,25 +229,57 @@ class _BadVisualStoryboardLLM:
         """
 
 
-def _video_service_with_context(route_id, module_id, llm):
+class _SlowTTSAdapter:
+    async def text_to_speech_with_timestamps(self, text: str, output_path: str) -> object:
+        await asyncio.sleep(0.2)
+        with open(output_path, "wb") as handle:
+            handle.write(b"fake-mp3")
+        return type(
+            "FakeTTSResult",
+            (),
+            {
+                "audio_path": output_path,
+                "duration_seconds": 1.0,
+                "captions": [{"word": text, "startMs": 0, "endMs": 1000}],
+            },
+        )()
+
+
+def _video_service_with_context(route_id, module_id, llm, include_modules_table=True):
+    module_row = (
+        [
+            {
+                "id": str(module_id),
+                "learning_path_id": str(route_id),
+                "titulo": "Ruta de Inteligencia Avanzada",
+                "descripcion": "Conectar tecnicas de razonamiento con decisiones de negocio verificables.",
+                "tipo": "capsula",
+            }
+        ]
+        if include_modules_table
+        else []
+    )
     service = VideoService(llm_adapter=llm)
     service._supabase = _FakeSupabase(
         {
-            "modules": [
-                {
-                    "id": str(module_id),
-                    "learning_path_id": str(route_id),
-                    "titulo": "Ruta de Inteligencia Avanzada",
-                    "descripcion": "Conectar tecnicas de razonamiento con decisiones de negocio verificables.",
-                    "tipo": "capsula",
-                }
-            ],
+            "modules": module_row,
             "learning_paths": [
                 {
                     "id": str(route_id),
                     "titulo": "Impulso 2026",
                     "tema": "IA aplicada a operaciones",
                     "brief": "Capacitar equipos para evaluar salidas de IA con criterio de negocio.",
+                    "details": {
+                        "objective": "Capacitar equipos para evaluar salidas de IA con criterio de negocio.",
+                        "modules": [
+                            {
+                                "id": str(module_id),
+                                "name": "Ruta de Inteligencia Avanzada",
+                                "description": "Conectar tecnicas de razonamiento con decisiones de negocio verificables.",
+                                "type": "capsula",
+                            }
+                        ],
+                    },
                 }
             ],
         }
@@ -258,6 +293,52 @@ class TestVideoAPI(unittest.TestCase):
 
     def tearDown(self):
         app.dependency_overrides.clear()
+
+    def test_render_executor_parallelizes_tts_scene_work_and_emits_incremental_progress(self):
+        """Scene TTS should overlap instead of blocking one-by-one for every narration clip."""
+        progress_updates = []
+
+        class FakeVideoService:
+            def __init__(self):
+                self.tts_adapter = _SlowTTSAdapter()
+
+            async def _update_job(self, job_id, status, progress, result=None, error=None):
+                progress_updates.append(progress)
+
+        executor = RenderExecutor(FakeVideoService())
+        executor._concat_audio_files = lambda _audio_paths, output_path: open(output_path, "wb").close()
+
+        scenes = [
+            {"scene_number": 1, "narration": "escena uno"},
+            {"scene_number": 2, "narration": "escena dos"},
+            {"scene_number": 3, "narration": "escena tres"},
+        ]
+        temp_dir = f"/tmp/test_render_executor_{uuid4()}"
+        os.makedirs(temp_dir, exist_ok=True)
+
+        started = time.perf_counter()
+        try:
+            asyncio.run(executor._stage_tts(uuid4(), scenes, temp_dir))
+        finally:
+            for filename in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, filename))
+            os.rmdir(temp_dir)
+
+        elapsed = time.perf_counter() - started
+
+        self.assertLess(
+            elapsed,
+            1.3,
+            "TTS scene generation still looks serialized; expected overlapping scene synthesis.",
+        )
+        self.assertEqual(len(executor.audio_paths), 3)
+        self.assertEqual(len(executor.durations), 3)
+        self.assertGreaterEqual(len(progress_updates), 3)
+        self.assertTrue(
+            any(progress > 5 for progress in progress_updates),
+            "Expected at least one heartbeat/progress bump while TTS is still running.",
+        )
+        self.assertIn(24, progress_updates)
 
     def test_generate_video_mock_returns_job_id(self):
         """POST /videos/generate with custom storyboard returns a valid job ID."""
@@ -305,6 +386,125 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(status_data["job_id"], job_id)
         self.assertIn("status", status_data)
         self.assertIn("progress", status_data)
+
+    def test_generate_video_from_render_target_persists_retrievable_video_asset(self):
+        """POST /videos/generate with route/module identity links the completed MP4 to the video Asset."""
+        service = VideoService()
+        service._supabase = None
+        captured_tasks = []
+
+        def capture_task(coro):
+            captured_tasks.append(coro)
+            return None
+
+        async def fake_execute(self, plan):
+            self.total_duration = 8.0
+            self.stage_outputs["upload"] = {"url": "https://example.com/videos/route-module.mp4"}
+
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        with patch("services.video.service.asyncio.create_task", side_effect=capture_task), patch(
+            "services.video.executor.RenderExecutor.execute",
+            new=fake_execute,
+        ):
+            response = self.client.post(
+                "/videos/generate",
+                json={
+                    "route_id": "01",
+                    "module_id": "r1m1",
+                    "component_kind": "video",
+                    "custom_storyboard": {
+                        "title": "Video conectado al modulo",
+                        "total_word_budget": 120,
+                        "scenes": [
+                            {
+                                "scene_number": 1,
+                                "narration": "Probamos que el render queda conectado al modulo real.",
+                                "visual_type": "callout",
+                                "visual_config": {"callout_style": "info", "text": "Render conectado"},
+                            }
+                        ],
+                    },
+                    "use_mock": False,
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            job_id = UUID(response.json()["job_id"])
+            asyncio.run(captured_tasks[0])
+
+        status = self.client.get(f"/videos/jobs/{job_id}").json()
+        self.assertEqual(status["result"]["video_url"], "https://example.com/videos/route-module.mp4")
+
+        asset_response = self.client.get(
+            "/videos/assets",
+            params={"route_id": "01", "module_id": "r1m1", "component_kind": "video"},
+        )
+        self.assertEqual(asset_response.status_code, 200)
+        asset = asset_response.json()
+        self.assertEqual(asset["storage_path"], "https://example.com/videos/route-module.mp4")
+        self.assertEqual(asset["estado"], "generado")
+        self.assertEqual(asset["provenance"]["storyboard_source"], "reviewed_storyboard")
+
+    def test_transformer_normalizes_storyboard_steps_for_remotion_components(self):
+        """String steps from the storyboard prompt should become Remotion component objects."""
+        storyboard = {
+            "title": "Componentes Remotion",
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "narration": "Primero vemos el resumen.",
+                    "visual_type": "text_card",
+                    "visual_config": {"title": "Resumen", "subtitle": "Punto A • Punto B"},
+                },
+                {
+                    "scene_number": 2,
+                    "narration": "Luego ejecutamos un comando.",
+                    "visual_type": "terminal_scene",
+                    "visual_config": {
+                        "title": "CLI demo",
+                        "steps": ["cmd: gcloud projects list", "out: PROJECT_ID  NAME", "pause: 1"],
+                    },
+                },
+                {
+                    "scene_number": 3,
+                    "narration": "Finalmente hacemos click en la interfaz.",
+                    "visual_type": "screenshot_scene",
+                    "visual_config": {
+                        "steps": [
+                            "cursor_move: 0.3 0.5",
+                            "click_pulse: 0.3 0.5",
+                            "highlight_box: 0.2 0.2 0.5 0.2",
+                            "callout_balloon: 0.4 0.4 Revisa esta zona",
+                        ],
+                    },
+                },
+            ],
+        }
+
+        edit_decisions = asyncio.run(
+            transform_storyboard_to_edit_decisions(
+                storyboard=storyboard,
+                audio_paths=[],
+                durations=[2.0, 3.0, 4.0],
+                visual_paths=["", "", "/tmp/screenshot.png"],
+                visual_is_video=[False, False, False],
+                music_path=None,
+                captions=None,
+                total_duration=9.0,
+                job_id="job-1",
+            )
+        )
+
+        text_cut, terminal_cut, screenshot_cut = edit_decisions["cuts"]
+        self.assertEqual(text_cut["subtitle"], "Punto A • Punto B")
+        self.assertEqual(terminal_cut["terminalTitle"], "CLI demo")
+        self.assertEqual(terminal_cut["steps"][0], {"kind": "cmd", "text": "gcloud projects list"})
+        self.assertEqual(terminal_cut["steps"][1], {"kind": "out", "text": "PROJECT_ID  NAME"})
+        self.assertEqual(terminal_cut["steps"][2], {"kind": "pause", "seconds": 1.0})
+        self.assertEqual(screenshot_cut["screenshotSteps"][0]["kind"], "cursor_move")
+        self.assertEqual(screenshot_cut["screenshotSteps"][0]["to"], [0.3, 0.5])
+        self.assertEqual(screenshot_cut["screenshotSteps"][2]["region"], {"x": 0.2, "y": 0.2, "w": 0.5, "h": 0.2})
+        self.assertEqual(screenshot_cut["screenshotSteps"][3]["text"], "Revisa esta zona")
 
     def test_generate_video_uses_reviewed_storyboard_as_render_source_of_truth(self):
         """POST /videos/generate renders from the reviewed storyboard and retains provenance."""
@@ -738,6 +938,102 @@ class TestVideoAPI(unittest.TestCase):
 
         render_input = StoryboardRequest.model_validate(storyboard)
         self.assertEqual(len(render_input.scenes), 5)
+
+    def test_storyboard_generation_supports_persisted_string_module_ids_from_route_details(self):
+        """POST /videos/storyboard works for real routes whose module ids are persisted strings like r1m1."""
+        route_id = uuid4()
+        module_id = "r1m1"
+        llm = _FakeLLM()
+        kb = _FakeKB(
+            [
+                GroundedChunk(
+                    content="El razonamiento avanzado requiere verificar supuestos antes de aceptar una conclusion automatica.",
+                    citation=Citation(
+                        source_id=uuid4(),
+                        title="Manual de razonamiento",
+                        url="https://example.com/razonamiento",
+                        snippet="verificar supuestos",
+                        score=0.94,
+                        verificada_google=True,
+                    ),
+                )
+            ]
+        )
+
+        app.dependency_overrides[get_video_service] = lambda: _video_service_with_context(
+            route_id,
+            module_id,
+            llm,
+            include_modules_table=False,
+        )
+        app.dependency_overrides[get_knowledge_base] = lambda: kb
+
+        response = self.client.post(
+            "/videos/storyboard",
+            json={
+                "route_id": str(route_id),
+                "module_id": module_id,
+                "component_kind": "video",
+                "k": 4,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["grounding"]["status"], "kb_grounded")
+        self.assertIn("Ruta de Inteligencia Avanzada", kb.queries[0]["text"])
+
+    def test_storyboard_generation_supports_short_route_ids_used_by_existing_routes(self):
+        """POST /videos/storyboard resolves route ids like 01 the same way RouteService does."""
+        route_id = "01"
+        module_id = "r1m1"
+        llm = _FakeLLM()
+        kb = _FakeKB([])
+
+        app.dependency_overrides[get_video_service] = lambda: _video_service_with_context(
+            UUID(int=1),
+            module_id,
+            llm,
+            include_modules_table=False,
+        )
+        app.dependency_overrides[get_knowledge_base] = lambda: kb
+
+        response = self.client.post(
+            "/videos/storyboard",
+            json={
+                "route_id": route_id,
+                "module_id": module_id,
+                "component_kind": "video",
+                "k": 4,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(kb.queries[0]["learning_path_id"], UUID(int=1))
+
+    def test_storyboard_generation_uses_route_service_fallback_when_video_service_has_no_supabase(self):
+        """Local dev without Supabase should still load route/module context from the shared route service."""
+        llm = _FakeLLM()
+        kb = _FakeKB([])
+        service = VideoService(llm_adapter=llm)
+        service._supabase = None
+
+        app.dependency_overrides[get_video_service] = lambda: service
+        app.dependency_overrides[get_knowledge_base] = lambda: kb
+
+        response = self.client.post(
+            "/videos/storyboard",
+            json={
+                "route_id": "01",
+                "module_id": "r1m1",
+                "component_kind": "video",
+                "k": 4,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Introducción", kb.queries[0]["text"])
+        self.assertNotEqual(response.json()["storyboard"]["title"], "Introducción a Xertica Education")
 
     def test_storyboard_generation_falls_back_honestly_when_kb_is_empty(self):
         """POST /videos/storyboard distinguishes Module-grounded fallback from KB-grounded output."""

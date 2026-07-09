@@ -59,25 +59,51 @@ class RenderExecutor:
     async def _stage_tts(self, job_id: UUID, scenes: list, temp_dir: str):
         all_captions: List[dict] = []
         cumulative_ms = 0
+        total_scenes = len(scenes)
+        ordered_results: List[Optional[dict]] = [None] * total_scenes
 
-        for i, scene in enumerate(scenes):
-            scene_num = scene.get("scene_number", i + 1)
-            audio_path = f"{temp_dir}/audio_{scene_num}.mp3"
-            narration = scene.get("narration", "")
+        tasks = [
+            asyncio.create_task(
+                self._synthesize_scene_audio(index, scene, temp_dir)
+            )
+            for index, scene in enumerate(scenes)
+        ]
+        heartbeat = asyncio.create_task(
+            self._heartbeat_stage_progress(
+                job_id=job_id,
+                stage_start=5,
+                stage_end=24,
+                tasks=tasks,
+            )
+        )
 
-            if hasattr(self.video_service.tts_adapter, "text_to_speech_with_timestamps"):
-                result = await self.video_service.tts_adapter.text_to_speech_with_timestamps(narration, audio_path)
-                duration = result.duration_seconds
-                for cap in result.captions:
-                    cap["startMs"] += cumulative_ms
-                    cap["endMs"] += cumulative_ms
-                all_captions.extend(result.captions)
-            else:
-                duration = await self.video_service.tts_adapter.text_to_speech(narration, audio_path)
+        try:
+            for completed_count, task in enumerate(asyncio.as_completed(tasks), start=1):
+                result = await task
+                ordered_results[result["index"]] = result
+                await self._update_stage_scene_progress(
+                    job_id=job_id,
+                    stage_start=5,
+                    stage_end=24,
+                    completed=completed_count,
+                    total=total_scenes,
+                )
+        finally:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
 
-            self.audio_paths.append(audio_path)
-            self.durations.append(duration)
-            cumulative_ms += int(duration * 1000)
+        for result in ordered_results:
+            if result is None:
+                continue
+
+            for cap in result["captions"]:
+                cap["startMs"] += cumulative_ms
+                cap["endMs"] += cumulative_ms
+            all_captions.extend(result["captions"])
+
+            self.audio_paths.append(result["audio_path"])
+            self.durations.append(result["duration"])
+            cumulative_ms += int(result["duration"] * 1000)
 
         self.total_duration = sum(self.durations)
         if all_captions:
@@ -90,36 +116,43 @@ class RenderExecutor:
             shutil.copy(self.audio_paths[0], merged_path)
 
     async def _stage_visual(self, job_id: UUID, scenes: list, temp_dir: str):
-        for i, scene in enumerate(scenes):
-            scene_num = scene.get("scene_number", i + 1)
-            visual_type = scene.get("visual_type", "")
-            config = scene.get("visual_config", {})
-            duration = self.durations[i] if i < len(self.durations) else 5.0
+        total_scenes = len(scenes)
+        ordered_results: List[Optional[dict]] = [None] * total_scenes
+        tasks = [
+            asyncio.create_task(
+                self._render_scene_visual(index, scene, temp_dir)
+            )
+            for index, scene in enumerate(scenes)
+        ]
+        heartbeat = asyncio.create_task(
+            self._heartbeat_stage_progress(
+                job_id=job_id,
+                stage_start=25,
+                stage_end=34,
+                tasks=tasks,
+            )
+        )
 
-            if visual_type == "ai_video":
-                vid_path = f"{temp_dir}/visual_{scene_num}.mp4"
-                prompt = config.get("prompt", "abstract cinematic animation, dark background, blue tones")
-                await self.video_service.veo_adapter.render_clip(prompt, duration, vid_path)
-                self.visual_paths.append(vid_path)
-                self.visual_is_video.append(True)
+        try:
+            for completed_count, task in enumerate(asyncio.as_completed(tasks), start=1):
+                result = await task
+                ordered_results[result["index"]] = result
+                await self._update_stage_scene_progress(
+                    job_id=job_id,
+                    stage_start=25,
+                    stage_end=34,
+                    completed=completed_count,
+                    total=total_scenes,
+                )
+        finally:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
 
-            elif visual_type == "ai_illustration":
-                img_path = f"{temp_dir}/visual_{scene_num}.png"
-                prompt = config.get("prompt", "educational diagram, clean design")
-                await self.video_service.imagen_adapter.generate_illustration(prompt, img_path)
-                self.visual_paths.append(img_path)
-                self.visual_is_video.append(False)
-
-            elif visual_type == "screenshot_scene":
-                img_path = f"{temp_dir}/visual_{scene_num}.png"
-                url = config.get("url", "")
-                await self._capture_url_screenshot(url, img_path)
-                self.visual_paths.append(img_path)
-                self.visual_is_video.append(False)
-
-            else:
-                self.visual_paths.append("")
-                self.visual_is_video.append(False)
+        for result in ordered_results:
+            if result is None:
+                continue
+            self.visual_paths.append(result["path"])
+            self.visual_is_video.append(result["is_video"])
 
     async def _stage_music(self, job_id: UUID, temp_dir: str):
         try:
@@ -283,3 +316,113 @@ class RenderExecutor:
             img.save(output_path, "PNG")
         except Exception:
             pass
+
+    async def _synthesize_scene_audio(self, index: int, scene: dict, temp_dir: str) -> dict:
+        scene_num = scene.get("scene_number", index + 1)
+        audio_path = f"{temp_dir}/audio_{scene_num}.mp3"
+        narration = scene.get("narration", "")
+
+        if hasattr(self.video_service.tts_adapter, "text_to_speech_with_timestamps"):
+            result = await self._run_async_callable_in_thread(
+                self.video_service.tts_adapter.text_to_speech_with_timestamps,
+                narration,
+                audio_path,
+            )
+            return {
+                "index": index,
+                "audio_path": audio_path,
+                "duration": result.duration_seconds,
+                "captions": list(result.captions),
+            }
+
+        duration = await self._run_async_callable_in_thread(
+            self.video_service.tts_adapter.text_to_speech,
+            narration,
+            audio_path,
+        )
+        return {
+            "index": index,
+            "audio_path": audio_path,
+            "duration": duration,
+            "captions": [],
+        }
+
+    async def _render_scene_visual(self, index: int, scene: dict, temp_dir: str) -> dict:
+        scene_num = scene.get("scene_number", index + 1)
+        visual_type = scene.get("visual_type", "")
+        config = scene.get("visual_config", {})
+        duration = self.durations[index] if index < len(self.durations) else 5.0
+
+        if visual_type == "ai_video":
+            vid_path = f"{temp_dir}/visual_{scene_num}.mp4"
+            prompt = config.get("prompt", "abstract cinematic animation, dark background, blue tones")
+            await self.video_service.veo_adapter.render_clip(prompt, duration, vid_path)
+            return {"index": index, "path": vid_path, "is_video": True}
+
+        if visual_type == "ai_illustration":
+            img_path = f"{temp_dir}/visual_{scene_num}.png"
+            prompt = config.get("prompt", "educational diagram, clean design")
+            await self._run_async_callable_in_thread(
+                self.video_service.imagen_adapter.generate_illustration,
+                prompt,
+                img_path,
+            )
+            return {"index": index, "path": img_path, "is_video": False}
+
+        if visual_type == "screenshot_scene":
+            img_path = f"{temp_dir}/visual_{scene_num}.png"
+            url = config.get("url", "")
+            await self._capture_url_screenshot(url, img_path)
+            return {"index": index, "path": img_path, "is_video": False}
+
+        return {"index": index, "path": "", "is_video": False}
+
+    async def _update_stage_scene_progress(
+        self,
+        job_id: UUID,
+        stage_start: int,
+        stage_end: int,
+        completed: int,
+        total: int,
+    ) -> None:
+        if total <= 0:
+            return
+
+        span = max(stage_end - stage_start, 0)
+        progress = stage_start + round((completed / total) * span)
+        await self.video_service._update_job(job_id, JobStatus.RUNNING, progress)
+
+    async def _heartbeat_stage_progress(
+        self,
+        job_id: UUID,
+        stage_start: int,
+        stage_end: int,
+        tasks: List[asyncio.Task],
+        interval_seconds: float = 1.5,
+    ) -> None:
+        # Keep the UI moving during long external calls even before the first
+        # scene completes, but never claim the stage is fully done.
+        if not tasks:
+            return
+
+        span = max(stage_end - stage_start, 0)
+        heartbeat_ceiling = stage_start + max(span - 2, 0)
+        progress = stage_start
+
+        while True:
+            if all(task.done() for task in tasks):
+                return
+
+            await asyncio.sleep(interval_seconds)
+            if all(task.done() for task in tasks):
+                return
+
+            progress = min(progress + 1, heartbeat_ceiling)
+            await self.video_service._update_job(job_id, JobStatus.RUNNING, progress)
+
+    async def _run_async_callable_in_thread(self, async_callable, *args):
+        return await asyncio.to_thread(self._run_async_callable_sync, async_callable, *args)
+
+    @staticmethod
+    def _run_async_callable_sync(async_callable, *args):
+        return asyncio.run(async_callable(*args))

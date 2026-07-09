@@ -15,6 +15,9 @@ class MockVideoService(VideoServiceInterface):
     async def generate_video(
         self,
         component_id: Optional[UUID] = None,
+        route_id: Optional[str] = None,
+        module_id: Optional[str] = None,
+        component_kind: Optional[str] = None,
         custom_storyboard: Optional[StoryboardRequest] = None,
         use_mock: bool = False
     ) -> UUID:
@@ -65,8 +68,8 @@ class MockVideoService(VideoServiceInterface):
 
     async def generate_storyboard(
         self,
-        route_id: UUID,
-        module_id: UUID,
+        route_id: str,
+        module_id: str,
         component_kind: str = "video",
         component_id: Optional[UUID] = None,
         k: int = 8,

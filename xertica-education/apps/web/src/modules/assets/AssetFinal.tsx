@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowRight, CircleCheck, FileImage, FlaskConical, ListChecks, RefreshCcw, ShieldCheck, Video as VideoIcon, X } from 'lucide-react'
@@ -15,13 +16,39 @@ import { QuizView } from '@/shared/content/QuizView'
 import { LabView } from '@/shared/content/LabView'
 import { getRoute } from '@/shared/data/routes'
 import { useStore } from '@/shared/store'
+import { api } from '@/shared/lib/api'
 
 export default function AssetFinal() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { routes, storyboardVideoUrlOf } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
-  const videoUrl = route ? storyboardVideoUrlOf(route.id) : ''
+  const [backendVideoUrl, setBackendVideoUrl] = useState('')
+  const videoUrl = backendVideoUrl || (route ? storyboardVideoUrlOf(route.id) : '')
+
+  useEffect(() => {
+    if (!route) return
+    const videoModule = route.modules.find((module) =>
+      module.contents.some((content) => content.kind === 'video')
+    )
+    if (!videoModule) return
+
+    let active = true
+    const params = new URLSearchParams({
+      route_id: route.id,
+      module_id: videoModule.id,
+      component_kind: 'video',
+    })
+    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
+      .then((asset) => {
+        if (!active) return
+        setBackendVideoUrl(asset.storage_path || asset.video_url || '')
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [route])
 
   if (!route) {
     return (

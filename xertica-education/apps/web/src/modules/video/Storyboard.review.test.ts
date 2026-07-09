@@ -1,8 +1,9 @@
 import {
   buildReviewedStoryboard,
   canRenderAiStoryboard,
-  isValidRenderTargetModuleId,
+  hasRenderTargetModuleId,
   isValidUuid,
+  renderPhaseLabel,
   sceneToReviewScene,
   updateSceneNarration,
   type StoryboardScene,
@@ -44,16 +45,16 @@ if (payload.scenes[0]?.visual_rationale !== backendScene.visual_rationale) {
   throw new Error('El render debe preservar la razón visual aprobada.')
 }
 
-if (!isValidRenderTargetModuleId('d781ba73-45b8-4c27-a1fe-5158787ef803')) {
-  throw new Error('Un module_id UUID debe activar la carga del storyboard real.')
+if (!hasRenderTargetModuleId('r1m1')) {
+  throw new Error('Un module_id persistido tipo r1m1 debe activar la carga del storyboard real si la ruta es real.')
 }
 
 if (!isValidUuid('d781ba73-45b8-4c27-a1fe-5158787ef803')) {
   throw new Error('La validación UUID debe servir tanto para route_id como para module_id.')
 }
 
-if (isValidRenderTargetModuleId('p102')) {
-  throw new Error('Un module_id local/mock no debe fingir que carga un Render Target real.')
+if (hasRenderTargetModuleId(undefined)) {
+  throw new Error('Sin module_id no debe intentarse cargar un Render Target real.')
 }
 
 if (canRenderAiStoryboard('fallback_error')) {
@@ -62,4 +63,12 @@ if (canRenderAiStoryboard('fallback_error')) {
 
 if (!canRenderAiStoryboard('backend')) {
   throw new Error('El render IA solo debe permitirse con storyboard real del backend.')
+}
+
+if (renderPhaseLabel(6) !== 'Sintetizando narración por escena...') {
+  throw new Error('El progreso bajo debe explicar que la demora actual está en TTS.')
+}
+
+if (renderPhaseLabel(72) !== 'Renderizando video final en Remotion...') {
+  throw new Error('El progreso medio debe explicar que el render final sigue en curso.')
 }
