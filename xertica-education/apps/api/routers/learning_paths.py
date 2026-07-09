@@ -8,6 +8,8 @@
 # - services/route/service.py: Performs business logic and DB edits for learning paths.
 # - services/jobs/service.py: Creates background generation jobs.
 
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from config.dependencies import (
     get_route_service, get_jobs_service, get_research_service, get_knowledge_base,
@@ -26,6 +28,8 @@ from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
 from typing import Dict, Any, List
 
+logger = logging.getLogger(__name__)
+
 
 async def _run_structure_job(
     structurer, route_service, jobs_service, job_id, route_id,
@@ -34,27 +38,34 @@ async def _run_structure_job(
     """Genera la Estructura Propuesta con el LLM (ADR-0014) y la persiste en la ruta.
     Si el LLM falla o el JSON no valida, marca el Job failed (el frontend ofrece
     'Regenerar') — en prod NO cae al mock (decisión del grill)."""
+    await jobs_service.update_job_status(job_id, JobStatus.RUNNING)
     try:
-        modules = await structurer.generate(brief, customer_context, parsed_docs)
+        structure = await structurer.generate(brief, customer_context, parsed_docs)
         await route_service.update_route(route_id, {
             "status": "borrador",
-            "modules": modules,
+            "name": structure["title"],        # → learning_paths.titulo
+            "tema": structure["tema"],         # → learning_paths.tema
+            "objective": structure["objective"],  # → details.objective
+            "modules": structure["modules"],
             "customerContext": customer_context,
         })
         await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
-    except Exception:
-        await jobs_service.update_job_status(job_id, JobStatus.FAILED)
+    except Exception as exc:
+        logger.exception("Structure generation job %s failed for route %s", job_id, route_id)
+        await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=str(exc))
 
 
 async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, sources):
     """Corre la ingesta RAG en background sobre las fuentes verificadas ya persistidas.
     Best-effort: si falla (infra no lista), marca el job y NO propaga — Gate 1 no se
     bloquea (regla de oro · CONTEXT §5)."""
+    await jobs_service.update_job_status(job_id, JobStatus.RUNNING)
     try:
         await coordinator.ingest_sources(learning_path_id, sources)
         await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
-    except Exception:
-        await jobs_service.update_job_status(job_id, JobStatus.FAILED)
+    except Exception as exc:
+        logger.exception("KB ingestion job %s failed for path %s", job_id, learning_path_id)
+        await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=str(exc))
 
 # Define the router namespace under `/learning-paths`.
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])

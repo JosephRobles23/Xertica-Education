@@ -572,7 +572,9 @@ export default function Ruta() {
     approveModule,
     routeProgressOf,
   } = useStore()
-  const route = useMemo(() => routes.find((r) => r.id === id), [routes, id])
+  const routeIndex = useMemo(() => routes.findIndex((r) => r.id === id), [routes, id])
+  const route = routeIndex >= 0 ? routes[routeIndex] : undefined
+  const routeOrderNo = routeIndex >= 0 ? String(routeIndex + 1).padStart(2, '0') : '—'
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0)
   const [selectedContentKind, setSelectedContentKind] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -647,7 +649,7 @@ export default function Ruta() {
     <div className="mx-auto grid max-w-[1120px] items-start gap-9 lg:grid-cols-[1fr_300px]">
       <div>
         <Eyebrow>
-          Ruta {route.id} · {route.name}
+          Ruta {routeOrderNo} · {route.name}
         </Eyebrow>
         <PageTitle className="mb-5 text-[31px]">{route.name}</PageTitle>
 
