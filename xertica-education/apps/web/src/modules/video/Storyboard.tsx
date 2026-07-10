@@ -115,8 +115,11 @@ export const renderPhaseLabel = (progress: number): string => {
   return RENDER_PHASES.find((item) => item.phase === phase)?.label ?? 'Encolando render en la nube...'
 }
 
-const renderPhaseMetaForProgress = (progress: number): RenderPhaseMeta =>
-  RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress)) ?? RENDER_PHASES[0]
+const renderPhaseMetaForProgress = (progress: number): RenderPhaseMeta => {
+  const matched = RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress))
+  if (matched) return matched
+  return RENDER_PHASES[0] as RenderPhaseMeta
+}
 
 const stagePercentWithinRange = (progress: number, start: number, end: number): number => {
   if (end <= start) return progress >= end ? 100 : 0
@@ -385,6 +388,8 @@ export default function Storyboard() {
     storyboardJobIdOf,
     setStoryboardJobId,
     clearStoryboardJobId,
+    activeJobs,
+    trackJob,
   } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
   const defaultReviewScenes = useMemo(() => (route ? buildReviewScenes(route) : []), [route])
@@ -459,6 +464,7 @@ export default function Storyboard() {
 
   const savedVideoUrl = route ? storyboardVideoUrlOf(route.id) : ''
   const savedJobId = route ? storyboardJobIdOf(route.id) : undefined
+  const activeStoryboardJob = savedJobId ? activeJobs[savedJobId] : undefined
   const resolvedVideoUrl = videoUrl || savedVideoUrl
 
   useEffect(() => {
@@ -501,8 +507,6 @@ export default function Storyboard() {
   useEffect(() => {
     if (!route) return
 
-    let active = true
-
     const resume = async () => {
       if (savedVideoUrl) {
         setVideoUrl(savedVideoUrl)
@@ -515,57 +519,60 @@ export default function Storyboard() {
       if (!savedJobId) return
 
       setRenderingState('rendering')
-      setRenderProgress(5)
-
-      const poll = async () => {
-        if (!active) return
-
-        try {
-          const status = await api.request<{ status: string, progress: number, result?: { video_url?: string; videoUrl?: string } }>(
-            `/videos/jobs/${savedJobId}`,
-          )
-          if (!active) return
-
-          setRenderProgress(status.progress)
-
-          if (status.status === 'completed') {
-            const finalUrl = status.result?.video_url || status.result?.videoUrl || ''
-            setRenderingState('success')
-            setVideoUrl(finalUrl)
-            if (finalUrl) {
-              setStoryboardVideoUrl(route.id, finalUrl)
-            }
-            clearStoryboardJobId(route.id)
-            approveStoryboard(route.id)
-            return
-          }
-
-          if (status.status === 'failed') {
-            setRenderingState('failed')
-            clearStoryboardJobId(route.id)
-            return
-          }
-
-          setRenderingState('rendering')
-          window.setTimeout(poll, 1500)
-        } catch {
-          if (!active) return
-          window.setTimeout(poll, 2000)
-        }
+      setRenderProgress((current) => (current > 0 ? current : 5))
+      if (!activeStoryboardJob) {
+        void trackJob(savedJobId).catch(() => {})
       }
-
-      void poll()
     }
 
     void resume()
-
-    return () => {
-      active = false
-    }
   }, [
     route,
     savedJobId,
     savedVideoUrl,
+    activeStoryboardJob,
+    trackJob,
+    setStoryboardVideoUrl,
+    clearStoryboardJobId,
+    approveStoryboard,
+  ])
+
+  useEffect(() => {
+    if (!route || !savedJobId) return
+
+    if (!activeStoryboardJob) {
+      setRenderingState('rendering')
+      setRenderProgress((current) => (current > 0 ? current : 5))
+      return
+    }
+
+    setRenderProgress(activeStoryboardJob.progress)
+
+    if (activeStoryboardJob.status === 'completed') {
+      const finalUrl = activeStoryboardJob.result?.video_url || activeStoryboardJob.result?.videoUrl || ''
+      setRenderingState('success')
+      setVideoUrl(finalUrl)
+      if (finalUrl) {
+        setStoryboardVideoUrl(route.id, finalUrl)
+      }
+      clearStoryboardJobId(route.id)
+      approveStoryboard(route.id)
+      toast.success('¡Video generado con éxito!', { id: 'render-job' })
+      return
+    }
+
+    if (activeStoryboardJob.status === 'failed') {
+      setRenderingState('failed')
+      clearStoryboardJobId(route.id)
+      toast.error('La generación del video falló', { id: 'render-job' })
+      return
+    }
+
+    setRenderingState('rendering')
+  }, [
+    route,
+    savedJobId,
+    activeStoryboardJob,
     setStoryboardVideoUrl,
     clearStoryboardJobId,
     approveStoryboard,
@@ -613,36 +620,11 @@ export default function Storyboard() {
       })
       const jId = res.job_id
       setStoryboardJobId(route.id, jId)
-
-      const poll = async () => {
-        try {
-          const status = await api.request<{ status: string, progress: number, result?: { video_url: string } }>(
-            `/videos/jobs/${jId}`
-          )
-          setRenderProgress(status.progress)
-          
-          if (status.status === 'completed') {
-            const finalUrl = status.result?.video_url || ''
-            setRenderingState('success')
-            setVideoUrl(finalUrl)
-            if (finalUrl) {
-              setStoryboardVideoUrl(route.id, finalUrl)
-            }
-            clearStoryboardJobId(route.id)
-            approveStoryboard(route.id)
-            toast.success('¡Video generado con éxito!', { id: 'render-job' })
-          } else if (status.status === 'failed') {
-            setRenderingState('failed')
-            clearStoryboardJobId(route.id)
-            toast.error('La generación del video falló', { id: 'render-job' })
-          } else {
-            setTimeout(poll, 1500)
-          }
-        } catch (err) {
-          setTimeout(poll, 2000)
-        }
-      }
-      setTimeout(poll, 1000)
+      void trackJob(jId).catch(() => {
+        setRenderingState('failed')
+        clearStoryboardJobId(route.id)
+        toast.error('La generación del video falló', { id: 'render-job' })
+      })
 
     } catch (e) {
       setRenderingState('failed')

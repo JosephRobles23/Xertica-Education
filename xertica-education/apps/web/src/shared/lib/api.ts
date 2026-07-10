@@ -83,7 +83,7 @@ export const api = {
   async pollJob(
     jobId: string,
     onProgress?: (job: JobState) => void,
-    intervalMs = 1000
+    intervalMs = 1500
   ): Promise<JobState> {
     return new Promise((resolve, reject) => {
       const runPoll = async () => {
