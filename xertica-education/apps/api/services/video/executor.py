@@ -28,12 +28,14 @@ class RenderExecutor:
         self.music_path: Optional[str] = None
         self.captions: Optional[List[dict]] = None
         self.edit_decisions: Optional[dict] = None
+        self.effective_storyboard: Optional[dict] = None
         self.total_duration: float = 0.0
 
     async def execute(self, plan: RenderPlan) -> None:
         job_id = plan.job_id
         storyboard = plan.storyboard.model_dump() if hasattr(plan.storyboard, "model_dump") else plan.storyboard
         storyboard = self.video_service._hydrate_storyboard_for_render(copy.deepcopy(storyboard))
+        self.effective_storyboard = storyboard
         scenes = storyboard.get("scenes", [])
         temp_dir = f"/tmp/render_{job_id}"
         os.makedirs(temp_dir, exist_ok=True)

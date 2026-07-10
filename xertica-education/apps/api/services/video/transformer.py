@@ -1,7 +1,24 @@
 from pathlib import Path
 
-STAT_CARD_ACCENT_COLORS = ["#22D3EE", "#A78BFA", "#34D399", "#F59E0B"]
-CHART_COLORS = ["#22D3EE", "#A78BFA", "#F59E0B", "#34D399", "#EC4899", "#8B5CF6"]
+STAT_CARD_ACCENT_COLORS = ["#22C7B8", "#F4B942", "#70D6A5", "#F27D5A"]
+CHART_COLORS = ["#22C7B8", "#F4B942", "#70D6A5", "#F27D5A", "#58A6D8", "#D6E76C"]
+
+XERTICA_EDUCATION_THEME = {
+    "primaryColor": "#22C7B8",
+    "accentColor": "#F4B942",
+    "backgroundColor": "#071A1F",
+    "surfaceColor": "#102A30",
+    "textColor": "#F5F1E8",
+    "mutedTextColor": "#A9C0BE",
+    "headingFont": "Space Grotesk",
+    "bodyFont": "Space Grotesk",
+    "monoFont": "Fira Code",
+    "chartColors": CHART_COLORS,
+    "springConfig": {"damping": 18, "stiffness": 105, "mass": 0.9},
+    "transitionDuration": 0.42,
+    "captionHighlightColor": "#F4B942",
+    "captionBackgroundColor": "rgba(7, 26, 31, 0.82)",
+}
 
 
 async def transform_storyboard_to_edit_decisions(
@@ -50,7 +67,8 @@ async def transform_storyboard_to_edit_decisions(
         "total_duration": total_duration,
         "cuts": cuts,
         "audio": audio_config,
-        "theme": "flat-motion-graphics",
+        "theme": "xertica-education",
+        "themeConfig": XERTICA_EDUCATION_THEME,
         "render_runtime": "remotion",
         "renderer_family": "explainer-data",
     }
@@ -77,21 +95,32 @@ def _build_cut(
 
     if visual_type == "text_card":
         subtitle = config.get("subtitle") or (narr if len(narr) < 60 else "")
-        return {**base, "type": "text_card", "text": config.get("title", ""), "subtitle": subtitle}
+        return {
+            **base, "type": "text_card", "text": config.get("title", ""), "subtitle": subtitle,
+            "accentColor": config.get("accentColor", CHART_COLORS[idx % len(CHART_COLORS)]),
+        }
 
     elif visual_type == "hero_title":
-        return {**base, "type": "hero_title", "text": config.get("text", config.get("title", "")), "subtitle": config.get("subtitle", "")}
+        return {
+            **base, "type": "hero_title", "text": config.get("text", config.get("title", "")),
+            "subtitle": config.get("subtitle", ""),
+            "accentColor": config.get("accentColor", CHART_COLORS[idx % len(CHART_COLORS)]),
+        }
 
     elif visual_type == "stat_card":
         accent = STAT_CARD_ACCENT_COLORS[idx % len(STAT_CARD_ACCENT_COLORS)]
         return {**base, "type": "stat_card", "stat": config.get("stat", ""), "subtitle": config.get("subtitle", ""), "accentColor": accent}
 
     elif visual_type == "callout":
-        return {**base, "type": "callout", "callout_type": config.get("callout_style", "info"), "text": config.get("text", "")}
+        return {
+            **base, "type": "callout", "title": config.get("title", ""),
+            "callout_type": config.get("callout_style", "info"), "text": config.get("text", ""),
+            "accentColor": config.get("accentColor", CHART_COLORS[idx % len(CHART_COLORS)]),
+        }
 
     elif visual_type == "comparison":
         return {
-            **base, "type": "comparison",
+            **base, "type": "comparison", "title": config.get("title", ""),
             "leftLabel": config.get("leftLabel", ""), "leftValue": config.get("leftValue", ""),
             "rightLabel": config.get("rightLabel", ""), "rightValue": config.get("rightValue", ""),
         }
@@ -101,7 +130,7 @@ def _build_cut(
             **base, "type": "bar_chart", "title": config.get("title", ""),
             "chartData": config.get("chartData", []),
             "showValues": config.get("showValues", True), "showGrid": config.get("showGrid", True),
-            "chartColors": CHART_COLORS,
+            "chartAnimation": config.get("chartAnimation", "grow-up"), "chartColors": CHART_COLORS,
         }
 
     elif visual_type == "line_chart":
@@ -115,6 +144,7 @@ def _build_cut(
             "showLegend": config.get("showLegend", False),
             "xLabel": config.get("xLabel", ""),
             "yLabel": config.get("yLabel", ""),
+            "chartAnimation": config.get("chartAnimation", "draw"),
             "chartColors": CHART_COLORS,
         }
 
@@ -123,11 +153,16 @@ def _build_cut(
             **base, "type": "pie_chart", "title": config.get("title", ""),
             "chartData": config.get("chartData", []), "donut": config.get("donut", True),
             "centerLabel": config.get("centerLabel", ""), "centerValue": config.get("centerValue", ""),
-            "showLegend": config.get("showLegend", True), "chartColors": CHART_COLORS,
+            "showLegend": config.get("showLegend", True),
+            "chartAnimation": config.get("chartAnimation", "expand"), "chartColors": CHART_COLORS,
         }
 
     elif visual_type == "kpi_grid":
-        return {**base, "type": "kpi_grid", "title": config.get("title", ""), "chartData": config.get("chartData", [])}
+        return {
+            **base, "type": "kpi_grid", "title": config.get("title", ""),
+            "chartData": config.get("chartData", []), "columns": config.get("columns"),
+            "chartAnimation": config.get("chartAnimation", "count-up"), "chartColors": CHART_COLORS,
+        }
 
     elif visual_type == "progress_bar":
         return {
@@ -136,6 +171,9 @@ def _build_cut(
             "title": config.get("title", ""),
             "progress": config.get("progress", 0),
             "progressSegments": _normalize_progress_steps(config.get("steps", [])),
+            "progressLabel": config.get("progressLabel", ""),
+            "progressAnimation": config.get("progressAnimation", "step"),
+            "progressColor": config.get("progressColor", CHART_COLORS[idx % len(CHART_COLORS)]),
         }
 
     elif visual_type == "terminal_scene":
@@ -163,14 +201,14 @@ def _build_cut(
         import os
         filename = os.path.basename(source) if source else ""
         src = f"{job_id}/{filename}" if filename else ""
-        return {**base, "source": src, "animation": "static"}
+        return {**base, "source": src, "animation": "static", "backgroundColor": "#071A1F"}
 
     elif visual_type == "ai_illustration":
         source = visual_paths[idx] if idx < len(visual_paths) else ""
         import os
         filename = os.path.basename(source) if source else ""
         src = f"{job_id}/{filename}" if filename else ""
-        return {**base, "source": src, "animation": "ken-burns", "backgroundColor": "#0F172A"}
+        return {**base, "source": src, "animation": "ken-burns", "backgroundColor": "#071A1F"}
 
     return None
 

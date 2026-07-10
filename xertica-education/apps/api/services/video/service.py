@@ -83,8 +83,8 @@ Cada escena debe incluir:
 
 Prioriza `comparison`, `progress_bar`, `callout`, `text_card`, `terminal_scene` y `screenshot_scene`.
 
-1. La primera escena (scene_number: 1) DEBE usar obligatoriamente `ai_video` (Veo 3.1) para crear un gancho visual de inicio. El prompt debe ser cinematográfico y en inglés. No se permite en otras escenas.
-2. Al menos una de las escenas posteriores (por ejemplo, la escena 2 o 3) DEBE usar obligatoriamente `ai_illustration` (Imagen 3) para representar el modelo mental, la arquitectura o el diagrama técnico. El prompt debe ser detallado y técnico en inglés.
+1. `ai_video` (Veo 3.1) es opcional y se usa como maximo una vez, solo cuando una metafora visual concreta ayuda a entender el tema. Nunca lo uses como intro tecnologica generica.
+2. `ai_illustration` (Imagen 3) es opcional y se usa para representar un modelo mental, arquitectura o diagrama concreto. No la uses como imagen decorativa.
 Graficos cuantitativos requieren valores evidenciados o marcados explicitamente como ilustrativos.
 `screenshot_scene` requiere URL especifica, proposito, pasos ordenados de UI y resultado de aprendizaje. Si no hay URL verificada, no uses `screenshot_scene`.
 
@@ -109,31 +109,31 @@ Para evitar videos aburridos con escenas estáticas prolongadas, el ritmo debe s
 ## Remotion-native (12 tipos — renderizados por el motor Remotion):
 
 ### text_card
-Tipografía grande con título + subtítulo. Usar para conceptos clave, encabezados de sección, listas de bullets.
+Tipografía grande con título + subtítulo. Usar para una tesis, regla o síntesis breve. El título debe nombrar la idea concreta y el subtítulo debe mostrar su consecuencia, no repetir la narración.
 ```json
 {"title": "Título del concepto", "subtitle": "Subtítulo o bullets separados por •"}
 ```
 
 ### hero_title
-Animación spring por carácter. Usar SOLO para secuencia de apertura o cierre (máximo 1 por video).
+Animación spring por carácter. Usar SOLO para formular la gran pregunta o cerrar con una frase memorable (máximo 1 por video).
 ```json
 {"text": "Título Principal", "subtitle": "Subtítulo opcional"}
 ```
 
 ### stat_card
-Un número grande con subtítulo. Usar al presentar una métrica o estadística clave.
+Un número grande con subtítulo. Usar solo con una cantidad respaldada por Grounding o marcada `illustrative: true`; incluye unidad y contexto.
 ```json
 {"stat": "80%", "subtitle": "de las empresas migrarán a la nube en 2026"}
 ```
 
 ### callout
-Mensaje en caja con estilo visual. Usar para notas importantes, definiciones, citas, advertencias.
+Mensaje en caja con estilo visual. Usa `info` para definiciones, `warning` para errores comunes, `tip` para reglas de decisión y `quote` solo para citas reales.
 ```json
 {"callout_style": "info|warning|tip|quote", "text": "Contenido del callout"}
 ```
 
 ### comparison
-Comparación lado a lado. Usar para antes/después, viejo vs nuevo, pros vs contras.
+Comparación lado a lado. Ambos lados deben completar la misma dimensión de análisis y mostrar un contraste que cambie una decisión.
 ```json
 {"leftLabel": "On-Premise", "leftValue": "Alta latencia", "rightLabel": "Cloud", "rightValue": "Baja latencia"}
 ```
@@ -163,13 +163,13 @@ Grid de KPIs de 2-4 columnas. Usar para resúmenes tipo dashboard con métricas 
 ```
 
 ### progress_bar
-Barra de progreso animada. Usar para flujos de proceso, tasas de completitud, procedimientos paso a paso.
+Barra de progreso animada. Para procesos, usa `steps` con verbos de acción y orden pedagógico; `progress` representa la etapa explicada, no una métrica inventada.
 ```json
 {"title": "Proceso de Migración", "progress": 60, "steps": ["Paso 1: Evaluar", "Paso 2: Planificar", "Paso 3: Migrar", "Paso 4: Validar"]}
 ```
 
 ### terminal_scene
-Terminal sintética con animación de tipeo. Usar para comandos CLI, código, snippets de configuración. NUNCA inventes comandos — usa comandos reales del tema.
+Terminal sintética con animación de tipeo. Cada comando debe ser ejecutable o claramente pseudocódigo, y cada salida debe enseñar cómo verificar el resultado. NUNCA inventes comandos de una herramienta real.
 ```json
 {"title": "Comandos de GCloud", "steps": ["cmd: gcloud auth login", "out: Logged in successfully.", "cmd: gcloud projects list", "out: PROJECT_ID  NAME", "cmd: gcloud compute instances create demo-instance --zone=us-central1-a", "out: Created [...].", "pause: 2"]}
 ```
@@ -183,13 +183,13 @@ Grabación sintética de UI con overlays de cursor, clicks y tipeo sobre un scre
 ## Asset-based (2 tipos — generados por APIs externas):
 
 ### ai_video
-Clip de video generativo Veo 3.1. Usar SOLO para la escena de hook inicial (máximo 1 por video, exactamente 1). El prompt debe ser cinematográfico y detallado.
+Clip de video generativo Veo 3.1. Opcional, máximo 1. Describe sujeto, relación conceptual, entorno, acción temporal, cámara, luz y paleta. Sin texto en pantalla, logos ni metáforas tecnológicas genéricas.
 ```json
 {"prompt": "detailed cinematic description in English — minimum 50 words, describe lighting, camera movement, color palette, mood, abstract or concrete subject matter"}
 ```
 
 ### ai_illustration
-Diagrama/ilustración Imagen 3. Usar para diagramas de arquitectura, visualizaciones de concepto, flujos de proceso.
+Diagrama/ilustración Imagen 3. Describe los elementos concretos, su relación espacial, dirección del flujo, jerarquía visual y el único modelo mental que debe quedar claro. Sin decoración irrelevante.
 ```json
 {"prompt": "detailed illustration description in English — minimum 50 words, describe composition, style, color scheme, elements, layout", "title": "Título overlay opcional", "bullets": ["Punto 1 opcional", "Punto 2 opcional"]}
 ```
@@ -197,7 +197,7 @@ Diagrama/ilustración Imagen 3. Usar para diagramas de arquitectura, visualizaci
 # INGENIERÍA DE PROMPTS PARA VISUALES
 
 Para `ai_video` (Veo 3.1), escribe prompts CINEMATOGRÁFICOS en inglés:
-- BUENO: "Glowing data streams flowing through a neural network, particles connecting into constellation patterns, cinematic slow motion, dark background with blue and purple bioluminescent light trails, abstract and metaphorical, no faces or text, 4K quality, smooth camera dollying forward"
+- BUENO: "A tangled paper route map physically reorganizes into one clear decision path as evidence cards lock into place, documentary macro photography, slow lateral dolly, deep ink shadows with teal and warm gold highlights, tactile materials, no text or logos"
 - MALO: "abstract animation" o "tech background"
 
 Para `ai_illustration` (Imagen 3), escribe prompts TÉCNICOS en inglés:
@@ -209,8 +209,8 @@ Para `ai_illustration` (Imagen 3), escribe prompts TÉCNICOS en inglés:
 - Narración total: ~225-300 palabras
 - Número de escenas: 5 a 7 escenas fuertes
 - Idioma: Español (toda la narración en español para TTS)
-- ai_video: EXACTAMENTE 1 escena, obligatoria en la primera escena (scene_number: 1).
-- ai_illustration: AL MENOS 1 escena (máximo 2) para diagramas o modelos conceptuales.
+- ai_video: opcional, máximo 1 escena y solo con metáfora didáctica concreta.
+- ai_illustration: opcional, máximo 2 escenas para diagramas o modelos conceptuales concretos.
 - hero_title: máximo 1 escena (apertura o cierre)
 - screenshot_scene: solo si hay una URL verificada en las fuentes del learning path
 - NO inventes URLs — usa únicamente URLs de las fuentes verificadas en el contexto del learning path
@@ -264,6 +264,7 @@ class VideoService(VideoServiceInterface):
         self._supabase = None
         self._fallback_assets: Dict[UUID, dict] = {}
         self._fallback_jobs: Dict[UUID, dict] = {}
+        self._render_tasks: set[asyncio.Task] = set()
 
         url = settings.supabase_url
         key = settings.supabase_key
@@ -364,9 +365,12 @@ class VideoService(VideoServiceInterface):
             )
 
         # Spawn the rendering pipeline as a background task.
-        asyncio.create_task(
+        task = asyncio.create_task(
             self._run_render_job(job_id, component_id, storyboard, storyboard_source, render_target)
         )
+        if task is not None:
+            self._render_tasks.add(task)
+            task.add_done_callback(self._render_tasks.discard)
         return job_id
 
     async def generate_storyboard(
@@ -545,25 +549,13 @@ class VideoService(VideoServiceInterface):
         """Keep scene-level provenance honest and repair decorative visuals."""
         verified_urls = verified_urls or set()
         ai_video_count = 0
-        ai_illustration_count = 0
         hero_title_count = 0
 
         scenes = storyboard.get("scenes", [])
         if not scenes:
             return storyboard
 
-        # ── 1. Enforce first scene is ai_video (Veo 3.1) ──
-        first_scene = scenes[0]
-        if first_scene.get("visual_type") != "ai_video":
-            first_scene["visual_type"] = "ai_video"
-            config = first_scene.get("visual_config") or {}
-            if not config.get("prompt"):
-                topic_name = storyboard.get("title") or "concept"
-                config["prompt"] = f"Abstract cinematic visual metaphor explaining {topic_name}, dark background, blue and purple glowing lights, high definition, 4k"
-            first_scene["visual_config"] = config
-            first_scene["visual_rationale"] = "Abrir con un gancho visual cinematográfico usando Veo 3.1 para contextualizar el tema."
-
-        # ── 2. Run normalization loop ──
+        # Repair unsafe or decorative choices before the reviewed storyboard is returned.
         for index, scene in enumerate(scenes):
             scene["grounding_status"] = grounding_status
 
@@ -600,17 +592,13 @@ class VideoService(VideoServiceInterface):
                             "Sin un modelo mental o arquitectura concreta, una tarjeta explicativa ensena mejor que una ilustracion generica."
                         ),
                     )
-                else:
-                    ai_illustration_count += 1
-
             if scene.get("visual_type") == "ai_video":
-                is_intro_video = (index == 0)
-                if not is_intro_video:
+                if ai_video_count >= 1 or not self._has_meaningful_visual_metaphor(scene):
                     self._replace_with_callout(
                         scene,
                         text=scene.get("teaching_point") or scene.get("narration") or "Idea clave del modulo",
                         rationale=(
-                            "ai_video solo se permite como metafora didactica concreta y como maximo una vez."
+                            "Sin una metafora didactica concreta, un visual explicativo ensena mejor que video generativo."
                         ),
                     )
                 else:
@@ -626,19 +614,6 @@ class VideoService(VideoServiceInterface):
                     )
                 else:
                     hero_title_count += 1
-
-        # ── 3. Enforce that at least one subsequent scene is ai_illustration (Imagen 3) ──
-        if ai_illustration_count == 0 and len(scenes) > 1:
-            target_scene = scenes[1]
-            target_scene["visual_type"] = "ai_illustration"
-            config = target_scene.get("visual_config") or {}
-            tp = target_scene.get("teaching_point") or target_scene.get("narration") or "concept diagram"
-            if not config.get("prompt"):
-                config["prompt"] = f"A clean technical diagram illustrating {tp}. Educational infographic style, dark navy background (#0f172a), blue and purple accent colors, flat design, vector style"
-            config["title"] = target_scene.get("teaching_point") or "Diagrama Conceptual"
-            target_scene["visual_config"] = config
-            target_scene["visual_rationale"] = "Representar el modelo mental mediante una ilustración técnica de Imagen 3."
-            target_scene["grounding_status"] = grounding_status
 
         return storyboard
 
@@ -764,8 +739,50 @@ class VideoService(VideoServiceInterface):
         for index, scene in enumerate(scenes):
             if not isinstance(scene, dict):
                 continue
+            self._repair_sparse_render_scene(scene)
             scene["visual_config"] = self._hydrate_visual_config(scene, index, title)
         return storyboard
+
+    def _repair_sparse_render_scene(self, scene: dict) -> None:
+        """Keep direct render payloads visible without fabricating evidence."""
+        visual_type = scene.get("visual_type")
+        config = scene.get("visual_config") or {}
+        focus = self._scene_focus_label(scene, "Idea clave")
+
+        if visual_type == "screenshot_scene" and not (
+            config.get("url") and isinstance(config.get("steps"), list) and config["steps"]
+        ):
+            self._replace_with_text_card(
+                scene,
+                title=focus,
+                subtitle="Demostracion visual no disponible; conserva la accion que debe aprenderse.",
+                rationale="Sin URL y pasos reales, una explicacion cualitativa evita fingir una interfaz.",
+            )
+        elif visual_type == "terminal_scene" and not config.get("steps"):
+            self._replace_with_text_card(
+                scene,
+                title=focus,
+                subtitle="Secuencia operativa explicada sin inventar comandos.",
+                rationale="Sin comandos verificables, una tarjeta mantiene el contenido honesto.",
+            )
+        elif visual_type in {"bar_chart", "pie_chart", "kpi_grid"} and not self._has_renderable_chart_data(config.get("chartData")):
+            self._replace_with_callout(
+                scene,
+                text=focus,
+                rationale="Sin datos proporcionados, un visual cualitativo evita inventar cantidades.",
+            )
+        elif visual_type == "line_chart" and not self._normalize_line_chart_series(config.get("chartSeries"), focus):
+            self._replace_with_callout(
+                scene,
+                text=focus,
+                rationale="Sin una serie proporcionada, un visual cualitativo evita inventar una tendencia.",
+            )
+        elif visual_type == "stat_card" and not config.get("stat"):
+            self._replace_with_callout(
+                scene,
+                text=focus,
+                rationale="Sin una cantidad proporcionada, un callout evita presentar una metrica falsa.",
+            )
 
     def _hydrate_visual_config(self, scene: dict, index: int, storyboard_title: str) -> dict:
         config = dict(scene.get("visual_config") or {})
@@ -773,73 +790,73 @@ class VideoService(VideoServiceInterface):
         focus = self._scene_focus_label(scene, storyboard_title)
         accent_title = config.get("title") or focus
 
+        if visual_type == "text_card":
+            config.setdefault("title", focus)
+            config.setdefault("subtitle", str(scene.get("pedagogical_intent") or scene.get("narration") or storyboard_title)[:150])
+            return config
+
+        if visual_type == "hero_title":
+            config.setdefault("text", focus)
+            config.setdefault("subtitle", str(scene.get("pedagogical_intent") or storyboard_title)[:120])
+            return config
+
+        if visual_type == "stat_card":
+            config.setdefault("title", accent_title)
+            config.setdefault("subtitle", focus)
+            return config
+
+        if visual_type == "callout":
+            pattern = str(scene.get("teaching_pattern") or "").lower()
+            default_style = "warning" if "misconception" in pattern else "tip" if "decision" in pattern else "info"
+            config.setdefault("title", accent_title)
+            config.setdefault("callout_style", default_style)
+            config.setdefault("text", focus)
+            return config
+
+        if visual_type == "comparison":
+            config.setdefault("title", accent_title)
+            config.setdefault("leftLabel", "Sin aplicar")
+            config.setdefault("leftValue", str(scene.get("pedagogical_intent") or "Estado inicial")[:90])
+            config.setdefault("rightLabel", "Aplicado")
+            config.setdefault("rightValue", focus[:90])
+            return config
+
+        if visual_type == "bar_chart":
+            config.setdefault("title", accent_title)
+            config.setdefault("showValues", True)
+            config.setdefault("showGrid", True)
+            config.setdefault("chartAnimation", "grow-up")
+            return config
+
         if visual_type == "terminal_scene":
             config.setdefault("title", accent_title or "Terminal")
             steps = config.get("steps")
             if not isinstance(steps, list) or not steps:
                 config["steps"] = [
-                    {"kind": "cmd", "text": f"abrir modulo --tema \"{focus}\""},
-                    {"kind": "out", "text": "Contexto cargado correctamente."},
-                    {"kind": "cmd", "text": "aplicar estrategia --modo guiado"},
-                    {"kind": "out", "text": "Resultado: plan listo para ejecutar."},
-                    {"kind": "pause", "seconds": 1.0},
+                    {"kind": "out", "text": focus},
                 ]
             return config
 
         if visual_type == "screenshot_scene":
             config.setdefault("title", accent_title or "Walkthrough")
-            config.setdefault("url", "")
-            steps = config.get("steps")
-            if not isinstance(steps, list) or not steps:
-                callout = (scene.get("teaching_point") or scene.get("narration") or focus)[:96]
-                config["steps"] = [
-                    {"kind": "cursor_move", "to": [0.22, 0.18], "durationSeconds": 0.8},
-                    {"kind": "click_pulse", "at": [0.22, 0.18], "durationSeconds": 0.45},
-                    {
-                        "kind": "type_into",
-                        "region": {"x": 0.18, "y": 0.14, "w": 0.56, "h": 0.1},
-                        "text": focus,
-                        "typeSpeed": 0.04,
-                    },
-                    {
-                        "kind": "highlight_box",
-                        "region": {"x": 0.16, "y": 0.12, "w": 0.62, "h": 0.2},
-                        "durationSeconds": 1.2,
-                    },
-                    {
-                        "kind": "callout_balloon",
-                        "anchor": [0.48, 0.24],
-                        "text": callout,
-                        "position": "bottom",
-                    },
-                ]
             return config
 
         if visual_type == "kpi_grid":
             config.setdefault("title", accent_title or "Resumen de metricas")
             chart_data = config.get("chartData")
-            if not isinstance(chart_data, list) or not chart_data:
-                config["chartData"] = [
-                    {"label": "Practica", "value": 78, "suffix": "%", "change": 12},
-                    {"label": "Control", "value": 64, "suffix": "%", "change": 8},
-                    {"label": "Consistencia", "value": 91, "suffix": "%", "change": 5},
-                ]
-            config.setdefault("columns", 3)
+            config.setdefault("columns", min(4, max(2, len(chart_data))))
+            config.setdefault("chartAnimation", "count-up")
             return config
 
         if visual_type == "pie_chart":
             config.setdefault("title", accent_title or "Distribucion")
             chart_data = config.get("chartData")
-            if not isinstance(chart_data, list) or not chart_data:
-                config["chartData"] = [
-                    {"label": "Preparacion", "value": 40},
-                    {"label": "Decision", "value": 35},
-                    {"label": "Ejecucion", "value": 25},
-                ]
             config.setdefault("donut", True)
-            config.setdefault("centerLabel", "Total")
-            config.setdefault("centerValue", "100%")
+            config.setdefault("centerLabel", "Composicion")
+            total = sum(float(item.get("value", 0)) for item in chart_data if isinstance(item, dict))
+            config.setdefault("centerValue", f"{total:g}%" if total == 100 else f"{total:g}")
             config.setdefault("showLegend", True)
+            config.setdefault("chartAnimation", "expand")
             return config
 
         if visual_type == "line_chart":
@@ -849,8 +866,25 @@ class VideoService(VideoServiceInterface):
             config.setdefault("showLegend", False)
             config.setdefault("showMarkers", True)
             config.setdefault("showGrid", True)
-            config.setdefault("xLabel", "Iteracion")
-            config.setdefault("yLabel", "Valor")
+            config.setdefault("xLabel", "Intento")
+            first_label = config["chartSeries"][0].get("label") if config["chartSeries"] else None
+            config.setdefault("yLabel", first_label or "Valor")
+            config.setdefault("chartAnimation", "draw")
+            return config
+
+        if visual_type == "progress_bar":
+            config.setdefault("title", accent_title)
+            steps = config.get("steps")
+            if not isinstance(steps, list) or not steps:
+                steps = [focus, str(scene.get("pedagogical_intent") or "Verificar el resultado")[:96]]
+                config["steps"] = steps
+            config.setdefault("progress", 100)
+            config.setdefault("progressLabel", "Secuencia completa")
+            config.setdefault("progressAnimation", "step")
+            return config
+
+        if visual_type == "ai_video":
+            config.setdefault("prompt", self._build_video_prompt(scene, storyboard_title))
             return config
 
         if visual_type == "ai_illustration":
@@ -866,20 +900,20 @@ class VideoService(VideoServiceInterface):
 
         return config
 
+    def _has_renderable_chart_data(self, chart_data: Any) -> bool:
+        if not isinstance(chart_data, list) or not chart_data:
+            return False
+        return all(
+            isinstance(item, dict)
+            and str(item.get("label") or "").strip()
+            and isinstance(item.get("value"), (int, float))
+            and not isinstance(item.get("value"), bool)
+            for item in chart_data
+        )
+
     def _normalize_line_chart_series(self, series: Any, fallback_label: str) -> list[dict]:
         if not isinstance(series, list) or not series:
-            return [
-                {
-                    "label": fallback_label or "Tendencia",
-                    "data": [
-                        {"x": 1, "y": 18},
-                        {"x": 2, "y": 34},
-                        {"x": 3, "y": 52},
-                        {"x": 4, "y": 68},
-                        {"x": 5, "y": 83},
-                    ],
-                }
-            ]
+            return []
 
         normalized = []
         for item in series:
@@ -900,18 +934,7 @@ class VideoService(VideoServiceInterface):
         if normalized:
             return normalized
 
-        return [
-            {
-                "label": fallback_label or "Tendencia",
-                "data": [
-                    {"x": 1, "y": 18},
-                    {"x": 2, "y": 34},
-                    {"x": 3, "y": 52},
-                    {"x": 4, "y": 68},
-                    {"x": 5, "y": 83},
-                ],
-            }
-        ]
+        return []
 
     def _scene_focus_label(self, scene: dict, storyboard_title: str) -> str:
         for key in ("teaching_point", "narration", "pedagogical_intent"):
@@ -930,13 +953,25 @@ class VideoService(VideoServiceInterface):
         context = " | ".join(part for part in [teaching_point, narration, intent, rationale] if part)
 
         return (
-            "A clean technical educational illustration for a training video. "
+            "A premium editorial educational illustration for a training video. "
+            f"Video topic: {storyboard_title}. "
             f"Primary concept: {focus}. "
             f"Scene context: {context}. "
-            "Show one coherent system, process, interface, or conceptual diagram directly related to the scene context. "
-            "Flat infographic style, dark navy background (#0f172a), blue and purple accent colors, subtle gradients, 16:9 wide composition, professional presentation quality. "
+            "Show one coherent system, process, interface, or conceptual diagram directly related to the scene context, emphasizing the teaching relationship between action and evidence. "
+            "Use clear visual hierarchy, directional flow, generous negative space, tactile geometric forms, deep ink background, teal and warm gold accents, subtle gradients, 16:9 wide composition, professional presentation quality. "
             "Avoid decorative stock imagery. Avoid biology, photosynthesis, plants, chloroplasts, classroom posters, and unrelated science diagrams. "
-            "No text labels embedded in the illustration unless essential for diagram structure."
+            "No logos, watermarks, decorative text, or text labels embedded in the illustration unless essential for diagram structure."
+        )
+
+    def _build_video_prompt(self, scene: dict, storyboard_title: str) -> str:
+        focus = self._scene_focus_label(scene, storyboard_title)
+        intent = str(scene.get("pedagogical_intent") or "Make the relationship visible").strip()
+        return (
+            f"A cinematic educational visual metaphor for {storyboard_title}. "
+            f"The concrete concept is: {focus}. The visual action must communicate: {intent}. "
+            "Show a specific subject changing through a clear cause-and-effect action over time, with a restrained documentary camera move, layered foreground and background, natural cinematic lighting, deep ink shadows, teal highlights and warm gold focal accents. "
+            "Premium editorial cinematography, realistic materials, coherent spatial continuity, 16:9 composition, no people speaking to camera. "
+            "No text, captions, logos, interfaces, glowing data streams, generic neural networks, random particles, or abstract technology background."
         )
 
     async def _load_render_target_context(
@@ -1492,13 +1527,15 @@ class VideoService(VideoServiceInterface):
             executor = RenderExecutor(self)
             await executor.execute(plan)
 
+            effective_storyboard = executor.effective_storyboard or storyboard
+            scenes = effective_storyboard.get("scenes", [])
             total_duration = executor.total_duration
             veo_scenes = sum(1 for s in scenes if s.get("visual_type") == "ai_video")
             imagen_scenes = sum(1 for s in scenes if s.get("visual_type") == "ai_illustration")
             estimated_cost = (veo_scenes * 0.20) + (imagen_scenes * 0.04) + (0.004 * total_duration)
 
             final_url = executor.stage_outputs.get("upload", {}).get("url", "")
-            render_provenance = self._build_render_provenance(storyboard, storyboard_source)
+            render_provenance = self._build_render_provenance(effective_storyboard, storyboard_source)
             result = {
                 "video_url": final_url,
                 "duration_seconds": round(total_duration, 2),

@@ -82,8 +82,6 @@ const RENDER_PHASES: RenderPhaseMeta[] = [
   { phase: 'done', shortLabel: 'Listo', label: '¡Generación Completada!', start: 100, end: 100, description: 'El video ya quedó generado y disponible.' },
 ]
 
-const SLOW_VISUAL_TYPES: readonly VisualType[] = ['ai_video', 'ai_illustration', 'screenshot_scene']
-
 const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -113,69 +111,6 @@ export const renderPhaseFromProgress = (progress: number): RenderPhase => {
 export const renderPhaseLabel = (progress: number): string => {
   const phase = renderPhaseFromProgress(progress)
   return RENDER_PHASES.find((item) => item.phase === phase)?.label ?? 'Encolando render en la nube...'
-}
-
-const renderPhaseMetaForProgress = (progress: number): RenderPhaseMeta => {
-  const matched = RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress))
-  if (matched) return matched
-  return RENDER_PHASES[0] as RenderPhaseMeta
-}
-
-const stagePercentWithinRange = (progress: number, start: number, end: number): number => {
-  if (end <= start) return progress >= end ? 100 : 0
-  const clamped = Math.min(end, Math.max(start, progress))
-  return Math.round(((clamped - start) / (end - start)) * 100)
-}
-
-const stageDisplayPercent = (progress: number, meta: RenderPhaseMeta, isCurrent: boolean): number => {
-  const pct = stagePercentWithinRange(progress, meta.start, meta.end)
-  if (isCurrent && pct >= 100 && meta.phase !== 'done') {
-    return 99
-  }
-  return pct
-}
-
-const estimatedSceneIndex = (progressPct: number, totalScenes: number): number => {
-  if (totalScenes <= 0) return 0
-  if (progressPct <= 0) return 1
-  return Math.min(totalScenes, Math.max(1, Math.ceil((progressPct / 100) * totalScenes)))
-}
-
-const renderPhaseNarrative = (progress: number, scenes: ReviewScene[]) => {
-  const meta = renderPhaseMetaForProgress(progress)
-  const currentPhasePct = stagePercentWithinRange(progress, meta.start, meta.end)
-
-  if (meta.phase === 'tts') {
-    const sceneIndex = estimatedSceneIndex(currentPhasePct, scenes.length)
-    const scene = scenes[sceneIndex - 1]
-    return {
-      headline: scene ? `Narración estimada: escena ${sceneIndex} de ${scenes.length}` : 'Narración en progreso',
-      detail: scene ? `${scene.tag}: sintetizando el audio de esta escena.` : meta.description,
-    }
-  }
-
-  if (meta.phase === 'visuals') {
-    const sceneIndex = estimatedSceneIndex(currentPhasePct, scenes.length)
-    const scene = scenes[sceneIndex - 1]
-    const slowScenes = scenes
-      .filter((item) => SLOW_VISUAL_TYPES.includes(item.visualType))
-      .map((item) => VISUAL_META[item.visualType]?.tag ?? item.visualType)
-    const slowHint = slowScenes.length > 0
-      ? ` En este storyboard hay visuales más lentos: ${Array.from(new Set(slowScenes)).join(', ')}.`
-      : ''
-    const remotionHint = ' Los charts, comparisons, callouts, progress bars y terminales aparecen más tarde en la etapa de Render, no como archivos sueltos aquí.'
-    return {
-      headline: scene ? `Visual estimado: escena ${sceneIndex} de ${scenes.length}` : 'Visuales en progreso',
-      detail: scene
-        ? `${scene.tag} (${scene.visualType}): generando el asset visual de esta escena.${slowHint}${remotionHint}`
-        : `${meta.description}${slowHint}${remotionHint}`,
-    }
-  }
-
-  return {
-    headline: meta.shortLabel,
-    detail: meta.description,
-  }
 }
 
 // Visual-type → friendly tag + pacing budget (mirrors ADR-0012 pacing rules).
@@ -397,7 +332,6 @@ export default function Storyboard() {
 
   // Video generation/render states
   const [renderingState, setRenderingState] = useState<'idle' | 'rendering' | 'success' | 'failed'>('idle')
-  const [renderProgress, setRenderProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState('')
   const [reviewScenes, setReviewScenes] = useState<ReviewScene[]>(defaultReviewScenes)
   const [isEditing, setIsEditing] = useState(false)
@@ -483,7 +417,6 @@ export default function Storyboard() {
         if (!finalUrl) return
         setVideoUrl(finalUrl)
         setStoryboardVideoUrl(route.id, finalUrl)
-        setRenderProgress(100)
         setRenderingState('success')
         clearStoryboardJobId(route.id)
       })
@@ -498,7 +431,6 @@ export default function Storyboard() {
     setReviewScenes(defaultReviewScenes)
     setIsEditing(false)
     setRenderingState('idle')
-    setRenderProgress(0)
     setVideoUrl('')
     setStoryboardSource(hasValidRenderTarget ? 'idle' : 'fallback_invalid_target')
     setStoryboardGrounding({ status: null, chunkCount: 0 })
@@ -510,7 +442,6 @@ export default function Storyboard() {
     const resume = async () => {
       if (savedVideoUrl) {
         setVideoUrl(savedVideoUrl)
-        setRenderProgress(100)
         setRenderingState('success')
         clearStoryboardJobId(route.id)
         return
@@ -519,7 +450,6 @@ export default function Storyboard() {
       if (!savedJobId) return
 
       setRenderingState('rendering')
-      setRenderProgress((current) => (current > 0 ? current : 5))
       if (!activeStoryboardJob) {
         void trackJob(savedJobId).catch(() => {})
       }
@@ -542,11 +472,8 @@ export default function Storyboard() {
 
     if (!activeStoryboardJob) {
       setRenderingState('rendering')
-      setRenderProgress((current) => (current > 0 ? current : 5))
       return
     }
-
-    setRenderProgress(activeStoryboardJob.progress)
 
     if (activeStoryboardJob.status === 'completed') {
       const finalUrl = activeStoryboardJob.result?.video_url || activeStoryboardJob.result?.videoUrl || ''
@@ -593,9 +520,6 @@ export default function Storyboard() {
   const totalWords = reviewScenes.reduce((sum, scene) => sum + wordCount(scene.narration), 0)
   const canRenderCurrentStoryboard = canRenderAiStoryboard(storyboardSource)
   const hasExistingRender = Boolean(resolvedVideoUrl || savedJobId || renderingState === 'success' || renderingState === 'failed')
-  const currentRenderPhase = renderPhaseFromProgress(renderProgress)
-  const currentRenderMeta = renderPhaseMetaForProgress(renderProgress)
-  const currentRenderNarrative = renderPhaseNarrative(renderProgress, reviewScenes)
 
   const startRender = async () => {
     if (!canRenderCurrentStoryboard) {
@@ -603,7 +527,6 @@ export default function Storyboard() {
       return
     }
     setRenderingState('rendering')
-    setRenderProgress(5)
     toast.loading('Iniciando render del video...', { id: 'render-job' })
     
     try {
@@ -649,70 +572,25 @@ export default function Storyboard() {
       <>
           {renderingState !== 'idle' && (
             <Card className="mb-8 p-5 border-primary bg-primary/4 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {renderingState === 'rendering' && <Loader2 className="size-5 text-primary animate-spin" />}
-                  {renderingState === 'success' && <CheckCircle2 className="size-5 text-success" />}
-                  {renderingState === 'failed' && <AlertTriangle className="size-5 text-destructive" />}
-                  <span className="font-display text-sm font-semibold text-ink">
-                    {renderingState === 'rendering' && renderPhaseLabel(renderProgress)}
-                    {renderingState === 'success' && '¡Generación Completada!'}
-                    {renderingState === 'failed' && 'Error al Generar el Video'}
-                  </span>
-                </div>
-                <span className="font-mono text-xs text-muted-foreground">
-                  Progreso: {renderProgress}%
-                </span>
-              </div>
-              
-              <Progress value={renderProgress} indicatorClassName="bg-primary animate-pulse" className="h-2" />
-
               {renderingState === 'rendering' && (
-                <div className="grid gap-3 sm:grid-cols-[1.1fr_0.9fr]">
-                  <div className="rounded-xl border border-primary/20 bg-background/70 p-4">
-                    <div className="text-[13px] font-semibold text-ink">
-                      {currentRenderNarrative.headline}
-                    </div>
-                    <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                      {currentRenderNarrative.detail}
-                    </p>
-                    {savedJobId && (
-                      <div className="mt-3 text-[11px] text-muted-foreground">
-                        Job ID: <span className="font-mono">{savedJobId}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-xl border border-primary/20 bg-background/70 p-4">
-                    <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Pipeline
-                    </div>
-                    <div className="space-y-2">
-                      {RENDER_PHASES.filter((item) => item.phase !== 'done').map((item) => {
-                        const isDone = item.end < renderProgress
-                        const isCurrent = item.phase === currentRenderPhase
-                        return (
-                          <div
-                            key={item.phase}
-                            className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[12px] ${
-                              isCurrent
-                                ? 'bg-primary/10 text-ink'
-                                : isDone
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-muted/40 text-muted-foreground'
-                            }`}
-                          >
-                            <span className="font-medium">{item.shortLabel}</span>
-                            <span className="font-mono">
-                              {isDone ? 'ok' : isCurrent ? `${stageDisplayPercent(renderProgress, item, isCurrent)}%` : '...'}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
-                      {currentRenderMeta.description}
+                <div className="rounded-xl border border-primary/20 bg-background/70 p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                    <p className="font-display text-sm font-semibold text-ink">
+                      Generando video en segundo plano
                     </p>
                   </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary/10">
+                    <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+                  </div>
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    Puede tardar entre 5 y 10 minutos. Puedes salir de esta pagina y volver luego; el render sigue corriendo en segundo plano.
+                  </p>
+                  {savedJobId && (
+                    <div className="mt-3 text-[11px] text-muted-foreground">
+                      Job ID: <span className="font-mono">{savedJobId}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -724,6 +602,19 @@ export default function Storyboard() {
               {renderingState === 'success' && !resolvedVideoUrl && (
                 <div className="mt-2 rounded-lg border border-dashed border-secondary bg-background px-4 py-6 text-center text-sm text-muted-foreground">
                   Video list. URL faltante. Revisa backend result o refresca una vez más.
+                </div>
+              )}
+              {renderingState === 'failed' && (
+                <div className="rounded-xl border border-destructive/20 bg-background/70 p-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="size-5 text-destructive" />
+                    <p className="font-display text-sm font-semibold text-ink">
+                      Error al generar el video
+                    </p>
+                  </div>
+                  <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
+                    El render no terminó bien. Puedes volver a intentar sin perder el storyboard actual.
+                  </p>
                 </div>
               )}
             </Card>

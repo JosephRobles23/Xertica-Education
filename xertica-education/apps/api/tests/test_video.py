@@ -522,8 +522,8 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(line_cut["chartSeries"][0]["data"][0], {"x": 1.0, "y": 10.0})
         self.assertEqual(line_cut["chartSeries"][0]["data"][4], {"x": 5.0, "y": 90.0})
 
-    def test_custom_storyboard_render_hydrates_sparse_visual_configs(self):
-        """Direct render payloads should get usable defaults for non-LLM-authored visual configs."""
+    def test_custom_storyboard_render_repairs_sparse_visual_configs_without_inventing_evidence(self):
+        """Sparse reviewed scenes stay renderable without fabricated metrics or commands."""
         service = VideoService()
         storyboard = {
             "title": "Domina Mario Kart: Estrategias para Ganar",
@@ -567,33 +567,126 @@ class TestVideoAPI(unittest.TestCase):
 
         hydrated = service._hydrate_storyboard_for_render(copy.deepcopy(storyboard))
 
-        screenshot_config = hydrated["scenes"][0]["visual_config"]
-        self.assertEqual(screenshot_config["url"], "")
-        self.assertEqual(screenshot_config["steps"][0]["kind"], "cursor_move")
-        self.assertEqual(screenshot_config["steps"][2]["kind"], "type_into")
+        self.assertEqual(hydrated["scenes"][0]["visual_type"], "text_card")
+        self.assertIn("accion observable", hydrated["scenes"][0]["visual_config"]["title"])
 
-        kpi_config = hydrated["scenes"][1]["visual_config"]
-        self.assertEqual(kpi_config["columns"], 3)
-        self.assertGreater(len(kpi_config["chartData"]), 0)
-        self.assertIn("value", kpi_config["chartData"][0])
+        self.assertEqual(hydrated["scenes"][1]["visual_type"], "callout")
+        self.assertIn("indicadores", hydrated["scenes"][1]["visual_config"]["text"])
 
-        pie_config = hydrated["scenes"][2]["visual_config"]
-        self.assertTrue(pie_config["donut"])
-        self.assertEqual(pie_config["centerValue"], "100%")
-        self.assertGreater(len(pie_config["chartData"]), 0)
+        self.assertEqual(hydrated["scenes"][2]["visual_type"], "callout")
+        self.assertIn("entrenamiento", hydrated["scenes"][2]["visual_config"]["text"])
 
         line_config = hydrated["scenes"][3]["visual_config"]
         self.assertEqual(line_config["chartSeries"][0]["label"], "Velocidad")
         self.assertEqual(line_config["chartSeries"][0]["data"][0], {"x": 1, "y": 12})
         self.assertEqual(line_config["chartSeries"][0]["data"][3], {"x": 4, "y": 73})
-        self.assertEqual(line_config["xLabel"], "Iteracion")
-        self.assertEqual(line_config["yLabel"], "Valor")
+        self.assertEqual(line_config["xLabel"], "Intento")
+        self.assertEqual(line_config["yLabel"], "Velocidad")
 
         illustration_config = hydrated["scenes"][4]["visual_config"]
         self.assertIn("prompt", illustration_config)
         self.assertIn("estrategia", illustration_config["prompt"].lower())
         self.assertIn("avoid biology", illustration_config["prompt"].lower())
         self.assertGreater(len(illustration_config["bullets"]), 0)
+
+    def test_render_hydration_makes_every_visual_type_topic_specific(self):
+        """Every supported scene type receives a complete topic-aligned render config."""
+        service = VideoService()
+        scene_types = [
+            "text_card", "hero_title", "stat_card", "callout", "comparison",
+            "bar_chart", "line_chart", "pie_chart", "kpi_grid", "progress_bar",
+            "terminal_scene", "screenshot_scene", "ai_video", "ai_illustration",
+        ]
+        configs = {
+            "stat_card": {"stat": "3 pasos", "subtitle": "Observar, decidir y verificar"},
+            "bar_chart": {"chartData": [{"label": "Antes", "value": 2}, {"label": "Despues", "value": 5}]},
+            "line_chart": {"chartSeries": [{"name": "Comprension", "data": [1, 3, 5]}]},
+            "pie_chart": {"chartData": [{"label": "Practica", "value": 60}, {"label": "Revision", "value": 40}]},
+            "kpi_grid": {"chartData": [{"label": "Pasos", "value": 3}, {"label": "Chequeos", "value": 2}]},
+            "terminal_scene": {"steps": ["cmd: pytest -q", "out: 12 passed"]},
+            "screenshot_scene": {
+                "url": "https://example.com/lesson",
+                "steps": ["cursor_move: 0.2 0.3", "callout_balloon: 0.4 0.5 Verifica el resultado"],
+            },
+        }
+        scenes = [
+            {
+                "scene_number": index,
+                "narration": "Aplicamos el ciclo observar, decidir y verificar con evidencia.",
+                "visual_type": visual_type,
+                "visual_config": configs.get(visual_type, {}),
+                "teaching_point": "Aplicar el ciclo de decision con evidencia",
+                "pedagogical_intent": "Convertir el concepto en una accion verificable",
+                "visual_rationale": "La composicion muestra la relacion entre accion y evidencia",
+            }
+            for index, visual_type in enumerate(scene_types, start=1)
+        ]
+
+        hydrated = service._hydrate_storyboard_for_render({"title": "Decisiones con evidencia", "scenes": scenes})
+
+        for scene in hydrated["scenes"]:
+            self.assertTrue(scene["visual_config"])
+        self.assertIn("decisiones con evidencia", hydrated["scenes"][12]["visual_config"]["prompt"].lower())
+        self.assertIn("action and evidence", hydrated["scenes"][13]["visual_config"]["prompt"].lower())
+
+    def test_render_hydration_degrades_malformed_chart_payloads_without_crashing(self):
+        service = VideoService()
+        storyboard = {
+            "title": "Datos seguros",
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "narration": "No fingimos un reparto.",
+                    "visual_type": "pie_chart",
+                    "visual_config": {"chartData": 42},
+                    "teaching_point": "Explicar el reparto solo con evidencia valida",
+                },
+                {
+                    "scene_number": 2,
+                    "narration": "No fingimos una tendencia.",
+                    "visual_type": "line_chart",
+                    "visual_config": {"chartSeries": [{"name": "Calidad", "data": ["N/A"]}]},
+                    "teaching_point": "Explicar la tendencia solo con puntos validos",
+                },
+            ],
+        }
+
+        hydrated = service._hydrate_storyboard_for_render(storyboard)
+
+        self.assertEqual([scene["visual_type"] for scene in hydrated["scenes"]], ["callout", "callout"])
+
+    def test_transformer_emits_repository_owned_educational_visual_direction(self):
+        storyboard = {
+            "title": "Decisiones con evidencia",
+            "scenes": [{
+                "scene_number": 1,
+                "narration": "Comparamos dos decisiones.",
+                "visual_type": "comparison",
+                "visual_config": {
+                    "title": "Misma pregunta, distinto criterio",
+                    "leftLabel": "Sin evidencia",
+                    "leftValue": "Adivina",
+                    "rightLabel": "Con evidencia",
+                    "rightValue": "Verifica",
+                },
+            }],
+        }
+
+        edit_decisions = asyncio.run(transform_storyboard_to_edit_decisions(
+            storyboard=storyboard,
+            audio_paths=[],
+            durations=[5.0],
+            visual_paths=[""],
+            visual_is_video=[False],
+            music_path=None,
+            captions=None,
+            total_duration=5.0,
+            job_id="job-theme",
+        ))
+
+        self.assertEqual(edit_decisions["theme"], "xertica-education")
+        self.assertEqual(edit_decisions["themeConfig"]["accentColor"], "#F4B942")
+        self.assertEqual(edit_decisions["cuts"][0]["title"], "Misma pregunta, distinto criterio")
 
     def test_generate_video_uses_reviewed_storyboard_as_render_source_of_truth(self):
         """POST /videos/generate renders from the reviewed storyboard and retains provenance."""
@@ -1016,9 +1109,10 @@ class TestVideoAPI(unittest.TestCase):
         self.assertIn("decisiones de negocio", storyboard["title"].lower())
         self.assertGreaterEqual(len(storyboard["scenes"]), 5)
         self.assertLessEqual(len(storyboard["scenes"]), 7)
-        self.assertEqual(storyboard["scenes"][0]["visual_type"], "ai_video")
+        self.assertEqual(storyboard["scenes"][0]["visual_type"], "callout")
         visual_types = [scene["visual_type"] for scene in storyboard["scenes"]]
-        self.assertIn("ai_illustration", visual_types)
+        self.assertNotIn("ai_video", visual_types)
+        self.assertNotIn("ai_illustration", visual_types)
 
         for scene in storyboard["scenes"]:
             self.assertEqual(scene["grounding_status"], "kb_grounded")
@@ -1201,9 +1295,8 @@ class TestVideoAPI(unittest.TestCase):
         self.assertLessEqual(visual_types.count("ai_video"), 1)
         self.assertNotIn("bar_chart", visual_types)
         self.assertNotIn("screenshot_scene", visual_types)
-        # One ai_illustration is enforced via fallback
-        self.assertEqual(visual_types.count("ai_illustration"), 1)
-        # Verify index 5 (original bad ai_illustration) was repaired
+        self.assertNotIn("ai_illustration", visual_types)
+        # The original decorative illustration was repaired rather than forced.
         self.assertNotEqual(storyboard["scenes"][5]["visual_type"], "ai_illustration")
 
         repaired_scene = storyboard["scenes"][4]
