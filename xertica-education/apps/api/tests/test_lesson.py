@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 # Add root folder to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from adapters.storage.memory import InMemoryStorageAdapter
+from config.settings import settings
 from services.lesson.service import LessonService
 
 class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
@@ -15,7 +17,8 @@ class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
         self.llm_mock.chat_completion = AsyncMock()
         self.kb_mock = MagicMock()
         self.kb_mock.query = AsyncMock()
-        self.service = LessonService(llm_adapter=self.llm_mock, kb=self.kb_mock)
+        self.storage = InMemoryStorageAdapter()
+        self.service = LessonService(llm_adapter=self.llm_mock, kb=self.kb_mock, storage=self.storage)
 
     async def test_lesson_generation_flow(self):
         # Mock LLM response containing JSON sections and terms
@@ -60,22 +63,14 @@ class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res["terms"][0]["term"], "Python")
         self.assertIn("pdfUrl", res)
         self.assertIn("txtUrl", res)
+        self.assertEqual(res["groundingStatus"], "kb-grounded")
 
-        # Verify files were created
+        # Los artefactos van al storage adapter (ADR-0022) con path del Spine.
+        base_path = f"{route_id}/r1m1/lesson"
         filename_prefix = f"{route_id}_r1m1_lesson"
-        local_dir = os.path.join(os.getcwd(), "static", "lessons")
-        local_txt_path = os.path.join(local_dir, f"{filename_prefix}.txt")
-        local_pdf_path = os.path.join(local_dir, f"{filename_prefix}.pdf")
-
-        self.assertTrue(os.path.exists(local_txt_path))
-        self.assertTrue(os.path.exists(local_pdf_path))
-
-        # Cleanup files
-        try:
-            os.remove(local_txt_path)
-            os.remove(local_pdf_path)
-        except Exception:
-            pass
+        self.assertEqual(res["storagePath"], f"{base_path}/{filename_prefix}.pdf")
+        self.assertIn((settings.storage_bucket, f"{base_path}/{filename_prefix}.txt"), self.storage._store)
+        self.assertIn((settings.storage_bucket, f"{base_path}/{filename_prefix}.pdf"), self.storage._store)
 
     def test_fallback_lesson(self):
         fallback = self.service._get_fallback_lesson("Módulo de prueba", "Alguna descripción de prueba")

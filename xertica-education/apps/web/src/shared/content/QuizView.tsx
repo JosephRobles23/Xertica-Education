@@ -8,6 +8,7 @@ import { Textarea } from '@/shared/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import type { QuizContent } from '@/shared/lib/types'
 import { api } from '@/shared/lib/api'
+import { GroundingBadge } from './GroundingBadge'
 import { useStore } from '@/shared/store'
 
 export function QuizView({
@@ -109,6 +110,7 @@ export function QuizView({
     <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-6', className)}>
       {/* Columna Izquierda: Previsualización de Preguntas en Pantalla */}
       <div className="md:col-span-2 flex flex-col gap-4">
+        <GroundingBadge status={quiz.groundingStatus} />
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
             Previsualización de Preguntas

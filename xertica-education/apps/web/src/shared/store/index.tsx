@@ -19,6 +19,7 @@ import type {
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
 import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
+import { toast } from 'sonner'
 
 /** Clave estable para el estado de un contenido concreto. */
 const contentKey = (routeId: string, moduleId: string, kind: ContentKind) =>
@@ -431,10 +432,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const approveContent = useCallback((routeId: string, moduleId: string, kind: ContentKind) => {
     setStatusOverride((prev) => ({ ...prev, [contentKey(routeId, moduleId, kind)]: 'aprobado' }))
+    // Persistencia en backend (ADR-0021); el override local actúa como capa optimista.
+    api.reviewContentApproval(routeId, moduleId, kind, 'aprobado').catch((e) => {
+      console.error('Failed to persist content approval', e)
+    })
   }, [])
 
   const refineContent = useCallback((routeId: string, moduleId: string, kind: ContentKind) => {
     setStatusOverride((prev) => ({ ...prev, [contentKey(routeId, moduleId, kind)]: 'en-revision' }))
+    api.reviewContentApproval(routeId, moduleId, kind, 'en-revision').catch((e) => {
+      console.error('Failed to persist content refinement', e)
+    })
   }, [])
 
   /* ── Aprobación en cascada (módulo → ruta) ────────────────── */
@@ -460,6 +468,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       })
       return next
     })
+    ;(module.contents ?? []).forEach((content) => {
+      api.reviewContentApproval(routeId, module.id, content.kind, 'aprobado').catch((e) => {
+        console.error('Failed to persist module approval', e)
+      })
+    })
   }, [])
 
   const routeStatusOf = useCallback(
@@ -483,20 +496,58 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   )
 
   /* ── Gates ────────────────────────────────────────────────── */
-  const isCorpusApproved = useCallback((routeId: string) => corpusApproved[routeId] ?? false, [corpusApproved])
+  // Rehidratación (ADR-0021): el estado local es capa optimista sobre lo persistido.
+  const routeApprovalsOf = useCallback(
+    (routeId: string) => routes.find((route) => route.id === routeId)?.approvals ?? {},
+    [routes],
+  )
+  const isCorpusApproved = useCallback(
+    (routeId: string) =>
+      corpusApproved[routeId] ??
+      routes.find((route) => route.id === routeId)?.status === 'generado',
+    [corpusApproved, routes],
+  )
   const approveCorpus = useCallback(async (routeId: string, aspect_ratio?: string) => {
     try {
-      await api.request(`/learning-paths/${routeId}/sourcing/approve`, {
-        method: 'POST',
-        body: JSON.stringify({ aspect_ratio: aspect_ratio || 'auto' })
-      })
+      const res = await api.request<{ ingestionJobId?: string }>(
+        `/learning-paths/${routeId}/sourcing/approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ aspect_ratio: aspect_ratio || 'auto' }),
+        },
+      )
       setCorpusApproved((prev) => ({ ...prev, [routeId]: true }))
       await fetchRoutes()
+
+      // Gate 1 advierte sin bloquear (ADR-0023): sigue la ingesta KB en background
+      // y reporta el resultado — incluida una KB vacía — de forma honesta.
+      if (res?.ingestionJobId) {
+        api
+          .pollJob(res.ingestionJobId)
+          .then((job) => {
+            const report = job.result as
+              | { chunks_created?: number; sources_processed?: number }
+              | undefined
+            if (report?.chunks_created) {
+              toast.success('Knowledge Base lista', {
+                description: `${report.chunks_created} chunks indexados de ${report.sources_processed} documento(s) del cliente.`,
+              })
+            }
+          })
+          .catch((err: Error) => {
+            toast.warning('Ruta sin grounding de KB', {
+              description:
+                err.message ||
+                'Esta ruta no tiene documentos del cliente (Vía 2); el contenido se generará sin grounding de la KB.',
+              duration: 10000,
+            })
+          })
+      }
     } catch (e) {
       console.error('Failed to approve corpus', e)
       throw e
     }
-  }, [fetchRoutes])
+  }, [fetchRoutes, routes])
 
   const discardedSources = useCallback(
     (routeId: string) => discarded[routeId] ?? [],
@@ -506,9 +557,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setDiscarded((prev) => ({ ...prev, [routeId]: [...(prev[routeId] ?? []), index] }))
   }, [])
 
-  const isStoryboardApproved = useCallback((routeId: string) => storyboardOk[routeId] ?? false, [storyboardOk])
+  const isStoryboardApproved = useCallback(
+    (routeId: string) => storyboardOk[routeId] ?? routeApprovalsOf(routeId).storyboard ?? false,
+    [storyboardOk, routeApprovalsOf],
+  )
   const approveStoryboard = useCallback((routeId: string) => {
     setStoryboardOk((prev) => ({ ...prev, [routeId]: true }))
+    api.patchRouteApprovals(routeId, { storyboard: true }).catch((e) => {
+      console.error('Failed to persist storyboard approval', e)
+    })
   }, [])
 
   const storyboardVideoUrlOf = useCallback(
@@ -535,14 +592,26 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const isLabGuideApproved = useCallback((routeId: string) => labGuideOk[routeId] ?? false, [labGuideOk])
+  const isLabGuideApproved = useCallback(
+    (routeId: string) => labGuideOk[routeId] ?? routeApprovalsOf(routeId).labGuide ?? false,
+    [labGuideOk, routeApprovalsOf],
+  )
   const approveLabGuide = useCallback((routeId: string) => {
     setLabGuideOk((prev) => ({ ...prev, [routeId]: true }))
+    api.patchRouteApprovals(routeId, { labGuide: true }).catch((e) => {
+      console.error('Failed to persist lab guide approval', e)
+    })
   }, [])
 
-  const isGenerated = useCallback((routeId: string) => generated[routeId] ?? false, [generated])
+  const isGenerated = useCallback(
+    (routeId: string) => generated[routeId] ?? routeApprovalsOf(routeId).generated ?? false,
+    [generated, routeApprovalsOf],
+  )
   const markGenerated = useCallback((routeId: string) => {
     setGenerated((prev) => ({ ...prev, [routeId]: true }))
+    api.patchRouteApprovals(routeId, { generated: true }).catch((e) => {
+      console.error('Failed to persist generated flag', e)
+    })
   }, [])
 
   const store = useMemo<AppStore>(

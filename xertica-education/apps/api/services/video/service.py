@@ -1568,22 +1568,16 @@ class VideoService(VideoServiceInterface):
 
             if create_if_missing:
                 try:
-                    module_uuid = UUID(str(module_id))
-                    component_id = uuid4()
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    payload = {
-                        "id": str(component_id),
-                        "modulo_id": str(module_uuid),
-                        "titulo": "Video",
-                        "tipo": component_kind,
-                        "orden": 0,
-                        "created_at": now_str,
-                        "updated_at": now_str,
-                    }
-                    self._supabase.table("components").insert(payload).execute()
-                    return component_id
+                    # Materialización perezosa del Spine (ADR-0020): crea module +
+                    # component con UUIDs deterministas (los ids de módulo del JSON
+                    # como 'r1m1' no son UUID, así que la FK se resuelve aquí).
+                    from repositories.spine import get_spine_materializer
+
+                    return get_spine_materializer().ensure_component(
+                        str(route_id), str(module_id), component_kind,
+                    )
                 except Exception as e:
-                    print(f"Supabase create video component error, using render-target fallback: {e}")
+                    print(f"Spine materialization error, using render-target fallback: {e}")
 
         return self._render_target_component_id(route_id, module_id, component_kind)
 

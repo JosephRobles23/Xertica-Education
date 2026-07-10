@@ -8,6 +8,7 @@ import { api } from '@/shared/lib/api'
 import { useStore } from '@/shared/store'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
+import { GroundingBadge } from './GroundingBadge'
 
 const renderFormattedText = (text: string) => {
   if (!text) return null
@@ -122,6 +123,7 @@ export function LessonView({
     <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-6', className)}>
       {/* Columna Izquierda: Secciones y Glosario */}
       <div className="md:col-span-2 flex flex-col gap-4">
+        <GroundingBadge status={lesson.groundingStatus} />
         {lesson.sections.map((s) => (
           <div key={s.heading} className="rounded-xl border-[1.5px] bg-card p-4.5">
             <div className="mb-1.5 flex items-center gap-2">

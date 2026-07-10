@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 from adapters.llm.base import BaseLLMAdapter
+from adapters.storage import get_storage_adapter
 from services.kb.interface import KnowledgeBaseInterface
 from .interface import LessonServiceInterface
 from config.settings import settings
@@ -14,9 +15,10 @@ from prompts.lesson import SYSTEM_PROMPT
 
 
 class LessonService(LessonServiceInterface):
-    def __init__(self, llm_adapter: BaseLLMAdapter, kb: KnowledgeBaseInterface):
+    def __init__(self, llm_adapter: BaseLLMAdapter, kb: KnowledgeBaseInterface, storage=None):
         self.llm_adapter = llm_adapter
         self.kb = kb
+        self.storage = storage or get_storage_adapter()
 
     async def generate_lesson(
         self,
@@ -80,22 +82,22 @@ class LessonService(LessonServiceInterface):
         # 7) Generate PDF file using Pillow
         pdf_bytes = self._generate_pdf_bytes(module_name, company_name, sections, terms)
 
-        # 8) Save files locally
-        local_dir = os.path.join(os.getcwd(), "static", "lessons")
-        os.makedirs(local_dir, exist_ok=True)
-        
+        # 8) Persist artifacts via storage adapter (ADR-0022): bucket con
+        # fallback local en dev; el path sigue la convención del Spine.
         filename_prefix = f"{route_id}_{module_id}_lesson"
-        local_txt_path = os.path.join(local_dir, f"{filename_prefix}.txt")
-        local_pdf_path = os.path.join(local_dir, f"{filename_prefix}.pdf")
-
-        with open(local_txt_path, "w", encoding="utf-8") as f:
-            f.write(txt_content)
-        with open(local_pdf_path, "wb") as f:
-            f.write(pdf_bytes)
+        base_path = f"{route_id}/{module_id}/lesson"
+        txt_url = await self.storage.upload_file(
+            settings.storage_bucket, f"{base_path}/{filename_prefix}.txt", txt_content.encode("utf-8")
+        )
+        pdf_url = await self.storage.upload_file(
+            settings.storage_bucket, f"{base_path}/{filename_prefix}.pdf", pdf_bytes
+        )
 
         return {
-            "pdfUrl": f"http://localhost:8000/static/lessons/{filename_prefix}.pdf",
-            "txtUrl": f"http://localhost:8000/static/lessons/{filename_prefix}.txt",
+            "pdfUrl": pdf_url,
+            "txtUrl": txt_url,
+            "storagePath": f"{base_path}/{filename_prefix}.pdf",
+            "groundingStatus": "kb-grounded" if grounded_text else "module-grounded",
             "sections": sections,
             "terms": terms
         }

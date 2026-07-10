@@ -31,11 +31,16 @@ export interface LessonSection {
   body: string
 }
 
+/** Origen del anclaje del contenido generado (ADR-0023): con documentos del
+ * cliente en la KB ('kb-grounded') o solo con el objetivo del módulo. */
+export type GroundingStatus = 'kb-grounded' | 'module-grounded'
+
 export interface LessonContent {
   sections: readonly LessonSection[]
   terms: readonly { term: string; def: string }[]
   pdfUrl?: string
   txtUrl?: string
+  groundingStatus?: GroundingStatus
 }
 
 export interface VideoSegment {
@@ -75,6 +80,7 @@ export interface QuizContent {
   questions: readonly QuizQuestion[]
   pdfUrl?: string
   txtUrl?: string
+  groundingStatus?: GroundingStatus
 }
 
 export interface LabStep {
@@ -129,6 +135,7 @@ export interface LabContent {
   txtUrl?: string
   pdfUrl?: string
   jsonUrl?: string
+  groundingStatus?: GroundingStatus
 }
 
 /** Pack de contenido de una ruta: alimenta previews y el asset final. */
@@ -159,6 +166,8 @@ export interface RouteModule {
   quiz?: QuizContent
   lab?: LabContent
   infografia?: InfografiaContent
+  /** Espejo persistido de la aprobación por kind (ADR-0021). */
+  approvals?: Partial<Record<ContentKind, ContentStatus>>
 }
 
 export interface SourceVideoPreview {
@@ -213,6 +222,14 @@ export interface CustomerContext {
 
 export type RouteId = '01' | '02' | '03' | '04' | '05' | '06' | '07'
 
+/** Flags de workflow persistidos a nivel ruta (ADR-0021). */
+export interface RouteApprovals {
+  storyboard?: boolean
+  labGuide?: boolean
+  generated?: boolean
+  discardedSourceUrls?: readonly string[]
+}
+
 export interface LearningRoute {
   id: RouteId
   name: string
@@ -222,6 +239,7 @@ export interface LearningRoute {
   sources: readonly Source[]
   pack: ContentPack
   modules: readonly RouteModule[]
+  approvals?: RouteApprovals
 }
 
 /* ── Estructura propuesta (Gate 0) ──────────────────────────────── */

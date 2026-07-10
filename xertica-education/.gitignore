@@ -43,3 +43,11 @@ apps/api/public/
 apps/api/static/videos/*.mp4
 apps/api/scratch_test_image.png
 apps/api/static/bg_music.mp3
+
+# Artefactos generados en runtime (ADR-0022): viven en el bucket, no en el repo
+apps/api/static/infographics/
+apps/api/static/lessons/
+apps/api/static/quizzes/
+apps/api/static/labs/
+apps/api/static/videos/
+apps/api/static/xertica-education-assets/

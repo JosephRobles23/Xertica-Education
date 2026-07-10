@@ -27,6 +27,8 @@ from services.kb.interface import KnowledgeBaseInterface
 from services.kb.ingestion import KbIngestionCoordinator, RealDocumentProvider
 from repositories.sourcing.interface import SourcingRepositoryInterface
 from repositories.sourcing.mapping import route_sources_to_domain
+from repositories.spine import get_spine_materializer
+from repositories.spine.materializer import COMPONENT_KINDS, ROUTE_LEVEL_MODULE_ID
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
 from services.infographic.service import InfographicService
@@ -551,6 +553,84 @@ async def list_source_links(
     }
 
 
+# ContentStatus del frontend → Asset.estado del Spine (ADR-0021)
+CONTENT_STATUS_TO_ASSET_ESTADO = {
+    "aprobado": "aprobado",
+    "en-revision": "en_revision",
+    "borrador": "draft",
+}
+
+
+@router.patch("/{route_id}/modules/{module_id}/contents/{kind}/approval", response_model=Dict[str, Any])
+async def review_content_approval(
+    route_id: str,
+    module_id: str,
+    kind: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+):
+    """Persiste la aprobación de un contenido (ADR-0021): actualiza Asset.estado
+    (materializando el Spine perezosamente, ADR-0020) y espeja el status en
+    details.modules[].contents[].status para la rehidratación del frontend."""
+    status = (payload or {}).get("status")
+    if kind not in COMPONENT_KINDS:
+        raise HTTPException(status_code=422, detail=f"kind must be one of {sorted(COMPONENT_KINDS)}")
+    if status not in CONTENT_STATUS_TO_ASSET_ESTADO:
+        raise HTTPException(
+            status_code=422,
+            detail=f"status must be one of {sorted(CONTENT_STATUS_TO_ASSET_ESTADO)}",
+        )
+
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+    modules = route.get("modules", [])
+    target_module = next((m for m in modules if m.get("id") == module_id), None)
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    asset = get_spine_materializer().upsert_asset(
+        str(route_service._resolve_id(route_id)),
+        module_id,
+        kind,
+        estado=CONTENT_STATUS_TO_ASSET_ESTADO[status],
+        module_name=target_module.get("name"),
+        module_type=target_module.get("type"),
+    )
+
+    for content in target_module.get("contents", []):
+        if content.get("kind") == kind:
+            content["status"] = status
+    target_module.setdefault("approvals", {})[kind] = status
+
+    updated = await route_service.update_route(route_id, {"modules": modules})
+    return {"route": updated, "asset": asset}
+
+
+@router.patch("/{route_id}/approvals", response_model=Dict[str, Any])
+async def update_route_approvals(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+):
+    """Persiste flags de workflow a nivel ruta (ADR-0021) en details.approvals:
+    storyboard / labGuide / generated (bool) y discardedSourceUrls (acumulativo)."""
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    approvals = dict(route.get("approvals") or {})
+    for flag in ("storyboard", "labGuide", "generated"):
+        if flag in (payload or {}):
+            approvals[flag] = bool(payload[flag])
+    if payload.get("discardedSourceUrls"):
+        current = set(approvals.get("discardedSourceUrls") or [])
+        current.update(url for url in payload["discardedSourceUrls"] if url)
+        approvals["discardedSourceUrls"] = sorted(current)
+
+    return await route_service.update_route(route_id, {"approvals": approvals})
+
+
 @router.post("/{route_id}/approve", response_model=Dict[str, Any])
 async def approve_learning_path(
     route_id: str,
@@ -632,10 +712,12 @@ async def regenerate_infographic(
         
     user_prompt = payload.get("user_prompt")
     aspect_ratio = payload.get("aspect_ratio", "auto")
-    
-    # Generate stable component_id
-    h = hashlib.md5(f"{route_id}:infografia".encode('utf-8')).hexdigest()
-    component_id = UUID(h)
+
+    # Componente real del Spine (ADR-0020): infografía a nivel ruta cuelga del
+    # pseudo-módulo 'route' para satisfacer la cadena de FKs de assets.
+    component_id = get_spine_materializer().ensure_component(
+        str(route_service._resolve_id(route_id)), ROUTE_LEVEL_MODULE_ID, "infografia",
+    )
     
     # Extract customer company name: explicit field → domain from URL → industry → fallback
     cust_ctx = route.get("customerContext", {}) or {}
@@ -755,13 +837,24 @@ async def regenerate_quiz(
     target_module["quiz"] = {
         "pdfUrl": res.get("pdfUrl"),
         "txtUrl": res.get("txtUrl"),
-        "questions": res.get("questions")
+        "questions": res.get("questions"),
+        "groundingStatus": res.get("groundingStatus"),
     }
-    
+
     # Also update module's quiz content ref status to 'generado'
     for c in target_module.get("contents", []):
         if c.get("kind") == "quiz":
             c["status"] = "generado"
+
+    # Asset del Spine (ADR-0020): materializa module/component y persiste el artefacto.
+    get_spine_materializer().upsert_asset(
+        str(resolved_route_id), module_id, "quiz",
+        estado="generado",
+        storage_path=res.get("storagePath"),
+        provenance={"grounding_status": res.get("groundingStatus")},
+        module_name=target_module.get("name"),
+        module_type=target_module.get("type"),
+    )
             
     updated = await route_service.update_route(route_id, {
         "modules": modules
@@ -831,13 +924,24 @@ async def regenerate_lesson(
         "pdfUrl": res.get("pdfUrl"),
         "txtUrl": res.get("txtUrl"),
         "sections": res.get("sections", []),
-        "terms": res.get("terms", [])
+        "terms": res.get("terms", []),
+        "groundingStatus": res.get("groundingStatus"),
     }
-    
+
     # Also update module's lesson content ref status to 'generado'
     for c in target_module.get("contents", []):
         if c.get("kind") == "lesson":
             c["status"] = "generado"
+
+    # Asset del Spine (ADR-0020): materializa module/component y persiste el artefacto.
+    get_spine_materializer().upsert_asset(
+        str(resolved_route_id), module_id, "lesson",
+        estado="generado",
+        storage_path=res.get("storagePath"),
+        provenance={"grounding_status": res.get("groundingStatus")},
+        module_name=target_module.get("name"),
+        module_type=target_module.get("type"),
+    )
             
     updated = await route_service.update_route(route_id, {
         "modules": modules
@@ -921,6 +1025,19 @@ async def regenerate_lab(
         if content.get("kind") == "lab":
             content["status"] = "generado"
 
+    # Asset del Spine (ADR-0020): materializa module/component y persiste el artefacto.
+    get_spine_materializer().upsert_asset(
+        str(resolved_route_id), module_id, "lab",
+        estado="generado",
+        storage_path=lab.get("storagePath"),
+        provenance={
+            "grounding_status": lab.get("groundingStatus"),
+            **(lab.get("provenance") or {}),
+        },
+        module_name=target_module.get("name"),
+        module_type=target_module.get("type"),
+    )
+
     pack = route.get("pack", {}) or {}
     pack["lab"] = target_module["lab"]
 
@@ -958,10 +1075,13 @@ async def regenerate_module_infographic(
         
     user_prompt = payload.get("user_prompt")
     aspect_ratio = payload.get("aspect_ratio", "auto")
-    
-    # Generate stable component_id specific to route + module + infografia
-    h = hashlib.md5(f"{route_id}:{module_id}:infografia".encode('utf-8')).hexdigest()
-    component_id = UUID(h)
+
+    # Componente real del Spine (ADR-0020) para satisfacer la cadena de FKs de assets.
+    component_id = get_spine_materializer().ensure_component(
+        str(route_service._resolve_id(route_id)), module_id, "infografia",
+        module_name=target_module.get("name"),
+        module_type=target_module.get("type"),
+    )
     
     # Extract customer company name
     cust_ctx = route.get("customerContext", {}) or {}

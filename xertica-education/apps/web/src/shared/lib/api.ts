@@ -114,6 +114,36 @@ export const api = {
   },
 
   /**
+   * Persiste la aprobación de un contenido (ADR-0021): Asset.estado + espejo
+   * en details para rehidratación.
+   */
+  async reviewContentApproval(
+    routeId: string,
+    moduleId: string,
+    kind: string,
+    status: 'aprobado' | 'en-revision' | 'borrador',
+  ): Promise<any> {
+    return this.request(
+      `/learning-paths/${routeId}/modules/${moduleId}/contents/${kind}/approval`,
+      { method: 'PATCH', body: JSON.stringify({ status }) },
+    );
+  },
+
+  /**
+   * Persiste flags de workflow a nivel ruta (storyboard/labGuide/generated,
+   * discardedSourceUrls) en details.approvals (ADR-0021).
+   */
+  async patchRouteApprovals(
+    routeId: string,
+    approvals: Record<string, unknown>,
+  ): Promise<any> {
+    return this.request(`/learning-paths/${routeId}/approvals`, {
+      method: 'PATCH',
+      body: JSON.stringify(approvals),
+    });
+  },
+
+  /**
    * Deep Research corre como background job: POST devuelve job_id, se hace
    * polling y el resultado (detected_tools + sources) viene en job.result.
    */

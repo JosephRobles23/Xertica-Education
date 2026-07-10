@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from adapters.storage.memory import InMemoryStorageAdapter
+from config.settings import settings
 from services.lab.service import LabService
 
 
@@ -15,7 +17,8 @@ class TestLabGeneration(unittest.IsolatedAsyncioTestCase):
         self.llm_mock.chat_completion = AsyncMock()
         self.kb_mock = MagicMock()
         self.kb_mock.query = AsyncMock()
-        self.service = LabService(llm_adapter=self.llm_mock, kb=self.kb_mock)
+        self.storage = InMemoryStorageAdapter()
+        self.service = LabService(llm_adapter=self.llm_mock, kb=self.kb_mock, storage=self.storage)
 
     async def test_lab_generation_flow(self):
         llm_response = """
@@ -92,23 +95,19 @@ class TestLabGeneration(unittest.IsolatedAsyncioTestCase):
         self.assertIn("pdfUrl", result)
         self.assertIn("jsonUrl", result)
 
-        filename_prefix = f"{route_id}_r1m3_lab"
-        local_dir = os.path.join(os.getcwd(), "static", "labs")
-        local_txt_path = os.path.join(local_dir, f"{filename_prefix}.txt")
-        local_pdf_path = os.path.join(local_dir, f"{filename_prefix}.pdf")
-        local_json_path = os.path.join(local_dir, f"{filename_prefix}.json")
-        self.assertTrue(os.path.exists(local_txt_path))
-        self.assertTrue(os.path.exists(local_pdf_path))
-        self.assertTrue(os.path.exists(local_json_path))
-        with open(local_txt_path, "r", encoding="utf-8") as f:
-            self.assertIn("Usa Gemini", f.read())
+        self.assertEqual(result["groundingStatus"], "kb-grounded")
 
-        try:
-            os.remove(local_txt_path)
-            os.remove(local_pdf_path)
-            os.remove(local_json_path)
-        except Exception:
-            pass
+        # Los artefactos van al storage adapter (ADR-0022) con path del Spine.
+        base_path = f"{route_id}/r1m3/lab"
+        filename_prefix = f"{route_id}_r1m3_lab"
+        self.assertEqual(result["storagePath"], f"{base_path}/{filename_prefix}.pdf")
+        for extension in ("txt", "pdf", "json"):
+            self.assertIn(
+                (settings.storage_bucket, f"{base_path}/{filename_prefix}.{extension}"),
+                self.storage._store,
+            )
+        txt_bytes = self.storage._store[(settings.storage_bucket, f"{base_path}/{filename_prefix}.txt")]
+        self.assertIn("Usa Gemini", txt_bytes.decode("utf-8"))
 
     def test_fallback_lab_uses_detected_tool(self):
         fallback = self.service._fallback_lab(
