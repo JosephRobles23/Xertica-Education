@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { FileText, FolderOpen, Upload, X } from 'lucide-react'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { FolderOpen, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import {
@@ -13,10 +13,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Textarea } from '@/shared/ui/textarea'
 import { pickGoogleDriveFile } from '@/shared/lib/googleDrive'
-import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
 import type { UploadedStructure } from '@/shared/store'
 
-/** Dialog para seleccionar la estructura propuesta desde Drive o pegar texto. */
+/** Dialog para seleccionar la estructura propuesta desde Drive, desde el computador o pegar texto. */
 export function UploadStructureDialog({
   open,
   onOpenChange,
@@ -27,10 +26,18 @@ export function UploadStructureDialog({
   onSubmit: (v: UploadedStructure) => void
 }) {
   const [tab, setTab] = useState<'drive' | 'text'>('drive')
-  const [driveFile, setDriveFile] = useState<GoogleDriveSelection | null>(null)
   const [text, setText] = useState('')
+  const localFileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const canSubmit = tab === 'drive' ? driveFile !== null : text.trim().length > 0
+  const submitLocalFile = (file: File) => {
+    const value: UploadedStructure = { name: file.name, kind: 'local', localFile: file }
+    onSubmit(value)
+    toast.success('Estructura recibida', {
+      description: `${file.name} · la IA la usará como base de los módulos.`,
+    })
+    setText('')
+    onOpenChange(false)
+  }
 
   const selectDriveFile = async () => {
     try {
@@ -38,7 +45,6 @@ export function UploadStructureDialog({
       if (!selected) return
       const value: UploadedStructure = { name: selected.name, kind: 'drive', driveFile: selected }
       onSubmit(value)
-      setDriveFile(null)
       setText('')
       onOpenChange(false)
       toast.success('Estructura recibida', {
@@ -51,17 +57,27 @@ export function UploadStructureDialog({
     }
   }
 
-  const submit = () => {
-    if (!canSubmit) return
-    const value: UploadedStructure =
-      tab === 'drive' && driveFile
-        ? { name: driveFile.name, kind: 'drive', driveFile }
-        : { name: 'Estructura pegada', kind: 'texto' }
+  const selectLocalFile = () => {
+    if (localFileInputRef.current) {
+      localFileInputRef.current.value = ''
+    }
+    localFileInputRef.current?.click()
+  }
+
+  const handleLocalFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    submitLocalFile(file)
+  }
+
+  const submitText = () => {
+    if (!text.trim()) return
+    const value: UploadedStructure = { name: 'Estructura pegada', kind: 'texto' }
     onSubmit(value)
     toast.success('Estructura recibida', {
       description: `${value.name} · la IA la usará como base de los módulos.`,
     })
-    setDriveFile(null)
     setText('')
     onOpenChange(false)
   }
@@ -75,8 +91,8 @@ export function UploadStructureDialog({
           </div>
           <DialogTitle>Subir estructura propuesta</DialogTitle>
           <DialogDescription>
-            Selecciona tu propuesta de estructura desde Google Drive o pégala como texto. La IA la
-            usará como base para los módulos.
+            Selecciona tu propuesta desde Google Drive, súbela desde tu computador o pégala como
+            texto. La IA la usará como base para los módulos.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,48 +103,52 @@ export function UploadStructureDialog({
           </TabsList>
 
           <TabsContent value="drive" className="pt-4">
-            <button
-              type="button"
-              onClick={selectDriveFile}
-              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-7 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <FolderOpen className="mx-auto mb-2 size-5 text-muted-foreground" />
-              <div className="text-[13.5px]">Selecciona una estructura desde Google Drive</div>
-              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                DOCX · PDF · TXT
-              </div>
-            </button>
-            {driveFile && (
-              <div className="mt-3 flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-                <FileText className="size-4 text-primary" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] text-ink">{driveFile.name}</div>
-                  <div className="font-mono text-[10.5px] text-muted-foreground">
-                    Google Drive · listo para importar
-                  </div>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={selectDriveFile}
+                className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-7 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+              >
+                <FolderOpen className="mx-auto mb-2 size-5 text-muted-foreground" />
+                <div className="text-[13.5px]">Selecciona una estructura desde Google Drive</div>
+                <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                  DOCX · PDF · TXT
                 </div>
-                <Button variant="ghost" size="icon" className="size-7" onClick={() => setDriveFile(null)}>
-                  <X className="size-3.5" />
-                </Button>
-              </div>
-            )}
+              </button>
+              <Button type="button" variant="outline-primary" onClick={selectLocalFile}>
+                <Upload /> Subir desde tu computador
+              </Button>
+            </div>
           </TabsContent>
 
           <TabsContent value="text" className="pt-4">
-            <Textarea
-              rows={6}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={'Pega aquí la estructura propuesta…\n\nMódulo 1 · …\nMódulo 2 · …'}
-            />
+            <div className="flex flex-col gap-3">
+              <Textarea
+                rows={6}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={'Pega aquí la estructura propuesta…\n\nMódulo 1 · …\nMódulo 2 · …'}
+              />
+              <Button type="button" variant="outline-primary" onClick={selectLocalFile}>
+                <Upload /> Cargar archivo desde tu computador
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
+
+        <input
+          ref={localFileInputRef}
+          type="file"
+          accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt"
+          className="hidden"
+          onChange={handleLocalFileChange}
+        />
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button disabled={!canSubmit} onClick={submit}>
+          <Button disabled={!text.trim()} onClick={submitText}>
             <Upload /> Subir estructura
           </Button>
         </DialogFooter>

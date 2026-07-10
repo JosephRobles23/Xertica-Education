@@ -1,0 +1,34 @@
+LECCIÓN DE ESTUDIO
+Módulo: Hechizos y Criaturas Mágicas
+Cliente: la empresa del cliente
+Generado el: 2026-07-09 23:41:02
+======================================================================
+
+1. Fundamentos de la Magia: Canalización de Hechizos
+-------------------------------------------------
+En 'la empresa del cliente', todo hechizo exitoso combina tres pilares: la intención (el propósito claro), la incantación (la fórmula verbal) y el gesto (el movimiento de varita). La sincronía perfecta de estos elementos garantiza que la energía mágica se manifieste de forma segura y precisa, evitando resultados inesperados. Ejemplo de Código:
+// Hechizo de Levitación Básico
+Incantación: "Wingardium Leviosa"
+Movimiento: Agitar y golpear con la muñeca.
+Efecto: El objeto objetivo comienza a flotar.
+
+2. El Bestiario Corporativo: Clasificación de Criaturas
+----------------------------------------------------
+Las criaturas mágicas se gestionan mediante una clasificación de riesgo estandarizada para garantizar la seguridad operativa. Esta escala nos permite evaluar rápidamente el nivel de amenaza y asignar los recursos adecuados para su manejo. Conocerla es el primer paso para una coexistencia segura y productiva. Ejemplo Práctico:
+Criatura: Niffler (Escarbato)
+Clasificación: XXX (Mago competente puede manejarlo)
+Protocolo: En caso de fuga, sellar accesos a bóvedas y distraer con objetos brillantes de bajo valor para su captura.
+
+3. Sinergias y Contramedidas: Hechizos ante Criaturas
+--------------------------------------------------
+Los hechizos son nuestra principal herramienta para la interacción y control de criaturas. No se trata de atacar, sino de gestionar. Existen encantamientos específicos para calmar, repeler, inmovilizar o contener a distintas bestias, siendo vitales para resolver incidentes de forma eficiente y sin daños. Ejemplo Práctico:
+Situación: Un enjambre de Pixies de Cornualles interrumpe una reunión.
+Hechizo de Contención: "Immobulus" (Hechizo Inmovilizador).
+Resultado: Los pixies quedan paralizados en el aire, permitiendo su recolección segura y sin caos.
+
+TÉRMINOS CLAVE (GLOSARIO)
+=========================
+* Incantación: La fórmula verbal o palabra de poder que se pronuncia para canalizar y dar forma a un hechizo.
+* Clasificación de Riesgo Mágico: Sistema que cataloga a las criaturas por su nivel de peligrosidad (de X a XXXXX), determinando el protocolo de interacción y manejo.
+* Bestiario: Un compendio o base de datos que describe las diferentes criaturas mágicas, sus hábitats, habilidades y vulnerabilidades.
+* Hechizo No-Verbal: La ejecución de un encantamiento únicamente con la mente y el gesto, sin pronunciar la incantación. Requiere un alto nivel de concentración.

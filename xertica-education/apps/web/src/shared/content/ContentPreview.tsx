@@ -9,12 +9,14 @@ export function ContentPreview({
   kind,
   pack,
   videoUrl,
+  compact,
   routeId,
   moduleId,
 }: {
   kind: ContentKind
   pack: ContentPack
   videoUrl?: string
+  compact?: boolean
   routeId?: string
   moduleId?: string
 }) {
@@ -22,7 +24,7 @@ export function ContentPreview({
     case 'lesson':
       return <LessonView lesson={pack.lesson} routeId={routeId} moduleId={moduleId} />
     case 'video':
-      return <VideoFrame video={pack.video} videoUrl={videoUrl} compact />
+      return <VideoFrame video={pack.video} videoUrl={videoUrl} compact={compact} />
     case 'infografia':
       return <InfografiaView info={pack.infografia} className="justify-start" routeId={routeId} moduleId={moduleId} />
     case 'quiz':

@@ -62,8 +62,9 @@ const hydrateRoutes = (apiRoutes: readonly ApiLearningRoute[]): readonly Learnin
 
 export interface UploadedStructure {
   name: string
-  kind: 'drive' | 'texto'
+  kind: 'drive' | 'texto' | 'local'
   driveFile?: GoogleDriveSelection
+  localFile?: File
 }
 
 export const mapRouteModulesToProposal = (modules: readonly RouteModule[]): ProposalModule[] => {

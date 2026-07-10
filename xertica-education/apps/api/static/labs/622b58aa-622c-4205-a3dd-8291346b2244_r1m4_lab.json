@@ -1,0 +1,107 @@
+{
+  "title": "Laboratorio práctico · Control de Plagas y Enfermedades",
+  "objective": "Métodos y estrategias para prevenir y manejar plagas y enfermedades comunes en el cultivo.",
+  "scenario": "En este laboratorio vas a aplicar Control de Plagas y Enfermedades en una actividad breve y concreta. La meta es pasar de entender el concepto a producir una evidencia útil para el contexto del cliente.",
+  "estimatedTimeMinutes": 20,
+  "difficulty": "intermediate",
+  "tools": [
+    {
+      "name": "Gemini",
+      "purpose": "Aplicar el concepto central del módulo.",
+      "url": "https://ai.google.dev/gemini-api/docs"
+    }
+  ],
+  "prerequisites": [
+    "Haber revisado el contenido principal del módulo.",
+    "Tener acceso a Gemini o una forma de simularlo."
+  ],
+  "instructions": [
+    {
+      "step": 1,
+      "title": "Define el desafio",
+      "description": "Elige una situacion real del equipo donde Gemini pueda ayudar. Escribe en una frase que quieres resolver y para quien.",
+      "expectedResult": "Un desafio claro y contextualizado.",
+      "tip": "Hazlo especifico: audiencia, objetivo y restriccion."
+    },
+    {
+      "step": 2,
+      "title": "Ejecuta la practica",
+      "description": "Usa Gemini o simula su uso con este prompt base: \"Ayudame a resolver [DESAFIO] para [AUDIENCIA] usando [CRITERIOS DEL MODULO]\".",
+      "expectedResult": "Una primera respuesta o prototipo.",
+      "tip": "Cambia los corchetes antes de correrlo."
+    },
+    {
+      "step": 3,
+      "title": "Refina el resultado",
+      "description": "Pide una mejora concreta: mas claro, mas visual, mas accionable o mejor alineado al contexto de la empresa.",
+      "expectedResult": "Una version mejorada.",
+      "tip": "No cambies todo el prompt; conversa con la herramienta."
+    },
+    {
+      "step": 4,
+      "title": "Guarda tu evidencia",
+      "description": "Exporta o copia el resultado final y agrega una nota breve explicando por que cumple el objetivo del modulo.",
+      "expectedResult": "Una entrega lista para revisar.",
+      "tip": "Incluye captura, enlace o texto final."
+    }
+  ],
+  "deliverable": {
+    "description": "Evidencia breve de la práctica realizada y la decisión tomada.",
+    "format": "Documento breve, captura o enlace",
+    "successCriteria": [
+      "Aplica el concepto central del módulo.",
+      "Está conectada al contexto del cliente.",
+      "Incluye una mejora o refinamiento."
+    ]
+  },
+  "reflectionQuestions": [
+    "¿Qué cambió entre tu primer resultado y el refinado?",
+    "¿Cómo lo aplicarías en una situación real?"
+  ],
+  "sourceReferences": [
+    {
+      "sourceId": null,
+      "title": "Documentación oficial de Gemini",
+      "url": "https://ai.google.dev/gemini-api/docs"
+    },
+    {
+      "sourceId": null,
+      "title": "Gemini: referencia oficial del producto",
+      "url": "https://blog.google/technology/ai/google-gemini-ai/"
+    }
+  ],
+  "safetyNotes": [],
+  "steps": [
+    {
+      "title": "Define el desafio",
+      "desc": "Elige una situacion real del equipo donde Gemini pueda ayudar. Escribe en una frase que quieres resolver y para quien.",
+      "tool": "Gemini",
+      "tip": "Hazlo especifico: audiencia, objetivo y restriccion."
+    },
+    {
+      "title": "Ejecuta la practica",
+      "desc": "Usa Gemini o simula su uso con este prompt base: \"Ayudame a resolver [DESAFIO] para [AUDIENCIA] usando [CRITERIOS DEL MODULO]\".",
+      "tool": "Gemini",
+      "tip": "Cambia los corchetes antes de correrlo."
+    },
+    {
+      "title": "Refina el resultado",
+      "desc": "Pide una mejora concreta: mas claro, mas visual, mas accionable o mejor alineado al contexto de la empresa.",
+      "tool": "Gemini",
+      "tip": "No cambies todo el prompt; conversa con la herramienta."
+    },
+    {
+      "title": "Guarda tu evidencia",
+      "desc": "Exporta o copia el resultado final y agrega una nota breve explicando por que cumple el objetivo del modulo.",
+      "tool": "Gemini",
+      "tip": "Incluye captura, enlace o texto final."
+    }
+  ],
+  "console": [
+    "[ ] Define el desafio",
+    "[ ] Ejecuta la practica",
+    "[ ] Refina el resultado",
+    "[ ] Guarda tu evidencia"
+  ],
+  "classroomText": "🧪 Laboratorio: Laboratorio práctico · Control de Plagas y Enfermedades\nTiempo estimado: 20 minutos\n\nMétodos y estrategias para prevenir y manejar plagas y enfermedades comunes en el cultivo.\n\nEn este laboratorio vas a aplicar Control de Plagas y Enfermedades en una actividad breve y concreta. La meta es pasar de entender el concepto a producir una evidencia útil para el contexto del cliente.\n\nHerramienta principal: Gemini\n\n1. Desafío\nAterriza el caso: define qué vas a crear, resolver o decidir usando el contenido del módulo.\n\n2. Define el desafio\nElige una situacion real del equipo donde Gemini pueda ayudar. Escribe en una frase que quieres resolver y para quien.\nResultado esperado: Un desafio claro y contextualizado.\n\n3. Ejecuta la practica\nUsa Gemini o simula su uso con este prompt base: \"Ayudame a resolver [DESAFIO] para [AUDIENCIA] usando [CRITERIOS DEL MODULO]\".\nResultado esperado: Una primera respuesta o prototipo.\n\n4. Refina el resultado\nPide una mejora concreta: mas claro, mas visual, mas accionable o mejor alineado al contexto de la empresa.\nResultado esperado: Una version mejorada.\n\n5. Guarda tu evidencia\nExporta o copia el resultado final y agrega una nota breve explicando por que cumple el objetivo del modulo.\nResultado esperado: Una entrega lista para revisar.\n\nEntrega\nEvidencia breve de la práctica realizada y la decisión tomada.\nFormato: Documento breve, captura o enlace\nDebe mostrar:\n- Aplica el concepto central del módulo.\n- Está conectada al contexto del cliente.\n- Incluye una mejora o refinamiento.\n\n✨ Tips de oro\n- Hazlo especifico: audiencia, objetivo y restriccion.\n- Cambia los corchetes antes de correrlo.\n\nCierre rápido\n- ¿Qué cambió entre tu primer resultado y el refinado?\n- ¿Cómo lo aplicarías en una situación real?"
+}

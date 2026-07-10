@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
@@ -47,6 +47,19 @@ const emptyToUndefined = (value: string) => {
   const trimmed = value.trim()
   return trimmed.length ? trimmed : undefined
 }
+
+const fileMetaOf = (file: GoogleDriveSelection | File) =>
+  'file_id' in file
+    ? {
+        name: file.name,
+        type: file.mime_type,
+        sizeKb: 1,
+      }
+    : {
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        sizeKb: Math.max(1, Math.round(file.size / 1024)),
+      }
 
 const inferFromText = (text: string): Partial<CustomerContext> => {
   const normalized = text.toLowerCase()
@@ -129,10 +142,14 @@ export default function NuevaRuta() {
   const [dialogOpen, setDialogOpen] = useState(false)
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
   const [driveFiles, setDriveFiles] = useState<GoogleDriveSelection[]>([])
+  const [localFiles, setLocalFiles] = useState<File[]>([])
   const [companyProposalDriveFiles, setCompanyProposalDriveFiles] = useState<GoogleDriveSelection[]>([])
+  const [companyProposalLocalFiles, setCompanyProposalLocalFiles] = useState<File[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
+  const materialFileInputRef = useRef<HTMLInputElement | null>(null)
+  const companyProposalFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const updateCustomerContext = (patch: CustomerContext) => {
     setCustomerContext({ ...customerContext, ...patch })
@@ -166,33 +183,21 @@ export default function NuevaRuta() {
   }
 
   // Metadata del primer doc → customerContext.baseMaterialFile (compat: inferencia +
-  // "video propio" en RouteDetail). El resto vive en la lista `driveFiles`.
-  const syncPrimaryMeta = (files: GoogleDriveSelection[]) => {
-    const first = files[0]
+  // "video propio" en RouteDetail). El resto vive en la lista `driveFiles` / `localFiles`.
+  const syncPrimaryMeta = (driveSelections: GoogleDriveSelection[], localSelections: File[]) => {
+    const first = driveSelections[0] ?? localSelections[0]
     updateCustomerContext({
-      baseMaterialFile: first
-        ? {
-            name: first.name,
-            type: first.mime_type,
-            sizeKb: 1,
-          }
-        : undefined,
+      baseMaterialFile: first ? fileMetaOf(first) : undefined,
       inferredFrom: first
         ? Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material']))
         : customerContext.inferredFrom,
     })
   }
 
-  const syncCompanyProposalMeta = (files: GoogleDriveSelection[]) => {
-    const first = files[0]
+  const syncCompanyProposalMeta = (driveSelections: GoogleDriveSelection[], localSelections: File[]) => {
+    const first = driveSelections[0] ?? localSelections[0]
     updateCustomerContext({
-      companyProposalFile: first
-        ? {
-            name: first.name,
-            type: first.mime_type,
-            sizeKb: 1,
-          }
-        : undefined,
+      companyProposalFile: first ? fileMetaOf(first) : undefined,
     })
   }
 
@@ -204,7 +209,7 @@ export default function NuevaRuta() {
         ? driveFiles
         : [...driveFiles, selected]
       setDriveFiles(next)
-      syncPrimaryMeta(next)
+      syncPrimaryMeta(next, localFiles)
       toast.success('Archivo de Drive seleccionado', {
         description: selected.name,
       })
@@ -218,7 +223,31 @@ export default function NuevaRuta() {
   const removeDriveMaterial = (index: number) => {
     const next = driveFiles.filter((_, i) => i !== index)
     setDriveFiles(next)
-    syncPrimaryMeta(next)
+    syncPrimaryMeta(next, localFiles)
+  }
+
+  const attachLocalMaterial = () => {
+    materialFileInputRef.current?.click()
+  }
+
+  const onLocalMaterialSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const next = localFiles.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)
+      ? localFiles
+      : [...localFiles, file]
+    setLocalFiles(next)
+    syncPrimaryMeta(driveFiles, next)
+    toast.success('Archivo local seleccionado', {
+      description: file.name,
+    })
+  }
+
+  const removeLocalMaterial = (index: number) => {
+    const next = localFiles.filter((_, i) => i !== index)
+    setLocalFiles(next)
+    syncPrimaryMeta(driveFiles, next)
   }
 
   const attachDriveCompanyProposal = async () => {
@@ -229,7 +258,7 @@ export default function NuevaRuta() {
         ? companyProposalDriveFiles
         : [...companyProposalDriveFiles, selected]
       setCompanyProposalDriveFiles(next)
-      syncCompanyProposalMeta(next)
+      syncCompanyProposalMeta(next, companyProposalLocalFiles)
       toast.success('Propuesta de Drive seleccionada', {
         description: selected.name,
       })
@@ -243,7 +272,33 @@ export default function NuevaRuta() {
   const removeDriveCompanyProposal = (index: number) => {
     const next = companyProposalDriveFiles.filter((_, i) => i !== index)
     setCompanyProposalDriveFiles(next)
-    syncCompanyProposalMeta(next)
+    syncCompanyProposalMeta(next, companyProposalLocalFiles)
+  }
+
+  const attachLocalCompanyProposal = () => {
+    companyProposalFileInputRef.current?.click()
+  }
+
+  const onLocalCompanyProposalSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const next = companyProposalLocalFiles.some(
+      (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
+    )
+      ? companyProposalLocalFiles
+      : [...companyProposalLocalFiles, file]
+    setCompanyProposalLocalFiles(next)
+    syncCompanyProposalMeta(companyProposalDriveFiles, next)
+    toast.success('Propuesta local seleccionada', {
+      description: file.name,
+    })
+  }
+
+  const removeLocalCompanyProposal = (index: number) => {
+    const next = companyProposalLocalFiles.filter((_, i) => i !== index)
+    setCompanyProposalLocalFiles(next)
+    syncCompanyProposalMeta(companyProposalDriveFiles, next)
   }
 
   const propose = async () => {
@@ -285,6 +340,21 @@ export default function NuevaRuta() {
           })
           throw new Error(`No se pudo importar ${uploadedStructure.name}: ${message}`)
         }
+      } else if (uploadedStructure?.kind === 'local' && uploadedStructure.localFile) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, uploadedStructure.localFile)
+          toast.loading('Archivo local importado · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
+          toast.error(`No se pudo importar ${uploadedStructure.name}`, {
+            id: toastId,
+            description: message,
+          })
+          throw new Error(`No se pudo importar ${uploadedStructure.name}: ${message}`)
+        }
       }
 
       // Vía 2 (ADR-0013): importa cada documento del cliente a la ruta recién creada.
@@ -306,10 +376,44 @@ export default function NuevaRuta() {
         }
       }
 
+      for (const file of companyProposalLocalFiles) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, file)
+          toast.loading('Propuesta local importada · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
+          toast.error(`No se pudo importar ${file.name}`, {
+            id: toastId,
+            description: message,
+          })
+          throw new Error(`No se pudo importar ${file.name}: ${message}`)
+        }
+      }
+
       for (const file of driveFiles) {
         try {
           const uploaded = await api.uploadDriveDocument(newPath.id, file)
           toast.loading('Documento de Drive importado · se añadirá a la base de conocimiento', {
+            id: toastId,
+            description: uploaded.filename,
+          })
+        } catch (uploadErr) {
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
+          toast.error(`No se pudo importar ${file.name}`, {
+            id: toastId,
+            description: message,
+          })
+          throw new Error(`No se pudo importar ${file.name}: ${message}`)
+        }
+      }
+
+      for (const file of localFiles) {
+        try {
+          const uploaded = await api.uploadDocument(newPath.id, file)
+          toast.loading('Documento local importado · se añadirá a la base de conocimiento', {
             id: toastId,
             description: uploaded.filename,
           })
@@ -503,18 +607,31 @@ export default function NuevaRuta() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label>Propuesta de la compañía</Label>
-                    <button
-                      type="button"
-                      onClick={attachDriveCompanyProposal}
-                      className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                    >
-                      <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-                      <div className="text-[13px]">Seleccionar propuesta desde Google Drive</div>
-                      <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                        DOCX · PDF · PPTX · XLSX · TXT
-                      </div>
-                    </button>
-                    {companyProposalDriveFiles.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={attachDriveCompanyProposal}
+                        className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                      >
+                        <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+                        <div className="text-[13px]">Seleccionar desde Google Drive</div>
+                        <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                          DOCX · PDF · PPTX · XLSX · TXT
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={attachLocalCompanyProposal}
+                        className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                      >
+                        <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+                        <div className="text-[13px]">Subir desde tu computador</div>
+                        <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                          DOCX · PDF · PPTX · XLSX · TXT
+                        </div>
+                      </button>
+                    </div>
+                    {companyProposalDriveFiles.length > 0 || companyProposalLocalFiles.length > 0 ? (
                       <div className="flex flex-col gap-2">
                         {companyProposalDriveFiles.map((file, index) => (
                           <div
@@ -534,6 +651,29 @@ export default function NuevaRuta() {
                               size="icon"
                               className="size-7"
                               onClick={() => removeDriveCompanyProposal(index)}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                        {companyProposalLocalFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.size}-${file.lastModified}`}
+                            className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                          >
+                            <FolderOpen className="size-4 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[13px] text-ink">{file.name}</div>
+                              <div className="font-mono text-[10.5px] text-muted-foreground">
+                                Computador · propuesta de compañía
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={() => removeLocalCompanyProposal(index)}
                             >
                               <X className="size-3.5" />
                             </Button>
@@ -664,19 +804,32 @@ export default function NuevaRuta() {
 
         {/* Material de referencia (Vía 2 · ADR-0013) — múltiples docs; todos a la KB por default */}
         <div className="flex flex-col gap-2">
-          <Label>O agrega material de referencia desde Google Drive</Label>
-          <button
-            type="button"
-            onClick={attachDriveMaterial}
-            className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-          >
-            <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-            <div className="text-[13px]">Seleccionar archivo desde Google Drive</div>
-            <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-              DOCX · PDF · PPTX · XLSX · TXT
-            </div>
-          </button>
-          {driveFiles.length > 0 && (
+          <Label>O agrega material de referencia</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={attachDriveMaterial}
+              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+              <div className="text-[13px]">Seleccionar desde Google Drive</div>
+              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                DOCX · PDF · PPTX · XLSX · TXT
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={attachLocalMaterial}
+              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+              <div className="text-[13px]">Subir desde tu computador</div>
+              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                DOCX · PDF · PPTX · XLSX · TXT
+              </div>
+            </button>
+          </div>
+          {driveFiles.length > 0 || localFiles.length > 0 ? (
             <div className="flex flex-col gap-2">
               {driveFiles.map((file, index) => (
                 <div
@@ -701,11 +854,34 @@ export default function NuevaRuta() {
                   </Button>
                 </div>
               ))}
+              {localFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.size}-${file.lastModified}`}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FolderOpen className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      Computador · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => removeLocalMaterial(index)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
             </div>
-          )}
-          {driveFiles.length === 0 && (
+          ) : null}
+          {driveFiles.length === 0 && localFiles.length === 0 && (
             <span className="font-mono text-[11px] text-muted-foreground">
-              Adjunta uno o varios archivos de Drive: informan la estructura y alimentan la base de conocimiento.
+              Adjunta uno o varios archivos desde Drive o tu computador: informan la estructura y alimentan la base de conocimiento.
             </span>
           )}
         </div>
@@ -719,6 +895,20 @@ export default function NuevaRuta() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSubmit={setUploadedStructure}
+      />
+      <input
+        ref={materialFileInputRef}
+        type="file"
+        accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt"
+        className="hidden"
+        onChange={onLocalMaterialSelected}
+      />
+      <input
+        ref={companyProposalFileInputRef}
+        type="file"
+        accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt"
+        className="hidden"
+        onChange={onLocalCompanyProposalSelected}
       />
     </div>
   )
