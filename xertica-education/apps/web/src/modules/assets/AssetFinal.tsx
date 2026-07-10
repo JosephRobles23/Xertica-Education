@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useState } from 'react'
 import { ArrowRight, CircleCheck, ExternalLink, FileImage, FlaskConical, FolderUp, ListChecks, RefreshCcw, ShieldCheck, Video as VideoIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
@@ -25,7 +24,6 @@ export default function AssetFinal() {
   const router = useRouter()
   const { routes, storyboardVideoUrlOf } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
-  const videoUrl = route ? storyboardVideoUrlOf(route.id) : ''
   const [savingDrive, setSavingDrive] = useState(false)
   const [driveLink, setDriveLink] = useState<string | null>(null)
   const [backendVideoUrl, setBackendVideoUrl] = useState('')
