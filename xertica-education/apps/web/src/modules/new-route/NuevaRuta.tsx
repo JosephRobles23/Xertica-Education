@@ -1,17 +1,15 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
   Building2,
   CheckCircle2,
-  FileText,
   FolderOpen,
   Globe2,
   MonitorPlay,
   Sparkles,
-  Upload,
   Users,
   X,
 } from 'lucide-react'
@@ -130,14 +128,11 @@ export default function NuevaRuta() {
   }, [setActiveRouteId, setStructureJobId, setPendingDeepResearch, setProposalLoadedRouteId, setProposal])
   const [dialogOpen, setDialogOpen] = useState(false)
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
-  const [materialFiles, setMaterialFiles] = useState<File[]>([])
-  const [companyProposalFiles, setCompanyProposalFiles] = useState<File[]>([])
   const [driveFiles, setDriveFiles] = useState<GoogleDriveSelection[]>([])
+  const [companyProposalDriveFiles, setCompanyProposalDriveFiles] = useState<GoogleDriveSelection[]>([])
   const [generating, setGenerating] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [contextStep, setContextStep] = useState(0)
-  const baseMaterialInputRef = useRef<HTMLInputElement>(null)
-  const companyProposalInputRef = useRef<HTMLInputElement>(null)
 
   const updateCustomerContext = (patch: CustomerContext) => {
     setCustomerContext({ ...customerContext, ...patch })
@@ -171,15 +166,15 @@ export default function NuevaRuta() {
   }
 
   // Metadata del primer doc → customerContext.baseMaterialFile (compat: inferencia +
-  // "video propio" en RouteDetail). El resto vive en la lista `materialFiles`.
-  const syncPrimaryMeta = (files: File[]) => {
+  // "video propio" en RouteDetail). El resto vive en la lista `driveFiles`.
+  const syncPrimaryMeta = (files: GoogleDriveSelection[]) => {
     const first = files[0]
     updateCustomerContext({
       baseMaterialFile: first
         ? {
             name: first.name,
-            type: first.type || first.name.split('.').pop()?.toUpperCase() || 'archivo',
-            sizeKb: Math.max(1, Math.round(first.size / 1024)),
+            type: first.mime_type,
+            sizeKb: 1,
           }
         : undefined,
       inferredFrom: first
@@ -188,80 +183,28 @@ export default function NuevaRuta() {
     })
   }
 
-  const attachMaterial = (incoming: FileList | File[] | null) => {
-    const files = incoming ? Array.from(incoming) : []
-    if (!files.length) return
-    // dedup por nombre+tamaño para no subir el mismo archivo dos veces.
-    const merged = [...materialFiles]
-    for (const f of files) {
-      if (!merged.some((m) => m.name === f.name && m.size === f.size)) merged.push(f)
-    }
-    setMaterialFiles(merged)
-    syncPrimaryMeta(merged)
-    toast.success(
-      files.length > 1 ? `${files.length} documentos adjuntados` : 'Documento adjuntado',
-      { description: 'Se usará como contexto y se añadirá a la base de conocimiento.' },
-    )
-  }
-
-  const removeMaterial = (index: number) => {
-    const next = materialFiles.filter((_, i) => i !== index)
-    setMaterialFiles(next)
-    syncPrimaryMeta(next)
-  }
-
-  const syncCompanyProposalMeta = (files: File[]) => {
+  const syncCompanyProposalMeta = (files: GoogleDriveSelection[]) => {
     const first = files[0]
     updateCustomerContext({
       companyProposalFile: first
         ? {
             name: first.name,
-            type: first.type || first.name.split('.').pop()?.toUpperCase() || 'archivo',
-            sizeKb: Math.max(1, Math.round(first.size / 1024)),
+            type: first.mime_type,
+            sizeKb: 1,
           }
         : undefined,
     })
-  }
-
-  const attachCompanyProposal = (incoming: FileList | File[] | null) => {
-    const files = incoming ? Array.from(incoming) : []
-    if (!files.length) return
-    const merged = [...companyProposalFiles]
-    for (const f of files) {
-      if (!merged.some((m) => m.name === f.name && m.size === f.size)) merged.push(f)
-    }
-    setCompanyProposalFiles(merged)
-    syncCompanyProposalMeta(merged)
-    toast.success(
-      files.length > 1 ? `${files.length} propuestas adjuntadas` : 'Propuesta adjuntada',
-      { description: 'Se usará para ajustar la audiencia y el enfoque de la ruta.' },
-    )
-  }
-
-  const removeCompanyProposal = (index: number) => {
-    const next = companyProposalFiles.filter((_, i) => i !== index)
-    setCompanyProposalFiles(next)
-    syncCompanyProposalMeta(next)
   }
 
   const attachDriveMaterial = async () => {
     try {
       const selected = await pickGoogleDriveFile()
       if (!selected) return
-      setDriveFiles((current) => {
-        if (current.some((file) => file?.file_id === selected.file_id)) return current
-        return [...current, selected]
-      })
-      if (!customerContext.baseMaterialFile) {
-        updateCustomerContext({
-          baseMaterialFile: {
-            name: selected.name,
-            type: selected.mime_type,
-            sizeKb: 1,
-          },
-          inferredFrom: Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material'])),
-        })
-      }
+      const next = driveFiles.some((file) => file?.file_id === selected.file_id)
+        ? driveFiles
+        : [...driveFiles, selected]
+      setDriveFiles(next)
+      syncPrimaryMeta(next)
       toast.success('Archivo de Drive seleccionado', {
         description: selected.name,
       })
@@ -270,6 +213,37 @@ export default function NuevaRuta() {
         description: err instanceof Error ? err.message : 'Error desconocido',
       })
     }
+  }
+
+  const removeDriveMaterial = (index: number) => {
+    const next = driveFiles.filter((_, i) => i !== index)
+    setDriveFiles(next)
+    syncPrimaryMeta(next)
+  }
+
+  const attachDriveCompanyProposal = async () => {
+    try {
+      const selected = await pickGoogleDriveFile()
+      if (!selected) return
+      const next = companyProposalDriveFiles.some((file) => file?.file_id === selected.file_id)
+        ? companyProposalDriveFiles
+        : [...companyProposalDriveFiles, selected]
+      setCompanyProposalDriveFiles(next)
+      syncCompanyProposalMeta(next)
+      toast.success('Propuesta de Drive seleccionada', {
+        description: selected.name,
+      })
+    } catch (err) {
+      toast.error('No se pudo abrir Google Drive', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    }
+  }
+
+  const removeDriveCompanyProposal = (index: number) => {
+    const next = companyProposalDriveFiles.filter((_, i) => i !== index)
+    setCompanyProposalDriveFiles(next)
+    syncCompanyProposalMeta(next)
   }
 
   const propose = async () => {
@@ -296,33 +270,39 @@ export default function NuevaRuta() {
 
       setActiveRouteId(newPath.id)
 
-      // Vía 2 (ADR-0013): sube cada documento del cliente a la ruta recién creada.
-      // Todos se ingestan por default (contexto de estructura + fuente de la KB).
-      for (const file of materialFiles) {
+      if (uploadedStructure?.kind === 'drive' && uploadedStructure.driveFile) {
         try {
-          const uploaded = await api.uploadDocument(newPath.id, file)
-          toast.loading('Documento subido · se añadirá a la base de conocimiento', {
+          const uploaded = await api.uploadDriveDocument(newPath.id, uploadedStructure.driveFile)
+          toast.loading('Estructura de Drive importada · se añadirá a la base de conocimiento', {
             id: toastId,
             description: uploaded.filename,
           })
         } catch (uploadErr) {
-          toast.error(`No se pudo subir ${file.name}`, {
-            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
+          toast.error(`No se pudo importar ${uploadedStructure.name}`, {
+            id: toastId,
+            description: message,
           })
+          throw new Error(`No se pudo importar ${uploadedStructure.name}: ${message}`)
         }
       }
 
-      for (const file of companyProposalFiles) {
+      // Vía 2 (ADR-0013): importa cada documento del cliente a la ruta recién creada.
+      // Todos se ingestan por default (contexto de estructura + fuente de la KB).
+      for (const file of companyProposalDriveFiles) {
         try {
-          const uploaded = await api.uploadDocument(newPath.id, file)
-          toast.loading('Propuesta de compañía subida · se añadirá a la base de conocimiento', {
+          const uploaded = await api.uploadDriveDocument(newPath.id, file)
+          toast.loading('Propuesta de Drive importada · se añadirá a la base de conocimiento', {
             id: toastId,
             description: uploaded.filename,
           })
         } catch (uploadErr) {
-          toast.error(`No se pudo subir ${file.name}`, {
-            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
+          toast.error(`No se pudo importar ${file.name}`, {
+            id: toastId,
+            description: message,
           })
+          throw new Error(`No se pudo importar ${file.name}: ${message}`)
         }
       }
 
@@ -334,9 +314,12 @@ export default function NuevaRuta() {
             description: uploaded.filename,
           })
         } catch (uploadErr) {
+          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
           toast.error(`No se pudo importar ${file.name}`, {
-            description: uploadErr instanceof Error ? uploadErr.message : 'Error desconocido',
+            id: toastId,
+            description: message,
           })
+          throw new Error(`No se pudo importar ${file.name}: ${message}`)
         }
       }
 
@@ -520,40 +503,29 @@ export default function NuevaRuta() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <Label>Propuesta de la compañía</Label>
-                    <input
-                      ref={companyProposalInputRef}
-                      type="file"
-                      multiple
-                      accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
-                      className="hidden"
-                      onClick={(e) => {
-                        ;(e.currentTarget as HTMLInputElement).value = ''
-                      }}
-                      onChange={(e) => attachCompanyProposal(e.target.files)}
-                    />
                     <button
                       type="button"
-                      onClick={() => companyProposalInputRef.current?.click()}
+                      onClick={attachDriveCompanyProposal}
                       className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
                     >
-                      <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-                      <div className="text-[13px]">Adjuntar propuesta para esta audiencia</div>
+                      <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+                      <div className="text-[13px]">Seleccionar propuesta desde Google Drive</div>
                       <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
                         DOCX · PDF · PPTX · XLSX · TXT
                       </div>
                     </button>
-                    {companyProposalFiles.length > 0 ? (
+                    {companyProposalDriveFiles.length > 0 ? (
                       <div className="flex flex-col gap-2">
-                        {companyProposalFiles.map((file, index) => (
+                        {companyProposalDriveFiles.map((file, index) => (
                           <div
-                            key={`${file.name}-${file.size}`}
+                            key={file.file_id}
                             className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
                           >
-                            <FileText className="size-4 shrink-0 text-primary" />
+                            <FolderOpen className="size-4 shrink-0 text-primary" />
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[13px] text-ink">{file.name}</div>
                               <div className="font-mono text-[10.5px] text-muted-foreground">
-                                {Math.max(1, Math.round(file.size / 1024))} KB · propuesta de compañía
+                                Google Drive · propuesta de compañía
                               </div>
                             </div>
                             <Button
@@ -561,7 +533,7 @@ export default function NuevaRuta() {
                               variant="ghost"
                               size="icon"
                               className="size-7"
-                              onClick={() => removeCompanyProposal(index)}
+                              onClick={() => removeDriveCompanyProposal(index)}
                             >
                               <X className="size-3.5" />
                             </Button>
@@ -623,12 +595,12 @@ export default function NuevaRuta() {
           <Label>Estructura de la ruta de aprendizaje</Label>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline-primary" onClick={() => setDialogOpen(true)}>
-              <Upload /> Subir estructura propuesta
+              <FolderOpen /> Seleccionar estructura
             </Button>
             {uploadedStructure ? (
               <span className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-success bg-success/10 py-1.5 pr-2 pl-3 text-[12.5px]">
                 <CheckCircle2 className="size-3.5 text-success" />
-                {uploadedStructure.name} · {uploadedStructure.kind}
+                {uploadedStructure.name} · {uploadedStructure.kind === 'drive' ? 'Google Drive' : 'texto'}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -640,7 +612,7 @@ export default function NuevaRuta() {
               </span>
             ) : (
               <span className="font-mono text-[11px] text-muted-foreground">
-                Sube DOCX, PDF o pega el texto de tu estructura.
+                Selecciona un archivo de Drive o pega el texto de tu estructura.
               </span>
             )}
           </div>
@@ -679,63 +651,18 @@ export default function NuevaRuta() {
 
         {/* Material de referencia (Vía 2 · ADR-0013) — múltiples docs; todos a la KB por default */}
         <div className="flex flex-col gap-2">
-          <Label>O sube material de referencia</Label>
-          <input
-            ref={baseMaterialInputRef}
-            type="file"
-            multiple
-            accept=".docx,.pdf,.pptx,.xlsx,.txt,.md"
-            className="hidden"
-            onClick={(e) => {
-              ;(e.currentTarget as HTMLInputElement).value = ''
-            }}
-            onChange={(e) => attachMaterial(e.target.files)}
-          />
+          <Label>O agrega material de referencia desde Google Drive</Label>
           <button
             type="button"
-            onClick={() => baseMaterialInputRef.current?.click()}
+            onClick={attachDriveMaterial}
             className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
           >
-            <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-            <div className="text-[13px]">Selecciona uno o varios archivos</div>
+            <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+            <div className="text-[13px]">Seleccionar archivo desde Google Drive</div>
             <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
               DOCX · PDF · PPTX · XLSX · TXT
             </div>
           </button>
-          <Button type="button" variant="outline-primary" onClick={attachDriveMaterial}>
-            <FolderOpen /> Seleccionar desde Google Drive
-          </Button>
-          {materialFiles.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {materialFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${file.size}`}
-                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
-                >
-                  <FileText className="size-4 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] text-ink">{file.name}</div>
-                    <div className="font-mono text-[10.5px] text-muted-foreground">
-                      {Math.max(1, Math.round(file.size / 1024))} KB · contexto + fuente de la KB
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => removeMaterial(index)}
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <span className="font-mono text-[11px] text-muted-foreground">
-              Adjunta uno o varios archivos: informan la estructura y alimentan la base de conocimiento.
-            </span>
-          )}
           {driveFiles.length > 0 && (
             <div className="flex flex-col gap-2">
               {driveFiles.map((file, index) => (
@@ -755,13 +682,18 @@ export default function NuevaRuta() {
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    onClick={() => setDriveFiles((current) => current.filter((_, i) => i !== index))}
+                    onClick={() => removeDriveMaterial(index)}
                   >
                     <X className="size-3.5" />
                   </Button>
                 </div>
               ))}
             </div>
+          )}
+          {driveFiles.length === 0 && (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Adjunta uno o varios archivos de Drive: informan la estructura y alimentan la base de conocimiento.
+            </span>
           )}
         </div>
 

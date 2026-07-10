@@ -121,7 +121,6 @@ async def _persist_route_document(
                     origin="upload",
                     document_id=doc.id,
                     title=filename,
-                    tipo="google_drive",
                     estado="approved",
                 )
             ]
