@@ -18,7 +18,7 @@ from services.route_structurer import get_route_structurer as _build_route_struc
 from adapters.embeddings import get_embedder
 from adapters.linker import get_linker as _build_linker
 from adapters.storage import get_storage_adapter as _build_storage_adapter
-from adapters.research import GoogleSearchGroundingClient
+from adapters.research import get_documentation_client
 from repositories.approved_research_sources import (
     get_approved_research_source_repository as _build_approved_research_source_repository,
 )
@@ -30,11 +30,7 @@ _jobs_service = JobsService(_jobs_repository)
 _route_repository = SupabaseLearningPathRepository()
 _route_service = RouteService(_route_repository)
 _research_service = ResearchService(
-    documentation_client=GoogleSearchGroundingClient(
-        project=settings.google_cloud_project,
-        location=settings.research_location,
-        model=settings.research_model,
-    )
+    documentation_client=get_documentation_client()
 )
 _video_service = VideoService()
 

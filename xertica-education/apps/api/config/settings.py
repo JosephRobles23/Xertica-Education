@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     linker_model: str = "openai/gpt-4o-mini"
     research_model: str = "gemini-2.5-flash"
     research_location: str = "global"
+    # Deep Research vía Tavily (búsqueda) + OpenRouter (ranking/detección).
+    # Con tavily_api_key configurada se usa Tavily; con placeholder se cae al
+    # cliente de Gemini + Google Search Grounding.
+    tavily_api_key: str = "placeholder-key"
+    research_rank_model: str = "openai/gpt-4o-mini"
     # Google Cloud settings for Vertex AI (Imagen 3 + Veo 3.1)
     google_cloud_project: str = "xertica-agent-courses"
     google_cloud_location: str = "us-central1"

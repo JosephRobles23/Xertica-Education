@@ -11,13 +11,7 @@ from models.domain.source import Source
 from models.domain.source_module_link import SourceModuleLink
 from .base import BaseLinker
 from .mock import MockLinker
-
-_SYSTEM = (
-    "Eres un diseñador instruccional. Asigna a cada módulo la fuente más pertinente del "
-    "pool dado (por tema/relevancia). NO inventes fuentes ni módulos. Responde SOLO un JSON "
-    '{"links":[{"module_id":"...","source_id":"...","score":0.0,"why":"..."}]}. '
-    "score en [0,1]. Omite un módulo si ninguna fuente aplica."
-)
+from prompts.linker import SYSTEM_PROMPT as _SYSTEM
 
 
 class RealLinker(BaseLinker):
