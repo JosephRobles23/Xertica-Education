@@ -997,17 +997,23 @@ export default function Ruta() {
   }
 
   const generate = () => {
-    setGenerating(true)
-    toast.loading('Generando el material de todos los módulos…', { id: 'gen' })
-    window.setTimeout(() => {
-      markGenerated(route.id)
-      toast.success('Contenido generado', {
-        id: 'gen',
-        description: 'Revisa el asset final antes de publicar.',
-      })
-      router.push(`/ruta/${route.id}/asset-final`)
-    }, 1400)
-  }
+  setGenerating(true)
+
+  toast.loading('Publicando ruta…', {
+    id: 'publish-route',
+  })
+
+  window.setTimeout(() => {
+    markGenerated(route.id)
+
+    toast.success('Ruta publicada', {
+      id: 'publish-route',
+      description: 'El contenido está listo en Google Classroom.',
+    })
+
+    router.push(`/ruta/${route.id}/publicado`)
+  }, 1400)
+}
 
   const generateButton = (
     <Button disabled={generating} onClick={generate}>
