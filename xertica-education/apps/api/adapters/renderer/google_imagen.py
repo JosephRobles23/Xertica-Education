@@ -56,14 +56,13 @@ class GoogleImagenAdapter:
         self._client = None
         if not self.is_mock:
             try:
-                # Initialize the GenAI client pointed at Vertex AI.
-                # vertexai=True tells the SDK to route through Vertex AI
-                # (Google Cloud's ML platform) rather than the consumer
-                # Gemini API endpoint.
+                # Gemini image generation models (like gemini-3.1-flash-image) are hosted
+                # globally on Vertex AI. We must target location="global" to prevent 404s.
+                location = "global" if "gemini-" in settings.imagen_model else settings.google_cloud_location
                 self._client = genai.Client(
                     vertexai=True,
                     project=settings.google_cloud_project,
-                    location=settings.google_cloud_location,
+                    location=location,
                 )
             except Exception as e:
                 print(f"Failed to initialize GenAI client for Imagen: {e}")

@@ -76,7 +76,7 @@ def _build_cut(
     base = {"id": cut_id, "in_seconds": start, "out_seconds": end}
 
     if visual_type == "text_card":
-        subtitle = narr if len(narr) < 60 else ""
+        subtitle = config.get("subtitle") or (narr if len(narr) < 60 else "")
         return {**base, "type": "text_card", "text": config.get("title", ""), "subtitle": subtitle}
 
     elif visual_type == "hero_title":
@@ -87,7 +87,7 @@ def _build_cut(
         return {**base, "type": "stat_card", "stat": config.get("stat", ""), "subtitle": config.get("subtitle", ""), "accentColor": accent}
 
     elif visual_type == "callout":
-        return {**base, "type": "callout", "callout_style": config.get("callout_style", "info"), "text": config.get("text", "")}
+        return {**base, "type": "callout", "callout_type": config.get("callout_style", "info"), "text": config.get("text", "")}
 
     elif visual_type == "comparison":
         return {
@@ -105,7 +105,18 @@ def _build_cut(
         }
 
     elif visual_type == "line_chart":
-        return {**base, "type": "line_chart", "title": config.get("title", ""), "chartSeries": config.get("chartSeries", [])}
+        return {
+            **base,
+            "type": "line_chart",
+            "title": config.get("title", ""),
+            "chartSeries": _normalize_line_chart_series(config.get("chartSeries", [])),
+            "showGrid": config.get("showGrid", True),
+            "showMarkers": config.get("showMarkers", True),
+            "showLegend": config.get("showLegend", False),
+            "xLabel": config.get("xLabel", ""),
+            "yLabel": config.get("yLabel", ""),
+            "chartColors": CHART_COLORS,
+        }
 
     elif visual_type == "pie_chart":
         return {
@@ -119,17 +130,33 @@ def _build_cut(
         return {**base, "type": "kpi_grid", "title": config.get("title", ""), "chartData": config.get("chartData", [])}
 
     elif visual_type == "progress_bar":
-        return {**base, "type": "progress_bar", "title": config.get("title", ""), "progress": config.get("progress", 0), "steps": config.get("steps", [])}
+        return {
+            **base,
+            "type": "progress_bar",
+            "title": config.get("title", ""),
+            "progress": config.get("progress", 0),
+            "progressSegments": _normalize_progress_steps(config.get("steps", [])),
+        }
 
     elif visual_type == "terminal_scene":
-        return {**base, "type": "terminal_scene", "steps": config.get("steps", [])}
+        return {
+            **base,
+            "type": "terminal_scene",
+            "terminalTitle": config.get("title", "Terminal"),
+            "steps": _normalize_terminal_steps(config.get("steps", [])),
+        }
 
     elif visual_type == "screenshot_scene":
         screenshot_path = visual_paths[idx] if idx < len(visual_paths) else ""
         import os
         filename = os.path.basename(screenshot_path) if screenshot_path else ""
         bg_image = f"{job_id}/{filename}" if filename else ""
-        return {**base, "type": "screenshot_scene", "backgroundImage": bg_image, "screenshotSteps": config.get("steps", [])}
+        return {
+            **base,
+            "type": "screenshot_scene",
+            "backgroundImage": bg_image,
+            "screenshotSteps": _normalize_screenshot_steps(config.get("steps", [])),
+        }
 
     elif visual_type == "ai_video":
         source = visual_paths[idx] if idx < len(visual_paths) else ""
@@ -146,3 +173,127 @@ def _build_cut(
         return {**base, "source": src, "animation": "ken-burns", "backgroundColor": "#0F172A"}
 
     return None
+
+
+def _normalize_terminal_steps(steps: list) -> list[dict]:
+    normalized = []
+    for step in steps:
+        if isinstance(step, dict):
+            normalized.append(step)
+            continue
+        if not isinstance(step, str):
+            continue
+        kind, _, value = step.partition(":")
+        value = value.strip()
+        if kind == "cmd" and value:
+            normalized.append({"kind": "cmd", "text": value})
+        elif kind == "out" and value:
+            normalized.append({"kind": "out", "text": value})
+        elif kind == "pause":
+            normalized.append({"kind": "pause", "seconds": _float_or(value, 1.0)})
+    return normalized
+
+
+def _normalize_screenshot_steps(steps: list) -> list[dict]:
+    normalized = []
+    for step in steps:
+        if isinstance(step, dict):
+            normalized.append(step)
+            continue
+        if not isinstance(step, str):
+            continue
+
+        kind, _, value = step.partition(":")
+        parts = value.strip().split()
+        if kind == "cursor_move" and len(parts) >= 2:
+            normalized.append({"kind": "cursor_move", "to": [_float_or(parts[0]), _float_or(parts[1])]})
+        elif kind == "click_pulse" and len(parts) >= 2:
+            normalized.append({"kind": "click_pulse", "at": [_float_or(parts[0]), _float_or(parts[1])]})
+        elif kind == "highlight_box" and len(parts) >= 4:
+            normalized.append({
+                "kind": "highlight_box",
+                "region": {
+                    "x": _float_or(parts[0]),
+                    "y": _float_or(parts[1]),
+                    "w": _float_or(parts[2]),
+                    "h": _float_or(parts[3]),
+                },
+            })
+        elif kind == "callout_balloon" and len(parts) >= 3:
+            normalized.append({
+                "kind": "callout_balloon",
+                "anchor": [_float_or(parts[0]), _float_or(parts[1])],
+                "text": " ".join(parts[2:]),
+            })
+        elif kind == "type_into" and len(parts) >= 5:
+            normalized.append({
+                "kind": "type_into",
+                "region": {
+                    "x": _float_or(parts[0]),
+                    "y": _float_or(parts[1]),
+                    "w": _float_or(parts[2]),
+                    "h": _float_or(parts[3]),
+                },
+                "text": " ".join(parts[4:]),
+            })
+        elif kind == "bubble_append" and len(parts) >= 5:
+            normalized.append({
+                "kind": "bubble_append",
+                "region": {
+                    "x": _float_or(parts[0]),
+                    "y": _float_or(parts[1]),
+                    "w": _float_or(parts[2]),
+                    "h": _float_or(parts[3]),
+                },
+                "text": " ".join(parts[4:]),
+            })
+        elif kind == "typing_dots" and len(parts) >= 2:
+            normalized.append({
+                "kind": "typing_dots",
+                "at": [_float_or(parts[0]), _float_or(parts[1])],
+            })
+        elif kind == "pause" and parts:
+            normalized.append({"kind": "pause", "seconds": _float_or(parts[0], 1.0)})
+    return normalized
+
+
+def _normalize_progress_steps(steps: list) -> list[dict]:
+    if not isinstance(steps, list) or not steps:
+        return []
+    share = round(100 / len(steps), 2)
+    normalized = []
+    for step in steps:
+        if isinstance(step, dict):
+            normalized.append(step)
+        elif isinstance(step, str):
+            normalized.append({"label": step, "value": share})
+    return normalized
+
+
+def _normalize_line_chart_series(series: list) -> list[dict]:
+    if not isinstance(series, list):
+        return []
+
+    normalized = []
+    for item in series:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label") or item.get("name") or "Serie"
+        raw_points = item.get("data") or []
+        points = []
+        if isinstance(raw_points, list):
+            for index, point in enumerate(raw_points, start=1):
+                if isinstance(point, dict) and "x" in point and "y" in point:
+                    points.append({"x": _float_or(point.get("x")), "y": _float_or(point.get("y"))})
+                elif isinstance(point, (int, float)):
+                    points.append({"x": float(index), "y": float(point)})
+        if points:
+            normalized.append({"label": label, "data": points})
+    return normalized
+
+
+def _float_or(value: object, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
