@@ -1138,6 +1138,8 @@ export default function Ruta() {
   const router = useRouter()
   const {
     routes,
+    routesLoaded,
+    fetchRouteById,
     markGenerated,
     contentStatusOf,
     moduleStatusOf,
@@ -1146,10 +1148,26 @@ export default function Ruta() {
   } = useStore()
   const routeIndex = useMemo(() => routes.findIndex((r) => r.id === id), [routes, id])
   const route = routeIndex >= 0 ? routes[routeIndex] : undefined
+  const [routeFetchPending, setRouteFetchPending] = useState(false)
   const routeOrderNo = routeIndex >= 0 ? String(routeIndex + 1).padStart(2, '0') : '—'
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0)
   const [selectedContentKind, setSelectedContentKind] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+
+  useEffect(() => {
+    if (!id || route || !routesLoaded) return
+
+    let cancelled = false
+    setRouteFetchPending(true)
+
+    void fetchRouteById(id).finally(() => {
+      if (!cancelled) setRouteFetchPending(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchRouteById, id, route, routesLoaded])
 
   const progress = useMemo(
     () => (route ? routeProgressOf(route) : { done: 0, total: 0, pct: 0 }),
@@ -1157,6 +1175,17 @@ export default function Ruta() {
   )
 
   if (!route) {
+    if (!routesLoaded || routeFetchPending) {
+      return (
+        <div className="mx-auto max-w-md pt-16 text-center">
+          <PageTitle>Cargando ruta…</PageTitle>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Estamos sincronizando el contenido desde el backend.
+          </p>
+        </div>
+      )
+    }
+
     return (
       <div className="mx-auto max-w-md pt-16 text-center">
         <PageTitle>Ruta no encontrada</PageTitle>

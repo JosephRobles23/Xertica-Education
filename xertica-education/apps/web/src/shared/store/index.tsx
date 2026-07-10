@@ -199,7 +199,9 @@ interface AppStore {
 
   /* Routes */
   routes: readonly LearningRoute[]
+  routesLoaded: boolean
   fetchRoutes: () => Promise<void>
+  fetchRouteById: (id: string) => Promise<LearningRoute | null>
   updateRoute: (id: string, data: Partial<LearningRoute>) => Promise<void>
   replaceRouteSources: (id: string, sources: readonly Source[]) => void
   activeRouteId: string | null
@@ -272,6 +274,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [generated, setGenerated] = useState<Record<string, boolean>>({})
 
   const [routes, setRoutes] = useState<readonly LearningRoute[]>(ROUTES)
+  const [routesLoaded, setRoutesLoaded] = useState(false)
   const [activeRouteId, setActiveRouteId] = useState<string | null>(
     () => readJSON<string | null>(ACTIVE_ROUTE_ID_KEY, null),
   )
@@ -282,6 +285,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setRoutes(hydrateRoutes(data))
     } catch (e) {
       console.error('Failed to fetch routes', e)
+    } finally {
+      setRoutesLoaded(true)
+    }
+  }, [])
+
+  const fetchRouteById = useCallback(async (id: string) => {
+    try {
+      const data = await api.request<ApiLearningRoute>(`/learning-paths/${id}`)
+      const hydrated = hydrateRoute(data)
+      setRoutes((prev) => {
+        const existingIndex = prev.findIndex((route) => route.id === id)
+        if (existingIndex < 0) return [...prev, hydrated]
+        return prev.map((route, index) => (index === existingIndex ? hydrated : route))
+      })
+      return hydrated
+    } catch (e) {
+      console.error(`Failed to fetch route ${id}`, e)
+      return null
     }
   }, [])
 
@@ -539,7 +560,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard, storyboardVideoUrlOf, setStoryboardVideoUrl, storyboardJobIdOf, setStoryboardJobId, clearStoryboardJobId,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute, replaceRouteSources,
+      routes, routesLoaded, fetchRoutes, fetchRouteById, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     }),
@@ -552,7 +573,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isStoryboardApproved, approveStoryboard, storyboardVideoUrlOf, setStoryboardVideoUrl, storyboardJobIdOf, setStoryboardJobId, clearStoryboardJobId,
       isLabGuideApproved, approveLabGuide,
       isGenerated, markGenerated,
-      routes, fetchRoutes, updateRoute, replaceRouteSources,
+      routes, routesLoaded, fetchRoutes, fetchRouteById, updateRoute, replaceRouteSources,
       activeRouteId, setActiveRouteId,
       activeJobs, trackJob,
     ],
