@@ -15,11 +15,13 @@ export function InfografiaView({
   compact = false,
   className,
   routeId,
+  moduleId,
 }: {
   info: InfografiaContent
   compact?: boolean
   className?: string
   routeId?: string
+  moduleId?: string
 }) {
   const [feedback, setFeedback] = useState('')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>(info?.aspectRatio || 'vertical')
@@ -36,7 +38,10 @@ export function InfografiaView({
       description: `Generando con gpt-image-2 en formato ${ratioToUse}. Esto puede tardar entre 2 y 3 minutos.`,
     })
     try {
-      await api.request(`/learning-paths/${routeId}/infographic/regenerate`, {
+      const url = moduleId
+        ? `/learning-paths/${routeId}/modules/${moduleId}/infographic/regenerate`
+        : `/learning-paths/${routeId}/infographic/regenerate`
+      await api.request(url, {
         method: 'POST',
         body: JSON.stringify({ 
           user_prompt: feedback,
@@ -200,13 +205,19 @@ export function InfografiaView({
     )
   }
 
-  const bulletsToUse = info?.bullets && info.bullets.length > 0 ? info.bullets : [
-    "Syllabus completo de la ruta de aprendizaje.",
-    "Estructura modular y temas clave.",
-    "Detalle de contenidos para cada bloque."
-  ]
+  const bulletsToUse = info?.bullets && info.bullets.length > 0 ? info.bullets : (
+    moduleId ? [
+      "Conceptos clave de este módulo.",
+      "Visualización estructurada del contenido.",
+      "Branding corporativo integrado."
+    ] : [
+      "Syllabus completo de la ruta de aprendizaje.",
+      "Estructura modular y temas clave.",
+      "Detalle de contenidos para cada bloque."
+    ]
+  )
 
-  const titleToUse = info?.title || "Syllabus de la Ruta"
+  const titleToUse = info?.title || (moduleId ? "Infografía del Módulo" : "Syllabus de la Ruta")
   const footerPng = info?.footer?.[0] || "Descargar PNG"
   const footerPdf = info?.footer?.[1] || "Descargar PDF"
 

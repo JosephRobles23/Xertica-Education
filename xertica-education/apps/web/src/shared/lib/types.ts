@@ -34,6 +34,8 @@ export interface LessonSection {
 export interface LessonContent {
   sections: readonly LessonSection[]
   terms: readonly { term: string; def: string }[]
+  pdfUrl?: string
+  txtUrl?: string
 }
 
 export interface VideoSegment {
@@ -114,6 +116,7 @@ export interface RouteModule {
   lesson?: LessonContent
   quiz?: QuizContent
   lab?: LabContent
+  infografia?: InfografiaContent
 }
 
 export interface SourceVideoPreview {

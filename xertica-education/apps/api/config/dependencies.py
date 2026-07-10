@@ -56,7 +56,9 @@ _route_structurer = _build_route_structurer()
 _infographic_service = InfographicService()
 _approved_research_source_repository = _build_approved_research_source_repository()
 from adapters.llm.openrouter import OpenRouterLLMAdapter
+from services.lesson.service import LessonService
 _quiz_service = QuizService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
+_lesson_service = LessonService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
 
 def get_jobs_service() -> JobsService:
     return _jobs_service
@@ -99,3 +101,6 @@ def get_infographic_service() -> InfographicService:
 
 def get_quiz_service() -> QuizService:
     return _quiz_service
+
+def get_lesson_service() -> LessonService:
+    return _lesson_service
