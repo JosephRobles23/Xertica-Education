@@ -1017,7 +1017,7 @@ export default function Ruta() {
         </>
       ) : (
         <>
-          <Wand2 /> Preparar asset final
+          <Wand2 /> Publicar Ruta
         </>
       )}
     </Button>
