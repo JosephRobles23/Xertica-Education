@@ -505,18 +505,12 @@ function SourceApprovalPanel({
       description: `Deep Research está buscando documentación para ${module.name}.`,
     })
     try {
-      const research = await api.request<{ sources: readonly Source[] }>(
-        `/learning-paths/${route.id}/deep-research`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            brief: `${route.objective}\n${module.name}`,
-            moduleId: module.id,
-            replaceSourceUrl: source.url,
-            customerContext: route.customerContext ?? {},
-          }),
-        },
-      )
+      const research = await api.runDeepResearch<{ sources: readonly Source[] }>(route.id, {
+        brief: `${route.objective}\n${module.name}`,
+        moduleId: module.id,
+        replaceSourceUrl: source.url,
+        customerContext: route.customerContext ?? {},
+      })
       replaceRouteSources(route.id, research.sources)
       toast.success('Nuevas fuentes listas', { id: toastId })
     } catch (err) {
@@ -747,15 +741,12 @@ function ContentReviewPanel({
     })
 
     try {
-      const research = await api.request<{
+      const research = await api.runDeepResearch<{
         detected_tools: readonly { tool: string; vendor: string }[]
         sources: readonly Source[]
-      }>(`/learning-paths/${route.id}/deep-research`, {
-        method: 'POST',
-        body: JSON.stringify({
-          brief: `${route.objective}\n${module.name}\n${content.summary}`,
-          customerContext: route.customerContext ?? {},
-        }),
+      }>(route.id, {
+        brief: `${route.objective}\n${module.name}\n${content.summary}`,
+        customerContext: route.customerContext ?? {},
       })
 
       replaceRouteSources(route.id, research.sources)

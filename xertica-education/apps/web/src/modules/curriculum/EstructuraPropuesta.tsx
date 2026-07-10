@@ -279,13 +279,10 @@ export default function EstructuraPropuesta() {
               const brief = activeRouteObj?.objective || ''
               const customerContext = activeRouteObj?.customerContext || {}
 
-              const research = await api.request<any>(
-                `/learning-paths/${activeRouteId}/deep-research`,
-                {
-                  method: 'POST',
-                  body: JSON.stringify({ brief, customerContext }),
-                },
-              )
+              const research = await api.runDeepResearch<any>(activeRouteId, {
+                brief,
+                customerContext,
+              })
               replaceRouteSources(activeRouteId, research.sources)
               setPendingDeepResearch(false)
               const toolNames = research.detected_tools.map((t: any) => t.tool).join(', ')

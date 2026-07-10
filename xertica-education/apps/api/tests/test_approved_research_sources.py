@@ -1,6 +1,7 @@
 import asyncio
 from uuid import uuid4
 
+from adapters.research import GoogleSearchGroundingClient
 from models.domain.approved_research_source import ApprovedResearchSource
 from repositories.approved_research_sources.memory import InMemoryApprovedResearchSourceRepository
 from routers.learning_paths import _prepare_research_sources_for_route
@@ -41,10 +42,10 @@ class _RankingDocs:
 
 
 def test_grounded_documents_are_classified_and_youtube_is_excluded():
-    result = ResearchService(
+    result = asyncio.run(ResearchService(
         youtube_client=_NoYoutube(),
         documentation_client=_GroundedDocs(),
-    ).run({"brief": "Curso de Vertex AI"})
+    ).run({"brief": "Curso de Vertex AI"}))
 
     docs = [source for source in result["sources"] if source["kind"] != "youtube"]
     assert [source["verified"] for source in docs] == [True, False]
@@ -52,10 +53,10 @@ def test_grounded_documents_are_classified_and_youtube_is_excluded():
 
 
 def test_llm_reranking_overrides_positional_scores_and_sorts():
-    result = ResearchService(
+    result = asyncio.run(ResearchService(
         youtube_client=_NoYoutube(),
         documentation_client=_RankingDocs(),
-    ).run({"brief": "Curso de Vertex AI"})
+    ).run({"brief": "Curso de Vertex AI"}))
 
     docs = [source for source in result["sources"] if source["kind"] != "youtube"]
     # The re-ranker scored the community guide highest, so it sorts first.
@@ -65,10 +66,10 @@ def test_llm_reranking_overrides_positional_scores_and_sorts():
 
 def test_reranking_is_noop_without_rank_sources():
     # A grounded client lacking rank_sources must keep positional order untouched.
-    result = ResearchService(
+    result = asyncio.run(ResearchService(
         youtube_client=_NoYoutube(),
         documentation_client=_GroundedDocs(),
-    ).run({"brief": "Curso de Vertex AI"})
+    ).run({"brief": "Curso de Vertex AI"}))
     docs = [source for source in result["sources"] if source["kind"] != "youtube"]
     assert docs[0]["url"] == "https://cloud.google.com/vertex-ai/docs"
 
@@ -121,6 +122,15 @@ def test_research_source_review_policy_auto_approves_discards_and_caps_manual_re
     assert len(manual) == 5
     assert [source["relevanceScore"] for source in manual] == list(range(81, 76, -1))
     assert any(source["kind"] == "youtube" for source in route_sources)
+
+
+def test_resolve_redirects_passes_through_non_proxy_urls_without_network():
+    urls = [
+        "https://cloud.google.com/vertex-ai/docs",
+        "https://example.org/guide",
+    ]
+    resolved = asyncio.run(GoogleSearchGroundingClient.resolve_redirects(urls))
+    assert resolved == {url: url for url in urls}
 
 
 def test_approved_repository_is_idempotent_and_route_scoped():

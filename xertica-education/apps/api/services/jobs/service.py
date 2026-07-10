@@ -24,7 +24,8 @@ class JobsService:
         return await self.repository.get_by_id(job_id)
 
     async def update_job_status(
-        self, job_id: UUID, status: JobStatus, error: Optional[str] = None
+        self, job_id: UUID, status: JobStatus, error: Optional[str] = None,
+        result: Optional[Any] = None,
     ) -> bool:
         """Updates the status of a job directly."""
         updates: Dict[str, Any] = {
@@ -33,5 +34,7 @@ class JobsService:
         }
         if error is not None:
             updates["error"] = error
+        if result is not None:
+            updates["result"] = result
         updated = await self.repository.update(job_id, updates)
         return updated is not None

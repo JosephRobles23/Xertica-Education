@@ -114,6 +114,22 @@ export const api = {
   },
 
   /**
+   * Deep Research corre como background job: POST devuelve job_id, se hace
+   * polling y el resultado (detected_tools + sources) viene en job.result.
+   */
+  async runDeepResearch<T = { detected_tools: any[]; sources: any[] }>(
+    routeId: string,
+    body: Record<string, any>,
+  ): Promise<T> {
+    const { job_id } = await this.request<{ job_id: string }>(
+      `/learning-paths/${routeId}/deep-research`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    const job = await this.pollJob(job_id);
+    return job.result as T;
+  },
+
+  /**
    * Poll a job until it completes or fails
    */
   async pollJob(

@@ -1,5 +1,6 @@
 """Gemini on Vertex AI adapter for documentation discovery with Google Search."""
 
+import asyncio
 import json
 from typing import Any
 from urllib.parse import urlparse
@@ -59,7 +60,6 @@ class GoogleSearchGroundingClient:
             url = getattr(web, "uri", None)
             if not url or url in seen:
                 continue
-            url = self._resolve_grounding_redirect(url)
             seen.add(url)
             search_entry_point = getattr(metadata, "search_entry_point", None)
             results.append({
@@ -73,18 +73,33 @@ class GoogleSearchGroundingClient:
         return results
 
     @staticmethod
-    def _resolve_grounding_redirect(url: str) -> str:
-        if (urlparse(url).hostname or "").lower() != "vertexaisearch.cloud.google.com":
-            return url
-        try:
-            with httpx.Client(timeout=8.0, follow_redirects=True) as client:
-                response = client.head(url)
+    async def resolve_redirects(urls: list[str]) -> dict[str, str]:
+        """Resolve vertexaisearch.cloud.google.com proxy URLs to their real targets.
+
+        Concurrent, best-effort: an unresolvable URL maps to itself. Non-proxy
+        URLs are returned untouched without any network call.
+        """
+        proxied = [
+            url for url in urls
+            if (urlparse(url).hostname or "").lower() == "vertexaisearch.cloud.google.com"
+        ]
+        resolved = {url: url for url in urls}
+        if not proxied:
+            return resolved
+
+        async def _resolve(client: httpx.AsyncClient, url: str) -> None:
+            try:
+                response = await client.head(url)
                 if response.status_code >= 400:
-                    response = client.get(url)
+                    response = await client.get(url)
                 response.raise_for_status()
-                return str(response.url)
-        except Exception:
-            return url
+                resolved[url] = str(response.url)
+            except Exception:
+                pass
+
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            await asyncio.gather(*(_resolve(client, url) for url in proxied))
+        return resolved
 
     def rank_sources(self, sources: list[dict[str, Any]], context: str) -> dict[int, int]:
         """Score each candidate 0-100 on relevance to the route context.

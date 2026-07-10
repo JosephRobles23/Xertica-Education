@@ -297,16 +297,79 @@ async def generate_structure(
     )
     return {"job_id": job_id, "context_docs": len(parsed_docs)}
 
+async def _run_deep_research_job(
+    research_service, route_service, approved_sources_repo, jobs_service,
+    job_id, route_id, route, payload,
+):
+    """Corre el deep research en background y persiste fuentes en la ruta.
+    El resultado (detected_tools + sources) queda en job.result para que el
+    frontend lo lea al completar el polling."""
+    await jobs_service.update_job_status(job_id, JobStatus.RUNNING)
+    try:
+        research = await research_service.run({
+            "route_name": route.get("name", ""),
+            "brief": payload.get("brief", route.get("objective", "")),
+            "modules": route.get("modules", []),
+            "customer_context": payload.get("customerContext") or route.get("customerContext", {}),
+        })
+        reviewed_sources, automatic_source_candidates = _prepare_research_sources_for_route(
+            research["sources"]
+        )
+
+        replace_url = payload.get("replaceSourceUrl") or payload.get("replace_source_url")
+        if replace_url:
+            merged_by_url = {
+                source.get("url"): source
+                for source in [
+                    *[
+                        source
+                        for source in route.get("sources", [])
+                        if source.get("url") != replace_url
+                    ],
+                    *reviewed_sources,
+                ]
+                if source.get("url")
+            }
+            route_sources = list(merged_by_url.values())
+        else:
+            route_sources = reviewed_sources
+
+        await route_service.update_route(route_id, {"sources": route_sources})
+        automatic_sources = [
+            _to_approved_research_source(
+                route_id,
+                source,
+                module_id=None,
+                approval_source="automatic",
+            )
+            for source in automatic_source_candidates
+        ]
+        approved = await approved_sources_repo.upsert(automatic_sources)
+
+        await jobs_service.update_job_status(job_id, JobStatus.COMPLETED, result={
+            "detected_tools": research["detected_tools"],
+            "sources": route_sources,
+            "approved_research_sources": [source.model_dump(mode="json") for source in approved],
+        })
+    except Exception as exc:
+        logger.exception("Deep research job %s failed for route %s", job_id, route_id)
+        await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=str(exc))
+
+
 @router.post("/{route_id}/deep-research", response_model=Dict[str, Any])
 async def run_deep_research(
     route_id: str,
     payload: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     route_service: RouteService = Depends(get_route_service),
     research_service: ResearchService = Depends(get_research_service),
+    jobs_service: JobsService = Depends(get_jobs_service),
     approved_sources_repo=Depends(get_approved_research_source_repository),
 ):
     """
-    Runs a tool-aware deep research pass for a learning path.
+    Kicks off a tool-aware deep research pass for a learning path as a background
+    job and returns its `job_id`; the frontend polls `/jobs/{job_id}` and reads
+    `detected_tools` + `sources` from `job.result` when it completes.
 
     Uses YouTube Data API v3 when YOUTUBE_API_KEY is configured and falls back to
     the deterministic registry otherwise. It detects tools from the brief/modules,
@@ -317,52 +380,12 @@ async def run_deep_research(
     if not route:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
-    research = research_service.run({
-        "route_name": route.get("name", ""),
-        "brief": payload.get("brief", route.get("objective", "")),
-        "modules": route.get("modules", []),
-        "customer_context": payload.get("customerContext") or route.get("customerContext", {}),
-    })
-    reviewed_sources, automatic_source_candidates = _prepare_research_sources_for_route(
-        research["sources"]
+    job_id = await jobs_service.create_job("deep_research")
+    background_tasks.add_task(
+        _run_deep_research_job, research_service, route_service,
+        approved_sources_repo, jobs_service, job_id, route_id, route, payload,
     )
-
-    replace_url = payload.get("replaceSourceUrl") or payload.get("replace_source_url")
-    if replace_url:
-        merged_by_url = {
-            source.get("url"): source
-            for source in [
-                *[
-                    source
-                    for source in route.get("sources", [])
-                    if source.get("url") != replace_url
-                ],
-                *reviewed_sources,
-            ]
-            if source.get("url")
-        }
-        route_sources = list(merged_by_url.values())
-    else:
-        route_sources = reviewed_sources
-
-    updated = await route_service.update_route(route_id, {"sources": route_sources})
-    automatic_sources = [
-        _to_approved_research_source(
-            route_id,
-            source,
-            module_id=None,
-            approval_source="automatic",
-        )
-        for source in automatic_source_candidates
-    ]
-    approved = await approved_sources_repo.upsert(automatic_sources)
-
-    return {
-        "detected_tools": research["detected_tools"],
-        "sources": route_sources,
-        "route": updated,
-        "approved_research_sources": [source.model_dump(mode="json") for source in approved],
-    }
+    return {"job_id": str(job_id)}
 
 
 @router.get("/{route_id}/approved-research-sources", response_model=Dict[str, Any])

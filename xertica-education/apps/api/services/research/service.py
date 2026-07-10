@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -236,20 +237,35 @@ class ResearchService:
                 names.append(name)
         return names
 
+    async def _search_youtube(self, query: str) -> List[Dict[str, Any]]:
+        """Run a blocking YouTube search off the event loop. Best-effort: [] on failure."""
+        if not self.youtube_client.enabled:
+            return []
+        try:
+            return await asyncio.to_thread(self.youtube_client.search, query)
+        except Exception as exc:
+            print(f"YouTube search failed for {query!r}: {exc}")
+            return []
+
+    async def _search_grounded(self, technology: str, context: str) -> List[Dict[str, Any]]:
+        """Run a blocking grounded search off the event loop. Best-effort: [] on failure."""
+        try:
+            return await asyncio.to_thread(self.documentation_client.search, technology, context)
+        except Exception as exc:
+            print(f"Grounded documentation search failed for {technology}: {exc}")
+            return []
+
+    @staticmethod
+    def _technology_youtube_query(technology: str, customer_context: Dict[str, Any]) -> str:
+        audience = customer_context.get("audienceLevel") or ""
+        return f"{technology} tutorial official {audience}".strip()
+
     def _youtube_sources_for_technology(
         self,
         technology: str,
-        customer_context: Dict[str, Any],
+        videos: List[Dict[str, Any]],
         used_video_ids: set[str],
     ) -> list[dict]:
-        if not self.youtube_client.enabled:
-            return []
-        audience = customer_context.get("audienceLevel") or ""
-        try:
-            videos = self.youtube_client.search(f"{technology} tutorial official {audience}".strip())
-        except Exception as exc:
-            print(f"YouTube search failed for {technology}: {exc}")
-            return []
         trusted_channels = {
             channel.lower()
             for tool in TOOL_REGISTRY
@@ -297,17 +313,12 @@ class ResearchService:
             for domain in APPROVED_DOCUMENTATION_DOMAINS
         )
 
-    def _grounded_documentation_sources(self, technologies: list[str], context: str) -> list[dict]:
-        if not self.documentation_client or not self.documentation_client.enabled:
-            return []
+    def _grounded_documentation_sources(
+        self, results_by_technology: Dict[str, List[Dict[str, Any]]]
+    ) -> list[dict]:
         sources = []
         seen_urls: set[str] = set()
-        for technology in technologies:
-            try:
-                results = self.documentation_client.search(technology, context)
-            except Exception as exc:
-                print(f"Grounded documentation search failed for {technology}: {exc}")
-                continue
+        for technology, results in results_by_technology.items():
             for index, result in enumerate(results):
                 url = result.get("url", "")
                 hostname = (urlparse(url).hostname or "").lower()
@@ -356,19 +367,10 @@ class ResearchService:
     def _youtube_sources_for_tool(
         self,
         tool: Dict[str, Any],
-        customer_context: Dict[str, Any],
+        videos: List[Dict[str, Any]],
         *,
         used_video_ids: set[str],
     ) -> List[Dict[str, Any]]:
-        if not self.youtube_client.enabled:
-            return []
-
-        try:
-            videos = self.youtube_client.search(self._youtube_query(tool, customer_context))
-        except Exception as exc:
-            print(f"YouTube search failed for {tool['tool']}: {exc}")
-            return []
-
         sources = []
         for index, video in enumerate(videos):
             youtube_id = video["youtube_id"]
@@ -459,7 +461,7 @@ class ResearchService:
             },
         }
 
-    def _apply_reranking(self, sources: List[Dict[str, Any]], context: str) -> List[Dict[str, Any]]:
+    async def _apply_reranking(self, sources: List[Dict[str, Any]], context: str) -> List[Dict[str, Any]]:
         """Replace positional relevanceScore with LLM-judged scores and sort desc.
 
         No-op (keeps positional scores and order) when the documentation client
@@ -471,7 +473,7 @@ class ResearchService:
         if not hasattr(client, "rank_sources"):
             return sources
         try:
-            scores = client.rank_sources(sources, context)
+            scores = await asyncio.to_thread(client.rank_sources, sources, context)
         except Exception as exc:
             print(f"Source re-ranking failed: {exc}")
             return sources
@@ -482,7 +484,56 @@ class ResearchService:
                 source["relevanceScore"] = scores[index]
         return sorted(sources, key=lambda source: source.get("relevanceScore", 0), reverse=True)
 
-    def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _fetch_research_inputs(
+        self,
+        technologies: list[str],
+        tools: List[Dict[str, Any]],
+        text: str,
+        customer_context: Dict[str, Any],
+    ) -> tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
+        """Run every external search (grounding + YouTube) concurrently.
+
+        Returns ({technology: grounded results}, {tool/technology name: videos}).
+        """
+        grounding_enabled = bool(
+            self.documentation_client and self.documentation_client.enabled
+        )
+        grounding_techs = technologies if grounding_enabled else []
+
+        registered_names = {tool["tool"] for tool in tools}
+        video_queries: dict[str, str] = {
+            tool["tool"]: self._youtube_query(tool, customer_context) for tool in tools
+        }
+        for technology in technologies:
+            if technology not in registered_names:
+                video_queries[technology] = self._technology_youtube_query(
+                    technology, customer_context
+                )
+
+        video_names = list(video_queries)
+        results = await asyncio.gather(
+            *(self._search_grounded(technology, text) for technology in grounding_techs),
+            *(self._search_youtube(video_queries[name]) for name in video_names),
+        )
+        grounded_by_technology = dict(zip(grounding_techs, results[: len(grounding_techs)]))
+        videos_by_name = dict(zip(video_names, results[len(grounding_techs):]))
+
+        if grounding_techs and hasattr(self.documentation_client, "resolve_redirects"):
+            urls = [
+                result["url"]
+                for grounded in grounded_by_technology.values()
+                for result in grounded
+                if result.get("url")
+            ]
+            resolved = await self.documentation_client.resolve_redirects(urls)
+            for grounded in grounded_by_technology.values():
+                for result in grounded:
+                    if result.get("url"):
+                        result["url"] = resolved.get(result["url"], result["url"])
+
+        return grounded_by_technology, videos_by_name
+
+    async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         brief = payload.get("brief", "")
         modules = payload.get("modules", [])
         route_name = payload.get("route_name", "")
@@ -490,7 +541,7 @@ class ResearchService:
         context_text = " ".join(str(value) for value in customer_context.values())
         text = " ".join([route_name, brief, context_text, " ".join(str(module) for module in modules)])
         tools = self.detect_tools(text)
-        technologies = self.detect_technologies(text, tools)
+        technologies = await asyncio.to_thread(self.detect_technologies, text, tools)
         if not technologies:
             tools = [TOOL_REGISTRY[2]]
             technologies = ["Gemini"]
@@ -503,7 +554,10 @@ class ResearchService:
             else ""
         )
 
-        grounded_sources = self._grounded_documentation_sources(technologies, text)
+        grounded_by_technology, videos_by_name = await self._fetch_research_inputs(
+            technologies, tools, text, customer_context
+        )
+        grounded_sources = self._grounded_documentation_sources(grounded_by_technology)
         sources = []
         used_video_ids: set[str] = set()
         for index, tool in enumerate(tools):
@@ -513,7 +567,7 @@ class ResearchService:
             vendor = tool["vendor"]
             youtube_sources = self._youtube_sources_for_tool(
                 tool,
-                customer_context,
+                videos_by_name.get(tool_name, []),
                 used_video_ids=used_video_ids,
             )
             if not youtube_sources:
@@ -592,12 +646,12 @@ class ResearchService:
                 sources.extend(
                     self._youtube_sources_for_technology(
                         technology,
-                        customer_context,
+                        videos_by_name.get(technology, []),
                         used_video_ids,
                     )
                 )
         sources.extend(grounded_sources)
-        sources = self._apply_reranking(sources, text)
+        sources = await self._apply_reranking(sources, text)
         return {
             "detected_tools": [
                 {
