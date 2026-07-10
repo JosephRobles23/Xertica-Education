@@ -35,10 +35,13 @@ class _FakeJobs:
     def __init__(self):
         self.status = None
         self.error = None
+        self.result = None
 
-    async def update_job_status(self, job_id, status, error=None):
+    async def update_job_status(self, job_id, status, error=None, result=None):
         self.status = status
         self.error = error
+        if result is not None:
+            self.result = result
 
 
 def test_ingest_sources_creates_chunks_from_verified():
@@ -71,7 +74,21 @@ def test_background_job_marks_completed_and_populates_kb():
     jobs = _FakeJobs()
     asyncio.run(_run_kb_ingestion_job(coord, jobs, uuid4(), lp, verified))
     assert jobs.status == JobStatus.COMPLETED
+    # El IngestReport queda en job.result para observabilidad de la ingesta.
+    assert jobs.result["chunks_created"] >= 2
+    assert jobs.result["corpus_size"] == 2
     assert asyncio.run(kb.query(lp, "Gemini", k=3))
+
+
+def test_background_job_with_empty_corpus_marks_failed_with_report():
+    # Un Gate 1 sin fuentes Vía-2 era un no-op silencioso; ahora queda visible.
+    kb, coord, repo = _setup()
+    jobs = _FakeJobs()
+    asyncio.run(_run_kb_ingestion_job(coord, jobs, uuid4(), uuid4(), []))
+    assert jobs.status == JobStatus.FAILED
+    assert "origin='upload'" in jobs.error
+    assert jobs.result["chunks_created"] == 0
+    assert jobs.result["corpus_size"] == 0
 
 
 def test_background_job_swallows_failure_and_marks_failed():

@@ -190,11 +190,28 @@ async def _run_structure_job(
 async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, sources):
     """Corre la ingesta RAG en background sobre las fuentes verificadas ya persistidas.
     Best-effort: si falla (infra no lista), marca el job y NO propaga — Gate 1 no se
-    bloquea (regla de oro · CONTEXT §5)."""
+    bloquea (regla de oro · CONTEXT §5). El IngestReport queda en job.result; una
+    corrida que no produce chunks se marca failed para que el no-op sea visible."""
     await jobs_service.update_job_status(job_id, JobStatus.RUNNING)
     try:
-        await coordinator.ingest_sources(learning_path_id, sources)
-        await jobs_service.update_job_status(job_id, JobStatus.COMPLETED)
+        report = await coordinator.ingest_sources(learning_path_id, sources)
+        result = {**report.model_dump(mode="json"), "corpus_size": len(sources)}
+        if report.chunks_created == 0:
+            error = (
+                "Corpus Vía-2 vacío: ninguna fuente con origin='upload' para esta ruta (ADR-0011); "
+                "no había nada que ingestar."
+                if not sources
+                else "La ingesta no produjo chunks: los documentos del corpus llegaron sin contenido "
+                "(sin parsed_md ni binario parseable)."
+            )
+            logger.warning("KB ingestion job %s for path %s: %s", job_id, learning_path_id, error)
+            await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=error, result=result)
+            return
+        logger.info(
+            "KB ingestion job %s for path %s: %d chunks from %d sources",
+            job_id, learning_path_id, report.chunks_created, report.sources_processed,
+        )
+        await jobs_service.update_job_status(job_id, JobStatus.COMPLETED, result=result)
     except Exception as exc:
         logger.exception("KB ingestion job %s failed for path %s", job_id, learning_path_id)
         await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=str(exc))
