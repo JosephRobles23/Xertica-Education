@@ -1310,7 +1310,7 @@ export default function Ruta() {
   )
 
   return (
-    <div className="mx-auto grid max-w-[1120px] items-start gap-9 lg:grid-cols-[1fr_300px]">
+    <div className="mx-auto w-full max-w-[1400px]">
       <div>
         <Eyebrow>
           Ruta {routeOrderNo} · {route.name}

@@ -1,11 +1,12 @@
 'use client'
 
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { getRoute } from '@/shared/data/routes'
+import { Button } from '@/shared/ui/button'
 
 interface Crumb {
   label: string
@@ -21,7 +22,6 @@ function crumbsFor(pathname: string): Crumb[] {
   if (pathname === '/nueva-ruta') return [rutas, { label: 'Nueva ruta', accent: 'ink' }]
   if (pathname === '/estructura-propuesta')
     return [rutas, { label: 'Nueva ruta', to: '/nueva-ruta' }, { label: 'Estructura propuesta', accent: 'ink' }]
-  if (pathname === '/biblioteca') return [{ label: 'Biblioteca', accent: 'ink' }]
 
   if (seg[0] === 'ruta' && seg[1]) {
     const id = seg[1]
@@ -39,17 +39,28 @@ function crumbsFor(pathname: string): Crumb[] {
 
 const NAV = [
   { label: 'Rutas', to: '/', enabled: true },
-  { label: 'Biblioteca', to: '/biblioteca', enabled: true },
 ] as const
+
+const SIDEBAR_STORAGE_KEY = 'xertica-education.sidebar-open'
 
 export default function Layout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const crumbs = crumbsFor(pathname)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (saved !== null) setSidebarOpen(saved === '1')
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? '1' : '0')
+  }, [sidebarOpen])
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* TOPBAR */}
-      <header className="sticky top-0 z-20 flex h-[62px] flex-none items-center gap-5 border-b-[1.5px] bg-card px-6">
+      <header className="sticky top-0 z-20 flex h-[62px] flex-none items-center gap-4 border-b-[1.5px] bg-card px-6">
         <Link href="/" className="flex items-center gap-2.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 rounded-lg">
           <span className="flex size-[30px] items-center justify-center rounded-lg bg-gradient-to-br from-primary to-fuchsia-500 font-display text-[17px] font-bold text-white shadow-[0_3px_10px_rgba(124,58,237,.35)]">
             X
@@ -59,7 +70,20 @@ export default function Layout({ children }: { children: ReactNode }) {
           </span>
         </Link>
 
-        <nav aria-label="breadcrumb" className="ml-2 flex items-center gap-2 font-mono text-[11.5px]">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-full px-3.5"
+          aria-expanded={sidebarOpen}
+          aria-controls="study-sidebar"
+          onClick={() => setSidebarOpen((open) => !open)}
+        >
+          {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+          {sidebarOpen ? 'Ocultar panel' : 'Abrir panel'}
+        </Button>
+
+        <nav aria-label="breadcrumb" className="ml-1 flex min-w-0 items-center gap-2 overflow-hidden font-mono text-[11.5px]">
           {crumbs.map((c, i) => (
             <Fragment key={`${c.label}-${i}`}>
               {i > 0 && <ChevronRight className="size-3 text-input" />}
@@ -86,16 +110,20 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex min-h-0 flex-1">
         {/* SIDEBAR */}
-        <nav className="flex w-[214px] flex-none flex-col gap-1 bg-sidebar px-3.5 py-5.5">
+        <nav
+          id="study-sidebar"
+          aria-hidden={!sidebarOpen}
+          className={cn(
+            'flex flex-none flex-col gap-1 overflow-hidden bg-sidebar py-5.5 transition-[width,opacity,padding] duration-300 ease-out',
+            sidebarOpen ? 'w-[214px] px-3.5 opacity-100' : 'pointer-events-none w-0 px-0 opacity-0',
+          )}
+        >
           <div className="px-2.5 pt-1.5 pb-3 font-mono text-[10px] uppercase tracking-[0.12em] text-sidebar-muted">
             Estudio
           </div>
           {NAV.map((n) => {
             const isRutas = n.label === 'Rutas'
-            const isBiblioteca = n.label === 'Biblioteca'
-            const active =
-              (isRutas && (pathname === '/' || pathname.startsWith('/nueva') || pathname.startsWith('/estructura') || pathname.startsWith('/ruta'))) ||
-              (isBiblioteca && pathname === '/biblioteca')
+            const active = isRutas && (pathname === '/' || pathname.startsWith('/nueva') || pathname.startsWith('/estructura') || pathname.startsWith('/ruta'))
             return (
               <Link
                 key={n.label}
