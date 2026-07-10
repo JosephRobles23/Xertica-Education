@@ -18,6 +18,7 @@ import type {
 } from '@/shared/lib/types'
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
+import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
 
 /** Clave estable para el estado de un contenido concreto. */
 const contentKey = (routeId: string, moduleId: string, kind: ContentKind) =>
@@ -61,7 +62,8 @@ const hydrateRoutes = (apiRoutes: readonly ApiLearningRoute[]): readonly Learnin
 
 export interface UploadedStructure {
   name: string
-  kind: 'archivo' | 'texto'
+  kind: 'drive' | 'texto'
+  driveFile?: GoogleDriveSelection
 }
 
 export const mapRouteModulesToProposal = (modules: readonly RouteModule[]): ProposalModule[] => {

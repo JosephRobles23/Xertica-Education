@@ -13,6 +13,14 @@ export interface JobState {
   error?: string | null;
 }
 
+export interface GoogleDriveFileMetadata {
+  file_id: string;
+  name: string;
+  mime_type: string;
+  web_view_link?: string;
+  access_token: string;
+}
+
 export const api = {
   /**
    * Generic request helper
@@ -59,6 +67,34 @@ export const api = {
     return res.json();
   },
 
+  async uploadDriveDocument(
+    routeId: string,
+    file: GoogleDriveFileMetadata,
+    useAsSource: boolean = true
+  ): Promise<{ document_id: string; filename: string; use_as_source: boolean; parsed: boolean; source_id: string | null }> {
+    return this.request(`/learning-paths/${routeId}/drive-documents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...file,
+        use_as_source: useAsSource,
+      }),
+    });
+  },
+
+  async saveRouteToGoogleDrive(
+    routeId: string,
+    accessToken: string,
+    filename?: string
+  ): Promise<{ file_id: string; name: string; mime_type: string; web_view_link?: string }> {
+    return this.request(`/learning-paths/${routeId}/export/google-drive`, {
+      method: 'POST',
+      body: JSON.stringify({
+        access_token: accessToken,
+        filename,
+      }),
+    });
+  },
+
   /**
    * Create a background task orchestration job
    */
@@ -83,7 +119,7 @@ export const api = {
   async pollJob(
     jobId: string,
     onProgress?: (job: JobState) => void,
-    intervalMs = 1000
+    intervalMs = 1500
   ): Promise<JobState> {
     return new Promise((resolve, reject) => {
       const runPoll = async () => {
