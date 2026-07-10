@@ -24,6 +24,7 @@ export default function AssetFinal() {
   const router = useRouter()
   const { routes, storyboardVideoUrlOf } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
+  const labModule = route?.modules.find((module) => module.lab?.instructions?.length || module.lab?.steps?.length)
   const [savingDrive, setSavingDrive] = useState(false)
   const [driveLink, setDriveLink] = useState<string | null>(null)
   const [backendVideoUrl, setBackendVideoUrl] = useState('')
@@ -133,7 +134,7 @@ export default function AssetFinal() {
             <QuizView quiz={route.pack.quiz} />
           </TabsContent>
           <TabsContent value="lab">
-            <LabView lab={route.pack.lab} />
+            <LabView lab={labModule?.lab || route.pack.lab} />
           </TabsContent>
         </Tabs>
 

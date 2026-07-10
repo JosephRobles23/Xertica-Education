@@ -1,4 +1,689 @@
+import io
+import json
+import os
+import re
+from typing import Any, Dict, List
+from uuid import UUID
+
+from adapters.llm.base import BaseLLMAdapter
+from services.kb.interface import KnowledgeBaseInterface
+from services.research.service import TECHNOLOGY_ALIASES, TOOL_REGISTRY
+
 from .interface import LabServiceInterface
 
+MAX_TOOLS = 2
+MAX_PREREQUISITES = 2
+MAX_INSTRUCTIONS = 5
+MAX_SUCCESS_CRITERIA = 3
+MAX_REFLECTION_QUESTIONS = 2
+MAX_SOURCE_REFERENCES = 2
+MAX_SAFETY_NOTES = 1
+
+SYSTEM_PROMPT = """Eres un experto en diseño instruccional aplicado, enablement técnico y diseño de laboratorios prácticos corporativos.
+Genera un laboratorio práctico REALISTA, contextualizado y accionable. No devuelvas actividades genéricas.
+
+Estilo esperado:
+- El campo principal es classroomText: una tarea completa, lista para copiar y pegar en Google Classroom.
+- Debe sentirse como una actividad dinámica para estudiantes, no como documentación técnica larga ni una ficha de UI.
+- Mantén una introducción breve, un desafío claro, 4 o 5 pasos máximo, entregable y 1 o 2 tips.
+- Si aplica, incluye un "Prompt maestro" breve dentro del texto.
+- Usa tono directo y motivador. Evita listas largas y explicaciones enciclopédicas.
+
+Reglas obligatorias:
+1. El laboratorio debe estar conectado al objetivo del módulo, al contexto de la empresa y a las herramientas o conceptos realmente presentes en la ruta.
+2. Si el módulo enseña una herramienta concreta (por ejemplo Gemini, Canva, BigQuery), la actividad debe pedir usar esa herramienta o tomar decisiones reales sobre su aplicación.
+3. Si aparecen varias herramientas, combínalas solo si tiene sentido pedagógico.
+4. Si el módulo es más conceptual, diseña una simulación, caso guiado, ejercicio de decisión o walkthrough práctico. Nunca dejes el laboratorio en puro texto teórico.
+5. Usa únicamente el contexto provisto. No cites fuentes rechazadas. Las fuentes aprobadas y el grounding de KB tienen prioridad alta.
+6. El resultado debe ser específico, claro y evaluable.
+7. Limites de longitud:
+   - title: máximo 12 palabras.
+   - objective: 1 frase.
+   - scenario: máximo 90 palabras.
+   - tools: máximo 2.
+   - prerequisites: máximo 2.
+   - instructions: exactamente 4 o 5 pasos, salvo que el módulo sea muy corto.
+   - cada instruction.description: máximo 80 palabras.
+   - deliverable.successCriteria: máximo 3.
+   - reflectionQuestions: máximo 2.
+   - sourceReferences: máximo 2.
+   - safetyNotes: máximo 1.
+   - classroomText: 350 a 650 palabras máximo.
+8. Responde únicamente con JSON válido con este esquema:
+{
+  "title": "string",
+  "classroomText": "string listo para pegar en Google Classroom",
+  "objective": "string",
+  "scenario": "string",
+  "estimatedTimeMinutes": 30,
+  "difficulty": "beginner|intermediate|advanced",
+  "tools": [
+    { "name": "string", "purpose": "string", "url": "optional string" }
+  ],
+  "prerequisites": ["string"],
+  "instructions": [
+    {
+      "step": 1,
+      "title": "string",
+      "description": "string",
+      "expectedResult": "optional string",
+      "tip": "optional string"
+    }
+  ],
+  "deliverable": {
+    "description": "string",
+    "format": "string",
+    "successCriteria": ["string"]
+  },
+  "reflectionQuestions": ["string"],
+  "sourceReferences": [
+    { "sourceId": "optional string", "title": "string", "url": "optional string" }
+  ],
+  "safetyNotes": ["string"]
+}
+"""
+
+
 class LabService(LabServiceInterface):
-    pass
+    def __init__(self, llm_adapter: BaseLLMAdapter, kb: KnowledgeBaseInterface):
+        self.llm_adapter = llm_adapter
+        self.kb = kb
+
+    async def generate_lab(
+        self,
+        route_id: UUID,
+        module_id: str,
+        route_name: str,
+        route_objective: str,
+        module_name: str,
+        module_description: str,
+        module_objective: str,
+        company_name: str,
+        customer_context: Dict[str, Any],
+        approved_sources: List[Dict[str, Any]],
+        user_prompt: str | None = None,
+    ) -> Dict[str, Any]:
+        kb_hits = []
+        grounded_text = ""
+        try:
+            kb_hits = await self.kb.query(
+                learning_path_id=route_id,
+                text="\n".join(
+                    filter(
+                        None,
+                        [route_name, route_objective, module_name, module_description, module_objective],
+                    )
+                ),
+                k=8,
+            )
+            grounded_text = "\n\n".join(
+                f"- {hit.content}" for hit in kb_hits if getattr(hit, "content", None)
+            )
+        except Exception as e:
+            print(f"Warning: RAG query failed during lab generation: {e}")
+
+        detected_tools = self._detect_tools(
+            "\n".join(
+                filter(
+                    None,
+                    [
+                        route_name,
+                        route_objective,
+                        module_name,
+                        module_description,
+                        module_objective,
+                        grounded_text,
+                        json.dumps(approved_sources, ensure_ascii=False),
+                    ],
+                )
+            )
+        )
+
+        prompt = self._build_prompt(
+            route_name=route_name,
+            route_objective=route_objective,
+            module_name=module_name,
+            module_description=module_description,
+            module_objective=module_objective,
+            company_name=company_name,
+            customer_context=customer_context,
+            approved_sources=approved_sources,
+            grounded_text=grounded_text,
+            detected_tools=detected_tools,
+            user_prompt=user_prompt,
+        )
+
+        raw_response = await self.llm_adapter.chat_completion(
+            role="lab_generator",
+            prompt=f"{SYSTEM_PROMPT}\n\n{prompt}",
+        )
+
+        parsed = self._extract_and_parse_json(raw_response)
+        normalized = self._normalize_lab(
+            parsed,
+            module_name=module_name,
+            module_description=module_description,
+            module_objective=module_objective,
+            approved_sources=approved_sources,
+            detected_tools=detected_tools,
+        )
+
+        txt_content = normalized.get("classroomText") or self._build_classroom_text(normalized)
+        normalized["classroomText"] = txt_content
+        pdf_bytes = self._generate_pdf_bytes(txt_content)
+
+        local_dir = os.path.join(os.getcwd(), "static", "labs")
+        os.makedirs(local_dir, exist_ok=True)
+        filename_prefix = f"{route_id}_{module_id}_lab"
+        local_txt_path = os.path.join(local_dir, f"{filename_prefix}.txt")
+        local_json_path = os.path.join(local_dir, f"{filename_prefix}.json")
+        local_pdf_path = os.path.join(local_dir, f"{filename_prefix}.pdf")
+
+        with open(local_txt_path, "w", encoding="utf-8") as f:
+            f.write(txt_content)
+        with open(local_pdf_path, "wb") as f:
+            f.write(pdf_bytes)
+        with open(local_json_path, "w", encoding="utf-8") as f:
+            json.dump(normalized, f, ensure_ascii=False, indent=2)
+
+        normalized["txtUrl"] = f"http://localhost:8000/static/labs/{filename_prefix}.txt"
+        normalized["pdfUrl"] = f"http://localhost:8000/static/labs/{filename_prefix}.pdf"
+        normalized["jsonUrl"] = f"http://localhost:8000/static/labs/{filename_prefix}.json"
+        normalized["provenance"] = {
+            "approved_sources": approved_sources,
+            "grounding_hits": [
+                {
+                    "title": getattr(hit.citation, "title", None),
+                    "url": getattr(hit.citation, "url", None),
+                    "score": getattr(hit.citation, "score", None),
+                }
+                for hit in kb_hits
+            ],
+            "detected_tools": detected_tools,
+        }
+        return normalized
+
+    def _build_prompt(
+        self,
+        *,
+        route_name: str,
+        route_objective: str,
+        module_name: str,
+        module_description: str,
+        module_objective: str,
+        company_name: str,
+        customer_context: Dict[str, Any],
+        approved_sources: List[Dict[str, Any]],
+        grounded_text: str,
+        detected_tools: List[Dict[str, Any]],
+        user_prompt: str | None,
+    ) -> str:
+        sources_json = json.dumps(approved_sources[:5], ensure_ascii=False, indent=2)
+        tools_json = json.dumps(detected_tools[:MAX_TOOLS], ensure_ascii=False, indent=2)
+        customer_json = json.dumps(customer_context or {}, ensure_ascii=False, indent=2)
+
+        parts = [
+            f"RUTA: {route_name}",
+            f"OBJETIVO DE LA RUTA: {route_objective}",
+            f"MÓDULO: {module_name}",
+            f"DESCRIPCIÓN DEL MÓDULO: {module_description}",
+            f"OBJETIVO DE APRENDIZAJE DEL MÓDULO: {module_objective}",
+            f"EMPRESA / CUSTOMER CONTEXT PRINCIPAL: {company_name}",
+            f"CUSTOMER CONTEXT JSON:\n{customer_json}",
+            f"HERRAMIENTAS / TECNOLOGÍAS DETECTADAS:\n{tools_json}",
+            f"FUENTES APROBADAS Y VERIFICADAS DISPONIBLES:\n{sources_json}",
+        ]
+        if grounded_text:
+            parts.append(f"CONTENIDO RELEVANTE DE KNOWLEDGE BASE / RAG:\n{grounded_text}")
+        else:
+            parts.append("CONTENIDO RELEVANTE DE KNOWLEDGE BASE / RAG: no disponible.")
+        parts.append(
+            "Diseña un laboratorio práctico compacto que ayude al alumno a aplicar lo enseñado en este módulo. "
+            "Usa el largo y ritmo de una tarea de Classroom: intro breve, pasos accionables, un entregable claro "
+            "y tips puntuales. El campo classroomText debe ser el material principal para Google Classroom: una sola "
+            "pieza de texto, con ritmo de laboratorio, lista para copiar y pegar. Debe sentirse propio de este cliente "
+            "y de estas herramientas, no una plantilla genérica."
+        )
+        if user_prompt:
+            parts.append(f"INSTRUCCIÓN ADICIONAL DE REFINAMIENTO (Prioridad alta): {user_prompt}")
+        return "\n\n".join(parts)
+
+    def _detect_tools(self, text: str) -> List[Dict[str, Any]]:
+        haystack = (text or "").lower()
+        detected: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for tool in TOOL_REGISTRY:
+            if any(alias in haystack for alias in tool["aliases"]):
+                detected.append(
+                    {
+                        "name": tool["tool"],
+                        "vendor": tool["vendor"],
+                        "url": tool.get("official_doc") or tool.get("official_article"),
+                    }
+                )
+                seen.add(tool["tool"].lower())
+
+        for name, aliases in TECHNOLOGY_ALIASES.items():
+            if name.lower() in seen:
+                continue
+            if any(alias in haystack for alias in aliases):
+                detected.append({"name": name, "vendor": "General", "url": None})
+                seen.add(name.lower())
+
+        return detected
+
+    def _extract_and_parse_json(self, text: str) -> Dict[str, Any]:
+        if not text:
+            return {}
+        try:
+            fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+            candidate = fenced.group(1) if fenced else None
+            if candidate is None:
+                start, end = text.find("{"), text.rfind("}")
+                if start != -1 and end > start:
+                    candidate = text[start : end + 1]
+            if candidate:
+                return json.loads(candidate)
+        except Exception as e:
+            print(f"Error parsing JSON from lab generator: {e}")
+        return {}
+
+    def _normalize_lab(
+        self,
+        raw: Dict[str, Any],
+        *,
+        module_name: str,
+        module_description: str,
+        module_objective: str,
+        approved_sources: List[Dict[str, Any]],
+        detected_tools: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        instructions_raw = raw.get("instructions")
+        if not isinstance(instructions_raw, list) or len(instructions_raw) == 0:
+            return self._fallback_lab(
+                module_name=module_name,
+                module_description=module_description,
+                module_objective=module_objective,
+                approved_sources=approved_sources,
+                detected_tools=detected_tools,
+            )
+
+        difficulty = str(raw.get("difficulty") or "intermediate").lower()
+        if difficulty not in {"beginner", "intermediate", "advanced"}:
+            difficulty = "intermediate"
+
+        normalized_tools = []
+        for item in (raw.get("tools") or [])[:MAX_TOOLS]:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            purpose = str(item.get("purpose") or "").strip()
+            if not name:
+                continue
+            normalized_tools.append(
+                {
+                    "name": name,
+                    "purpose": self._compact_text(purpose or f"Aplicar {name} dentro del laboratorio.", max_words=18),
+                    "url": item.get("url"),
+                }
+            )
+
+        if not normalized_tools and detected_tools:
+            normalized_tools = [
+                {
+                    "name": tool["name"],
+                    "purpose": f"Aplicar {tool['name']} en el contexto práctico del módulo.",
+                    "url": tool.get("url"),
+                }
+                for tool in detected_tools[:MAX_TOOLS]
+            ]
+
+        normalized_instructions = []
+        for index, item in enumerate(instructions_raw[:MAX_INSTRUCTIONS], start=1):
+            if not isinstance(item, dict):
+                continue
+            title = self._compact_text(str(item.get("title") or "").strip() or f"Paso {index}", max_words=9)
+            description = self._compact_text(str(item.get("description") or "").strip(), max_words=80)
+            if not description:
+                continue
+            normalized_instructions.append(
+                {
+                    "step": index,
+                    "title": title,
+                    "description": description,
+                    "expectedResult": self._compact_text(str(item.get("expectedResult") or "").strip(), max_words=18) or None,
+                    "tip": self._compact_text(str(item.get("tip") or "").strip(), max_words=24) or None,
+                }
+            )
+
+        if not normalized_instructions:
+            return self._fallback_lab(
+                module_name=module_name,
+                module_description=module_description,
+                module_objective=module_objective,
+                approved_sources=approved_sources,
+                detected_tools=detected_tools,
+            )
+
+        prerequisites = [
+            self._compact_text(str(item).strip(), max_words=16)
+            for item in (raw.get("prerequisites") or [])[:MAX_PREREQUISITES]
+            if str(item).strip()
+        ]
+        reflection_questions = [
+            self._compact_text(str(item).strip(), max_words=18)
+            for item in (raw.get("reflectionQuestions") or [])[:MAX_REFLECTION_QUESTIONS]
+            if str(item).strip()
+        ]
+        safety_notes = [
+            self._compact_text(str(item).strip(), max_words=24)
+            for item in (raw.get("safetyNotes") or [])[:MAX_SAFETY_NOTES]
+            if str(item).strip()
+        ]
+
+        deliverable = raw.get("deliverable") if isinstance(raw.get("deliverable"), dict) else {}
+        deliverable_norm = {
+            "description": self._compact_text(str(deliverable.get("description") or "Entrega una evidencia del ejercicio resuelto.").strip(), max_words=28),
+            "format": self._compact_text(str(deliverable.get("format") or "Documento breve o captura").strip(), max_words=8),
+            "successCriteria": [
+                self._compact_text(str(item).strip(), max_words=18)
+                for item in (deliverable.get("successCriteria") or [])[:MAX_SUCCESS_CRITERIA]
+                if str(item).strip()
+            ] or ["La entrega demuestra aplicación correcta del módulo."],
+        }
+
+        source_references = []
+        for source in (raw.get("sourceReferences") or [])[:MAX_SOURCE_REFERENCES]:
+            if not isinstance(source, dict):
+                continue
+            title = self._compact_text(str(source.get("title") or "").strip(), max_words=12)
+            if not title:
+                continue
+            source_references.append(
+                {
+                    "sourceId": str(source.get("sourceId") or "").strip() or None,
+                    "title": title,
+                    "url": str(source.get("url") or "").strip() or None,
+                }
+            )
+
+        if not source_references:
+            source_references = self._default_source_references(approved_sources)
+
+        steps = [
+            {
+                "title": instruction["title"],
+                "desc": instruction["description"],
+                "tool": normalized_tools[0]["name"] if normalized_tools else None,
+                "tip": instruction.get("tip"),
+            }
+            for instruction in normalized_instructions
+        ]
+
+        lab = {
+            "title": self._compact_text(str(raw.get("title") or f"Laboratorio práctico · {module_name}").strip(), max_words=12),
+            "objective": self._compact_text(str(raw.get("objective") or module_objective or module_description or "").strip(), max_words=28),
+            "scenario": self._compact_text(str(raw.get("scenario") or module_description or "").strip(), max_words=90),
+            "estimatedTimeMinutes": self._safe_int(raw.get("estimatedTimeMinutes"), fallback=25, min_value=10, max_value=60),
+            "difficulty": difficulty,
+            "tools": normalized_tools,
+            "prerequisites": prerequisites,
+            "instructions": normalized_instructions,
+            "deliverable": deliverable_norm,
+            "reflectionQuestions": reflection_questions,
+            "sourceReferences": source_references,
+            "safetyNotes": safety_notes,
+            "steps": steps,
+            "console": [f"[ ] {instruction['title']}" for instruction in normalized_instructions],
+        }
+        classroom_text = self._compact_multiline_text(str(raw.get("classroomText") or "").strip(), max_words=650)
+        lab["classroomText"] = classroom_text or self._build_classroom_text(lab)
+        return lab
+
+    def _fallback_lab(
+        self,
+        *,
+        module_name: str,
+        module_description: str,
+        module_objective: str,
+        approved_sources: List[Dict[str, Any]],
+        detected_tools: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        tool_name = detected_tools[0]["name"] if detected_tools else "la herramienta del módulo"
+        tool_url = detected_tools[0].get("url") if detected_tools else None
+        objective = module_objective or f"Aplicar {module_name} en un caso práctico guiado."
+        scenario = (
+            f"En este laboratorio vas a aplicar {module_name} en una actividad breve y concreta. "
+            f"La meta es pasar de entender el concepto a producir una evidencia útil para el contexto del cliente."
+        )
+        instructions = [
+            {
+                "step": 1,
+                "title": "Define el desafio",
+                "description": f"Elige una situacion real del equipo donde {tool_name} pueda ayudar. Escribe en una frase que quieres resolver y para quien.",
+                "expectedResult": "Un desafio claro y contextualizado.",
+                "tip": "Hazlo especifico: audiencia, objetivo y restriccion.",
+            },
+            {
+                "step": 2,
+                "title": "Ejecuta la practica",
+                "description": f"Usa {tool_name} o simula su uso con este prompt base: \"Ayudame a resolver [DESAFIO] para [AUDIENCIA] usando [CRITERIOS DEL MODULO]\".",
+                "expectedResult": "Una primera respuesta o prototipo.",
+                "tip": "Cambia los corchetes antes de correrlo.",
+            },
+            {
+                "step": 3,
+                "title": "Refina el resultado",
+                "description": "Pide una mejora concreta: mas claro, mas visual, mas accionable o mejor alineado al contexto de la empresa.",
+                "expectedResult": "Una version mejorada.",
+                "tip": "No cambies todo el prompt; conversa con la herramienta.",
+            },
+            {
+                "step": 4,
+                "title": "Guarda tu evidencia",
+                "description": "Exporta o copia el resultado final y agrega una nota breve explicando por que cumple el objetivo del modulo.",
+                "expectedResult": "Una entrega lista para revisar.",
+                "tip": "Incluye captura, enlace o texto final.",
+            },
+        ]
+        lab = {
+            "title": f"Laboratorio práctico · {module_name}",
+            "objective": objective,
+            "scenario": scenario,
+            "estimatedTimeMinutes": 20,
+            "difficulty": "intermediate",
+            "tools": (
+                [{"name": tool_name, "purpose": "Aplicar el concepto central del módulo.", "url": tool_url}]
+                if tool_name
+                else []
+            ),
+            "prerequisites": [
+                "Haber revisado el contenido principal del módulo.",
+                f"Tener acceso a {tool_name} o una forma de simularlo.",
+            ],
+            "instructions": instructions,
+            "deliverable": {
+                "description": "Evidencia breve de la práctica realizada y la decisión tomada.",
+                "format": "Documento breve, captura o enlace",
+                "successCriteria": [
+                    "Aplica el concepto central del módulo.",
+                    "Está conectada al contexto del cliente.",
+                    "Incluye una mejora o refinamiento.",
+                ],
+            },
+            "reflectionQuestions": [
+                "¿Qué cambió entre tu primer resultado y el refinado?",
+                "¿Cómo lo aplicarías en una situación real?",
+            ],
+            "sourceReferences": self._default_source_references(approved_sources),
+            "safetyNotes": [],
+            "steps": [
+                {
+                    "title": item["title"],
+                    "desc": item["description"],
+                    "tool": tool_name,
+                    "tip": item.get("tip"),
+                }
+                for item in instructions
+            ],
+            "console": [f"[ ] {item['title']}" for item in instructions],
+        }
+        lab["classroomText"] = self._build_classroom_text(lab)
+        return lab
+
+    def _default_source_references(self, approved_sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        refs = []
+        for source in approved_sources[:MAX_SOURCE_REFERENCES]:
+            refs.append(
+                {
+                    "sourceId": str(source.get("id") or "").strip() or None,
+                    "title": self._compact_text(source.get("title") or source.get("url") or "Fuente aprobada", max_words=12),
+                    "url": source.get("url"),
+                }
+            )
+        return refs
+
+    def _compact_text(self, value: str, *, max_words: int) -> str:
+        text = re.sub(r"\s+", " ", value or "").strip()
+        if not text:
+            return ""
+        words = text.split(" ")
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words]).rstrip(".,;:") + "..."
+
+    def _compact_multiline_text(self, value: str, *, max_words: int) -> str:
+        text = re.sub(r"\n{3,}", "\n\n", (value or "").strip())
+        if not text:
+            return ""
+        words = text.split()
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words]).rstrip(".,;:") + "..."
+
+    def _safe_int(self, value: Any, *, fallback: int, min_value: int, max_value: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return max(min_value, min(max_value, parsed))
+
+    def _build_classroom_text(self, lab: Dict[str, Any]) -> str:
+        title = lab.get("title") or "Laboratorio práctico"
+        objective = lab.get("objective") or ""
+        scenario = lab.get("scenario") or ""
+        minutes = lab.get("estimatedTimeMinutes")
+        tools = lab.get("tools") or []
+        instructions = lab.get("instructions") or []
+        deliverable = lab.get("deliverable") or {}
+        tips = [item.get("tip") for item in instructions if item.get("tip")]
+
+        lines = [f"🧪 Laboratorio: {title}"]
+        if minutes:
+            lines.append(f"Tiempo estimado: {minutes} minutos")
+        lines.append("")
+        if objective:
+            lines.append(objective)
+        if scenario:
+            lines.extend(["", scenario])
+
+        tool_names = ", ".join(tool.get("name", "") for tool in tools if tool.get("name"))
+        if tool_names:
+            lines.extend(["", f"Herramienta principal: {tool_names}"])
+
+        lines.extend(["", "1. Desafío"])
+        lines.append("Aterriza el caso: define qué vas a crear, resolver o decidir usando el contenido del módulo.")
+
+        for instruction in instructions:
+            step = int(instruction.get("step") or 0) + 1
+            lines.extend(["", f"{step}. {instruction.get('title', 'Paso de práctica')}"])
+            lines.append(instruction.get("description", ""))
+            if instruction.get("expectedResult"):
+                lines.append(f"Resultado esperado: {instruction['expectedResult']}")
+
+        if deliverable:
+            lines.extend(["", "Entrega"])
+            lines.append(deliverable.get("description") or "Entrega una evidencia breve del laboratorio.")
+            if deliverable.get("format"):
+                lines.append(f"Formato: {deliverable['format']}")
+            criteria = deliverable.get("successCriteria") or []
+            if criteria:
+                lines.append("Debe mostrar:")
+                for criterion in criteria[:MAX_SUCCESS_CRITERIA]:
+                    lines.append(f"- {criterion}")
+
+        if tips:
+            lines.extend(["", "✨ Tips de oro"])
+            for tip in tips[:2]:
+                lines.append(f"- {tip}")
+
+        if lab.get("safetyNotes"):
+            lines.extend(["", f"⚠️ Nota clave: {lab['safetyNotes'][0]}"])
+
+        if lab.get("reflectionQuestions"):
+            lines.extend(["", "Cierre rápido"])
+            for question in lab.get("reflectionQuestions")[:MAX_REFLECTION_QUESTIONS]:
+                lines.append(f"- {question}")
+
+        return "\n".join(line for line in lines if line is not None).strip()
+
+    def _generate_pdf_bytes(self, text: str) -> bytes:
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except Exception as e:
+            raise RuntimeError("Pillow is required to generate lab PDFs") from e
+
+        width = 900
+        margin = 56
+        line_height = 28
+        paragraph_gap = 14
+        try:
+            font = ImageFont.truetype("Arial.ttf", 18)
+            title_font = ImageFont.truetype("Arial Bold.ttf", 24)
+        except Exception:
+            font = ImageFont.load_default()
+            title_font = font
+
+        probe = Image.new("RGB", (width, 200), "white")
+        draw = ImageDraw.Draw(probe)
+        max_text_width = width - (margin * 2)
+        wrapped_lines: List[tuple[str, bool]] = []
+
+        for paragraph in text.splitlines():
+            if not paragraph.strip():
+                wrapped_lines.append(("", False))
+                continue
+            use_title_font = len(wrapped_lines) == 0
+            active_font = title_font if use_title_font else font
+            words = paragraph.split()
+            current = ""
+            for word in words:
+                candidate = f"{current} {word}".strip()
+                bbox = draw.textbbox((0, 0), candidate, font=active_font)
+                if bbox[2] - bbox[0] <= max_text_width or not current:
+                    current = candidate
+                else:
+                    wrapped_lines.append((current, use_title_font))
+                    current = word
+                    use_title_font = False
+                    active_font = font
+            if current:
+                wrapped_lines.append((current, use_title_font))
+
+        height = margin * 2
+        for line, _is_title in wrapped_lines:
+            height += paragraph_gap if not line else line_height
+        image = Image.new("RGB", (width, max(height, 1200)), "white")
+        draw = ImageDraw.Draw(image)
+        y = margin
+        for line, is_title in wrapped_lines:
+            if not line:
+                y += paragraph_gap
+                continue
+            draw.text((margin, y), line, fill=(31, 22, 51), font=title_font if is_title else font)
+            y += line_height
+
+        output = io.BytesIO()
+        image.save(output, format="PDF", resolution=144.0)
+        return output.getvalue()

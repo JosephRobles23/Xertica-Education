@@ -6,6 +6,7 @@ from services.kb.service import KBService
 from services.video.service import VideoService
 from services.infographic.service import InfographicService
 from services.quiz.service import QuizService
+from services.lab.service import LabService
 from config.settings import settings
 from repositories.jobs.repository import SupabaseJobRepository
 from repositories.learning_path.repository import SupabaseLearningPathRepository
@@ -59,6 +60,7 @@ from adapters.llm.openrouter import OpenRouterLLMAdapter
 from services.lesson.service import LessonService
 _quiz_service = QuizService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
 _lesson_service = LessonService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
+_lab_service = LabService(llm_adapter=OpenRouterLLMAdapter(), kb=_knowledge_base)
 
 def get_jobs_service() -> JobsService:
     return _jobs_service
@@ -104,3 +106,6 @@ def get_quiz_service() -> QuizService:
 
 def get_lesson_service() -> LessonService:
     return _lesson_service
+
+def get_lab_service() -> LabService:
+    return _lab_service

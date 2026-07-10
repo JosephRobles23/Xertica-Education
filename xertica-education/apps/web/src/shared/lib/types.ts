@@ -84,9 +84,51 @@ export interface LabStep {
   tip?: string
 }
 
+export interface LabTool {
+  name: string
+  purpose: string
+  url?: string
+}
+
+export interface LabInstruction {
+  step: number
+  title: string
+  description: string
+  expectedResult?: string
+  tip?: string
+}
+
+export interface LabDeliverable {
+  description: string
+  format: string
+  successCriteria: readonly string[]
+}
+
+export interface LabSourceReference {
+  sourceId?: string
+  title: string
+  url?: string
+}
+
 export interface LabContent {
+  title?: string
+  classroomText?: string
+  objective?: string
+  scenario?: string
+  estimatedTimeMinutes?: number
+  difficulty?: 'beginner' | 'intermediate' | 'advanced'
+  tools?: readonly LabTool[]
+  prerequisites?: readonly string[]
+  instructions?: readonly LabInstruction[]
+  deliverable?: LabDeliverable
+  reflectionQuestions?: readonly string[]
+  sourceReferences?: readonly LabSourceReference[]
+  safetyNotes?: readonly string[]
   steps: readonly LabStep[]
   console: readonly string[]
+  txtUrl?: string
+  pdfUrl?: string
+  jsonUrl?: string
 }
 
 /** Pack de contenido de una ruta: alimenta previews y el asset final. */
