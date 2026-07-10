@@ -597,25 +597,38 @@ export default function NuevaRuta() {
             <Button variant="outline-primary" onClick={() => setDialogOpen(true)}>
               <FolderOpen /> Seleccionar estructura
             </Button>
-            {uploadedStructure ? (
-              <span className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-success bg-success/10 py-1.5 pr-2 pl-3 text-[12.5px]">
-                <CheckCircle2 className="size-3.5 text-success" />
-                {uploadedStructure.name} · {uploadedStructure.kind === 'drive' ? 'Google Drive' : 'texto'}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5 rounded-full"
-                  onClick={() => setUploadedStructure(null)}
-                >
-                  <X className="size-3" />
-                </Button>
-              </span>
-            ) : (
+            {!uploadedStructure && (
               <span className="font-mono text-[11px] text-muted-foreground">
                 Selecciona un archivo de Drive o pega el texto de tu estructura.
               </span>
             )}
           </div>
+          {uploadedStructure && (
+            <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
+              {uploadedStructure.kind === 'drive' ? (
+                <FolderOpen className="size-4 shrink-0 text-primary" />
+              ) : (
+                <CheckCircle2 className="size-4 shrink-0 text-success" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] text-ink">{uploadedStructure.name}</div>
+                <div className="font-mono text-[10.5px] text-muted-foreground">
+                  {uploadedStructure.kind === 'drive'
+                    ? 'Google Drive · estructura propuesta'
+                    : 'Texto pegado · estructura propuesta'}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setUploadedStructure(null)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Deep research */}

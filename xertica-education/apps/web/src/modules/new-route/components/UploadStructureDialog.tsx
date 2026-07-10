@@ -36,9 +36,13 @@ export function UploadStructureDialog({
     try {
       const selected = await pickGoogleDriveFile()
       if (!selected) return
-      setDriveFile(selected)
-      toast.success('Estructura seleccionada desde Drive', {
-        description: selected.name,
+      const value: UploadedStructure = { name: selected.name, kind: 'drive', driveFile: selected }
+      onSubmit(value)
+      setDriveFile(null)
+      setText('')
+      onOpenChange(false)
+      toast.success('Estructura recibida', {
+        description: `${selected.name} · la IA la usará como base de los módulos.`,
       })
     } catch (err) {
       toast.error('No se pudo abrir Google Drive', {
