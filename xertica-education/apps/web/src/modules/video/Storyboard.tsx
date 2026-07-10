@@ -116,7 +116,7 @@ export const renderPhaseLabel = (progress: number): string => {
 }
 
 const renderPhaseMetaForProgress = (progress: number): RenderPhaseMeta =>
-  RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress)) ?? RENDER_PHASES[0]
+  RENDER_PHASES.find((item) => item.phase === renderPhaseFromProgress(progress)) as RenderPhaseMeta
 
 const stagePercentWithinRange = (progress: number, start: number, end: number): number => {
   if (end <= start) return progress >= end ? 100 : 0

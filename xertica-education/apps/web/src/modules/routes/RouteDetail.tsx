@@ -11,6 +11,7 @@ import {
   CircleCheck,
   ExternalLink,
   Film,
+  FileImage,
   FlaskConical,
   Link2,
   Loader2,
@@ -26,11 +27,20 @@ import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Separator } from '@/shared/ui/separator'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/shared/ui/dialog'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
 import { ContentPreview } from '@/shared/content/ContentPreview'
+import { InfografiaView } from '@/shared/content/InfografiaView'
 import { SourceVideoPreview } from '@/shared/content/SourceVideoPreview'
 import { RefinePopover } from '@/modules/routes/components/RefinePopover'
 import { api } from '@/shared/lib/api'
@@ -1003,8 +1013,8 @@ function ContentReviewPanel({
                   description: 'Generando con gpt-image-2. Esto puede tardar entre 2 y 3 minutos.',
                 })
                 try {
-                  const currentRatio = route.pack?.infografia?.aspectRatio || 'auto'
-                  await api.request(`/learning-paths/${route.id}/infographic/regenerate`, {
+                  const currentRatio = module.infografia?.aspectRatio || 'auto'
+                  await api.request(`/learning-paths/${route.id}/modules/${module.id}/infographic/regenerate`, {
                     method: 'POST',
                     body: JSON.stringify({
                       user_prompt: prompt,
@@ -1017,6 +1027,27 @@ function ContentReviewPanel({
                 } catch (e) {
                   console.error(e)
                   toast.error('Error al regenerar la infografía', {
+                    id: toastId,
+                    description: e instanceof Error ? e.message : 'Error desconocido',
+                  })
+                }
+              } else if (content.kind === 'lesson') {
+                const toastId = toast.loading('Regenerando lección con tu feedback…', {
+                  description: 'Actualizando el contenido y glosario en base al feedback de las fuentes.',
+                })
+                try {
+                  await api.request(`/learning-paths/${route.id}/modules/${module.id}/lesson/regenerate`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      user_prompt: prompt,
+                    }),
+                  })
+                  refineContent(route.id, module.id, content.kind)
+                  await fetchRoutes()
+                  toast.success('Lección regenerada con éxito', { id: toastId })
+                } catch (e) {
+                  console.error(e)
+                  toast.error('Error al regenerar la lección', {
                     id: toastId,
                     description: e instanceof Error ? e.message : 'Error desconocido',
                   })
@@ -1087,6 +1118,7 @@ function ContentReviewPanel({
             kind={content.kind}
             pack={{
               ...route.pack,
+              infografia: module.infografia || { title: '', bullets: [], footer: ['', ''] },
               quiz: module.quiz || route.pack.quiz || { questions: [] },
               lesson: module.lesson || route.pack.lesson,
               lab: module.lab || route.pack.lab,
@@ -1253,11 +1285,31 @@ export default function Ruta() {
         )}
 
         {/* Módulo activo */}
-        <div className="mb-3.5 flex items-center justify-between">
-          <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {progress.done} de {route.modules.length} aprobados
-          </span>
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="font-display text-xl font-medium text-ink">Módulos</h2>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {progress.done} de {route.modules.length} aprobados
+            </span>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline-primary" size="sm" className="gap-1.5 cursor-pointer">
+                <FileImage className="size-4" /> Infografía de Syllabus
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-[560px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Infografía de Syllabus</DialogTitle>
+                <DialogDescription>
+                  Mapa visual general de toda la ruta de aprendizaje.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-2 flex justify-center">
+                <InfografiaView info={route.pack?.infografia} routeId={route.id} />
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {selectedModule && (

@@ -96,7 +96,7 @@ def _is_well_known(company_name: str) -> bool:
     return company_name.strip().lower() in WELL_KNOWN_BRANDS
 
 
-def build_image_prompt(points: List[str], company_name: str, user_prompt: str | None = None, route_name: str | None = None) -> str:
+def build_image_prompt(points: List[str], company_name: str, user_prompt: str | None = None, route_name: str | None = None, is_module: bool = False) -> str:
     """
     Builds the target prompt for image generation.
     - Well-known companies: use their real brand colors + logo.
@@ -119,12 +119,25 @@ def build_image_prompt(points: List[str], company_name: str, user_prompt: str | 
         f"  2. Si NO es posible obtener o recrear el logotipo con un nivel de fidelidad aceptable, ELIMINA el espacio destinado al logo.\n"
         f"  3. REGLA ESTRICTA (Prioridad Alta): NUNCA utilices placeholders como 'Tu logo aquí', 'Logo', 'Company Logo' o cualquier texto similar. No inventes logotipos.\n"
         f"  4. Analiza la identidad visual de la empresa (paleta de colores, estilo, tipografía) y aplícala.\n"
-        f"  5. Si no hay branding suficiente, usa un diseño con colores normales y profesionales, sin estética de plantilla genérica.\n"
+        f"  5. Si no hay branding suficiente, usa un diseño con colores normales and profesionales, sin estética de plantilla genérica.\n"
+    )
+
+    intro_phrase = (
+        "Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
+        "que sirva como una herramienta didáctica y visual de aprendizaje para explicar de forma clara los conceptos y fundamentos de este tema."
+        if is_module else
+        "Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
+        "que sirva como el syllabus del curso."
+    )
+
+    structure_phrase = (
+        "- Estructura: Diseño didáctico estructurado en tarjetas, diagramas conceptuales o pasos ordenados que ilustren de forma gráfica los conceptos del tema. Utiliza iconos conceptuales estilizados en 3D (glassmorphism/neon icon) para cada concepto clave, en lugar de secciones de un syllabus."
+        if is_module else
+        "- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. Cada sección o módulo del curso debe estar representado en una tarjeta con un número grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D (3D glassmorphism/neon icon)."
     )
 
     prompt = (
-        f"Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
-        f"que sirva como el syllabus del curso.\n"
+        f"{intro_phrase}\n"
         f"El tema principal debe estar alineado con el siguiente contenido:\n"
         f"{points_text}\n\n"
         f"Requisitos de Estilo y Visualización:\n"
@@ -132,10 +145,7 @@ def build_image_prompt(points: List[str], company_name: str, user_prompt: str | 
         f"{branding_block}"
         f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), "
         f"con acentos de color vibrantes y degradados elegantes.\n"
-        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. "
-        f"Cada sección o módulo del curso debe estar representado en una tarjeta con un número "
-        f"grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D "
-        f"(3D glassmorphism/neon icon).\n"
+        f"{structure_phrase}\n"
         f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, "
         f"NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
         f"- Relación de aspecto vertical apta para impresión en una página.\n"
@@ -150,7 +160,7 @@ def build_image_prompt(points: List[str], company_name: str, user_prompt: str | 
     return prompt
 
 
-def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str | None = None, route_name: str | None = None) -> str:
+def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str | None = None, route_name: str | None = None, is_module: bool = False) -> str:
     """
     Fallback prompt: never includes logo (for safety filter bypass), always
     uses generic colors for unknown brands and brand colors for known ones.
@@ -167,17 +177,27 @@ def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str
 
     branding_block = (
         f"- Identidad Visual y Branding: El curso es para la empresa '{company_name}'.\n"
-        f"  1. Si '{company_name}' tiene un sitio web oficial o identidad conocida, obtén y utiliza su logotipo oficial como referencia. "
-        f"Si puedes reproducirlo fielmente (como Google, Apple, Xertica.ai, Rappi), úsalo.\n"
-        f"  2. Si NO es posible obtener o recrear el logotipo con un nivel de fidelidad aceptable, ELIMINA el espacio destinado al logo.\n"
-        f"  3. REGLA ESTRICTA (Prioridad Alta): NUNCA utilices placeholders como 'Tu logo aquí', 'Logo', 'Company Logo' o cualquier texto similar. No inventes logotipos.\n"
-        f"  4. Analiza la identidad visual de la empresa (paleta de colores, estilo, tipografía) y aplícala.\n"
-        f"  5. Si no hay branding suficiente, usa un diseño con colores normales y profesionales, sin estética de plantilla genérica.\n"
+        f"  1. REGLA ESTRICTA: NO incluyas NINGÚN logotipo de la empresa en la infografía. Deja el espacio correspondiente vacío.\n"
+        f"  2. Analiza la identidad visual de la empresa (paleta de colores, estilo, tipografía) y aplícala.\n"
+        f"  3. Si no hay branding suficiente, usa un diseño con colores normales y profesionales, sin estética de plantilla genérica.\n"
+    )
+
+    intro_phrase = (
+        "Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
+        "que sirva como una herramienta didáctica y visual de aprendizaje para explicar de forma clara los conceptos y fundamentos de este tema."
+        if is_module else
+        "Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
+        "que sirva como el syllabus del curso."
+    )
+
+    structure_phrase = (
+        "- Estructura: Diseño didáctico estructurado en tarjetas, diagramas conceptuales o pasos ordenados que ilustren de forma gráfica los conceptos del tema. Utiliza iconos conceptuales estilizados en 3D (glassmorphism/neon icon) para cada concepto clave, en lugar de secciones de un syllabus."
+        if is_module else
+        "- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. Cada sección o módulo del curso debe estar representado en una tarjeta con un número grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D (3D glassmorphism/neon icon)."
     )
 
     prompt = (
-        f"Diseña una infografía educativa y corporativa limpia, profesional y moderna en español, "
-        f"que sirva como el syllabus del curso.\n"
+        f"{intro_phrase}\n"
         f"El tema principal debe estar alineado con el siguiente contenido:\n"
         f"{points_text}\n\n"
         f"Requisitos de Estilo y Visualización:\n"
@@ -185,10 +205,7 @@ def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str
         f"{branding_block}"
         f"- Estilo visual: Fondo oscuro premium (dark mode con tonos negro o gris muy oscuro), "
         f"con acentos de color vibrantes y degradados elegantes.\n"
-        f"- Estructura: Diseño estructurado en secciones/tarjetas limpias y ordenadas. "
-        f"Cada sección o módulo del curso debe estar representado en una tarjeta con un número "
-        f"grande (01, 02, 03, etc.) y un icono simple estilizado de estilo cristalino o neón 3D "
-        f"(3D glassmorphism/neon icon).\n"
+        f"{structure_phrase}\n"
         f"- El estilo debe ser de diseño gráfico editorial vectorizado y moderno, "
         f"NO una fotografía, NO renders 3D realistas ni texturas complejas.\n"
         f"- Relación de aspecto vertical apta para impresión en una página.\n"
@@ -222,7 +239,8 @@ class InfographicService(InfographicServiceInterface):
         word_budget: int,
         user_prompt: str | None = None,
         aspect_ratio: AspectRatio = "auto",
-        route_name: str | None = None
+        route_name: str | None = None,
+        is_module: bool = False
     ) -> Dict[str, Any]:
         """
         Main infographic generation method. Calls OpenAI Images API (gpt-image-2),
@@ -232,7 +250,7 @@ class InfographicService(InfographicServiceInterface):
         points = extract_grounded_points(sources, word_budget)
         
         # Step 2: Build main prompt
-        prompt = build_image_prompt(points, company_name, user_prompt, route_name)
+        prompt = build_image_prompt(points, company_name, user_prompt, route_name, is_module)
         
         png_bytes = None
         prompt_used = prompt
@@ -312,7 +330,7 @@ class InfographicService(InfographicServiceInterface):
             
             if is_policy_violation:
                 print("OpenAI Image generation blocked by safety filters (likely due to brand logo). Trying fallback prompt...")
-                fallback_prompt = build_fallback_prompt(points, company_name, user_prompt, route_name)
+                fallback_prompt = build_fallback_prompt(points, company_name, user_prompt, route_name, is_module)
                 prompt_used = fallback_prompt
                 try:
                     png_bytes = await attempt_call(fallback_prompt)

@@ -684,3 +684,171 @@ async def regenerate_quiz(
     })
     return updated
 
+
+from services.lesson.service import LessonService
+from config.dependencies import get_lesson_service
+
+@router.post("/{route_id}/modules/{module_id}/lesson/regenerate", response_model=Dict[str, Any])
+async def regenerate_lesson(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any] | None = None,
+    route_service: RouteService = Depends(get_route_service),
+    lesson_service: LessonService = Depends(get_lesson_service)
+):
+    """
+    Generates or regenerates a lesson for a specific module of a learning path.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    modules = route.get("modules", [])
+    target_module = None
+    for m in modules:
+        if m.get("id") == module_id:
+            target_module = m
+            break
+            
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+        
+    user_prompt = payload.get("user_prompt") if payload else None
+    
+    # Extract customer company name: explicit field → domain from URL → industry → fallback
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+
+    # Resolve ID
+    resolved_route_id = route_service._resolve_id(route_id)
+
+    # Call lesson service
+    res = await lesson_service.generate_lesson(
+        route_id=resolved_route_id,
+        module_id=module_id,
+        module_name=target_module.get("name", "Módulo"),
+        module_description=target_module.get("description", "Descripción") or target_module.get("descripcion", ""),
+        company_name=company_name,
+        user_prompt=user_prompt
+    )
+    
+    # Update module's lesson pack content
+    target_module["lesson"] = {
+        "pdfUrl": res.get("pdfUrl"),
+        "txtUrl": res.get("txtUrl"),
+        "sections": res.get("sections", []),
+        "terms": res.get("terms", [])
+    }
+    
+    # Also update module's lesson content ref status to 'generado'
+    for c in target_module.get("contents", []):
+        if c.get("kind") == "lesson":
+            c["status"] = "generado"
+            
+    updated = await route_service.update_route(route_id, {
+        "modules": modules
+    })
+    return updated
+
+
+@router.post("/{route_id}/modules/{module_id}/infographic/regenerate", response_model=Dict[str, Any])
+async def regenerate_module_infographic(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    infographic_service: InfographicService = Depends(get_infographic_service)
+):
+    """
+    Generates or regenerates an infographic for a specific module of a learning path.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+        
+    modules = route.get("modules", [])
+    target_module = None
+    for m in modules:
+        if m.get("id") == module_id:
+            target_module = m
+            break
+            
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+        
+    user_prompt = payload.get("user_prompt")
+    aspect_ratio = payload.get("aspect_ratio", "auto")
+    
+    # Generate stable component_id specific to route + module + infografia
+    h = hashlib.md5(f"{route_id}:{module_id}:infografia".encode('utf-8')).hexdigest()
+    component_id = UUID(h)
+    
+    # Extract customer company name
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            from urllib.parse import urlparse
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+        
+    # Extract word budget or fallback
+    word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
+    
+    # Call infographic service with the specific module info
+    res = await infographic_service.generate_infographic(
+        component_id=component_id,
+        sources=[target_module],
+        company_name=company_name,
+        word_budget=word_budget,
+        user_prompt=user_prompt,
+        aspect_ratio=aspect_ratio,
+        route_name=target_module.get("name", "Módulo"),
+        is_module=True
+    )
+    
+    # Update module's infographic content
+    import time
+    cache_buster = int(time.time())
+    local_png_url = f"{res.get('local_png_url')}?cb={cache_buster}"
+    local_pdf_url = f"{res.get('local_pdf_url')}?cb={cache_buster}"
+    
+    target_module["infografia"] = {
+        "title": f"Infografía - {target_module.get('name', 'Módulo')}",
+        "bullets": [
+            "Conceptos del módulo ilustrados con gpt-image-2.",
+            "Integración de branding corporativo.",
+            f"Enfoque en {target_module.get('name')}."
+        ],
+        "footer": ["Descargar PNG", "Descargar PDF"],
+        "imageUrl": local_png_url,
+        "pdfUrl": local_pdf_url,
+        "aspectRatio": aspect_ratio
+    }
+    
+    # Update status of infographic component inside contents list to 'generado'
+    for c in target_module.get("contents", []):
+        if c.get("kind") == "infografia":
+            c["status"] = "generado"
+            
+    updated = await route_service.update_route(route_id, {
+        "modules": modules
+    })
+    return updated
+
+

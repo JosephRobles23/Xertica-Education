@@ -20,11 +20,11 @@ export function ContentPreview({
 }) {
   switch (kind) {
     case 'lesson':
-      return <LessonView lesson={pack.lesson} />
+      return <LessonView lesson={pack.lesson} routeId={routeId} moduleId={moduleId} />
     case 'video':
       return <VideoFrame video={pack.video} videoUrl={videoUrl} compact />
     case 'infografia':
-      return <InfografiaView info={pack.infografia} className="justify-start" routeId={routeId} />
+      return <InfografiaView info={pack.infografia} className="justify-start" routeId={routeId} moduleId={moduleId} />
     case 'quiz':
       return <QuizView quiz={pack.quiz} routeId={routeId} moduleId={moduleId} />
     case 'lab':
