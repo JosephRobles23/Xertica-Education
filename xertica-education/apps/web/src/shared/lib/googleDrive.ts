@@ -27,8 +27,11 @@ const scriptSources: Record<GoogleScriptName, string> = {
   gsi: 'https://accounts.google.com/gsi/client',
 }
 
+let cachedDriveToken: string | null = null
+
 function loadScript(name: GoogleScriptName) {
   const id = `google-${name}-script`
+
   return new Promise<void>((resolve, reject) => {
     if (document.getElementById(id)) {
       resolve()
@@ -52,8 +55,13 @@ function loadPickerApi() {
   })
 }
 
-function requestDriveToken(clientId: string) {
+function requestDriveToken(clientId: string, forceConsent = false) {
   return new Promise<string>((resolve, reject) => {
+    if (cachedDriveToken && !forceConsent) {
+      resolve(cachedDriveToken)
+      return
+    }
+
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: DRIVE_SCOPE,
@@ -62,11 +70,28 @@ function requestDriveToken(clientId: string) {
           reject(new Error(response.error || 'No se pudo autorizar Google Drive'))
           return
         }
+
+        cachedDriveToken = response.access_token
         resolve(response.access_token)
       },
     })
-    tokenClient.requestAccessToken({ prompt: 'consent' })
+
+    tokenClient.requestAccessToken({
+      prompt: forceConsent ? 'consent' : '',
+    })
   })
+}
+
+export async function authorizeGoogleDrive() {
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_ID
+
+  if (!clientId) {
+    throw new Error('Falta NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_ID')
+  }
+
+  await loadScript('gsi')
+
+  return requestDriveToken(clientId, true)
 }
 
 export async function pickGoogleDriveFile(): Promise<GoogleDriveSelection | null> {
@@ -80,11 +105,12 @@ export async function pickGoogleDriveFile(): Promise<GoogleDriveSelection | null
 
   await Promise.all([loadScript('api'), loadScript('gsi')])
   await loadPickerApi()
+
   const accessToken = await requestDriveToken(clientId)
 
   return new Promise((resolve) => {
     const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
-      .setIncludeFolders(false)
+      .setIncludeFolders(true)
       .setSelectFolderEnabled(false)
 
     const picker = new window.google.picker.PickerBuilder()
@@ -94,6 +120,7 @@ export async function pickGoogleDriveFile(): Promise<GoogleDriveSelection | null
       .setCallback((data: PickerResponse) => {
         if (data.action === window.google.picker.Action.PICKED) {
           const doc = data.docs[0] as PickerDocument
+
           resolve({
             file_id: doc.id,
             name: doc.name,
@@ -102,21 +129,14 @@ export async function pickGoogleDriveFile(): Promise<GoogleDriveSelection | null
             access_token: accessToken,
           })
         }
+
         if (data.action === window.google.picker.Action.CANCEL) {
           resolve(null)
         }
       })
 
     if (appId) picker.setAppId(appId)
+
     picker.build().setVisible(true)
   })
-}
-
-export async function authorizeGoogleDrive() {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_ID
-  if (!clientId) {
-    throw new Error('Falta NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_ID')
-  }
-  await loadScript('gsi')
-  return requestDriveToken(clientId)
 }
