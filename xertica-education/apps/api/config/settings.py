@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     imagen_model: str = "gemini-3.1-flash-image"
     veo_model: str = "veo-3.1-generate-001"
     google_application_credentials: Optional[str] = None
+    google_drive_client_id: str = "placeholder-client-id"
+    google_drive_api_key: str = "placeholder-api-key"
+    google_drive_scope: str = "https://www.googleapis.com/auth/drive.file"
 
     # OpenMontage integration (ADR-0010)
     pixabay_api_key: str = ""  # Free API key from pixabay.com — used for background music

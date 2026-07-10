@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { FileText, Upload, X } from 'lucide-react'
+import { useState } from 'react'
+import { FileText, FolderOpen, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import {
@@ -12,9 +12,11 @@ import {
 } from '@/shared/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Textarea } from '@/shared/ui/textarea'
+import { pickGoogleDriveFile } from '@/shared/lib/googleDrive'
+import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
 import type { UploadedStructure } from '@/shared/store'
 
-/** Dialog para subir la estructura propuesta (DOCX, PDF o texto). */
+/** Dialog para seleccionar la estructura propuesta desde Drive o pegar texto. */
 export function UploadStructureDialog({
   open,
   onOpenChange,
@@ -24,24 +26,42 @@ export function UploadStructureDialog({
   onOpenChange: (open: boolean) => void
   onSubmit: (v: UploadedStructure) => void
 }) {
-  const [tab, setTab] = useState<'file' | 'text'>('file')
-  const [file, setFile] = useState<File | null>(null)
+  const [tab, setTab] = useState<'drive' | 'text'>('drive')
+  const [driveFile, setDriveFile] = useState<GoogleDriveSelection | null>(null)
   const [text, setText] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
 
-  const canSubmit = tab === 'file' ? file !== null : text.trim().length > 0
+  const canSubmit = tab === 'drive' ? driveFile !== null : text.trim().length > 0
+
+  const selectDriveFile = async () => {
+    try {
+      const selected = await pickGoogleDriveFile()
+      if (!selected) return
+      const value: UploadedStructure = { name: selected.name, kind: 'drive', driveFile: selected }
+      onSubmit(value)
+      setDriveFile(null)
+      setText('')
+      onOpenChange(false)
+      toast.success('Estructura recibida', {
+        description: `${selected.name} · la IA la usará como base de los módulos.`,
+      })
+    } catch (err) {
+      toast.error('No se pudo abrir Google Drive', {
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    }
+  }
 
   const submit = () => {
     if (!canSubmit) return
     const value: UploadedStructure =
-      tab === 'file' && file
-        ? { name: file.name, kind: 'archivo' }
+      tab === 'drive' && driveFile
+        ? { name: driveFile.name, kind: 'drive', driveFile }
         : { name: 'Estructura pegada', kind: 'texto' }
     onSubmit(value)
     toast.success('Estructura recibida', {
       description: `${value.name} · la IA la usará como base de los módulos.`,
     })
-    setFile(null)
+    setDriveFile(null)
     setText('')
     onOpenChange(false)
   }
@@ -55,46 +75,39 @@ export function UploadStructureDialog({
           </div>
           <DialogTitle>Subir estructura propuesta</DialogTitle>
           <DialogDescription>
-            Sube tu propuesta de estructura como DOCX o PDF, o pégala como texto. La IA la usará
-            como base para los módulos.
+            Selecciona tu propuesta de estructura desde Google Drive o pégala como texto. La IA la
+            usará como base para los módulos.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'file' | 'text')}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'drive' | 'text')}>
           <TabsList>
-            <TabsTrigger value="file">Archivo</TabsTrigger>
+            <TabsTrigger value="drive">Google Drive</TabsTrigger>
             <TabsTrigger value="text">Texto</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="file" className="pt-4">
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".docx,.pdf,.txt"
-              className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
+          <TabsContent value="drive" className="pt-4">
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
+              onClick={selectDriveFile}
               className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-7 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
             >
-              <Upload className="mx-auto mb-2 size-5 text-muted-foreground" />
-              <div className="text-[13.5px]">Arrastra o selecciona un archivo</div>
+              <FolderOpen className="mx-auto mb-2 size-5 text-muted-foreground" />
+              <div className="text-[13.5px]">Selecciona una estructura desde Google Drive</div>
               <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
                 DOCX · PDF · TXT
               </div>
             </button>
-            {file && (
+            {driveFile && (
               <div className="mt-3 flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
                 <FileText className="size-4 text-primary" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] text-ink">{file.name}</div>
+                  <div className="truncate text-[13px] text-ink">{driveFile.name}</div>
                   <div className="font-mono text-[10.5px] text-muted-foreground">
-                    listo para procesar
+                    Google Drive · listo para importar
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="size-7" onClick={() => setFile(null)}>
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setDriveFile(null)}>
                   <X className="size-3.5" />
                 </Button>
               </div>

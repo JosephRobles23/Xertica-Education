@@ -157,6 +157,11 @@ export interface CustomerContext {
     type: string
     sizeKb: number
   }
+  companyProposalFile?: {
+    name: string
+    type: string
+    sizeKb: number
+  }
   inferredFrom?: readonly ('url' | 'brief' | 'material')[]
   companyName?: string
 }

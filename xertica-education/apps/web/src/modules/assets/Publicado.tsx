@@ -31,7 +31,7 @@ export default function Publicado() {
         <Check className="size-7 text-success" strokeWidth={2.5} />
       </div>
       <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-success">
-        Publicado a Google Classroom
+        Publicado
       </div>
       <PageTitle className="mb-3">Asset aprobado y listo</PageTitle>
       <p className="mx-auto mb-8 max-w-md text-[14.5px] leading-relaxed text-muted-foreground">
@@ -42,8 +42,7 @@ export default function Publicado() {
       <Card className="mb-6 flex-row items-center gap-3 border-success bg-success/10 p-4.5 text-left">
         <CircleCheck className="size-4 shrink-0 text-success" />
         <span className="text-[13.5px] leading-relaxed">
-          Publicado a <b className="text-ink">Classroom · {route.name}</b> — visible para 34
-          estudiantes inscritos.
+          Publicado <b className="text-ink">· {route.name}</b> 
         </span>
       </Card>
 
