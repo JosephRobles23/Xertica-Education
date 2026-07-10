@@ -7,13 +7,16 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  CheckCircle2,
   CircleCheck,
   ExternalLink,
+  Film,
   FlaskConical,
   Link2,
   Loader2,
   Search,
   Sparkles,
+  SquarePen,
   Upload as UploadIcon,
   Wand2,
 } from 'lucide-react'
@@ -207,12 +210,17 @@ function makePreviewForSource(source: Source) {
 
 function VideoRecommendationPanel({
   route,
+  module,
   content,
   recommendedSource,
   secondarySource,
   onFindAnother,
   findingAnother,
-  onUseAiVideo,
+  onGenerateAiVideo,
+  onEditAiVideo,
+  generatingAiVideo,
+  aiVideoJobProgress,
+  aiVideoJobStatus,
   onSelectYoutube,
   onRelink,
   relinking,
@@ -220,12 +228,17 @@ function VideoRecommendationPanel({
   storyboardVideoUrl,
 }: {
   route: LearningRoute
+  module: RouteModule
   content: ModuleContentRef
   recommendedSource?: Source
   secondarySource?: Source
   onFindAnother: () => void
   findingAnother: boolean
-  onUseAiVideo: () => void
+  onGenerateAiVideo: () => void
+  onEditAiVideo: () => void
+  generatingAiVideo: boolean
+  aiVideoJobProgress?: number
+  aiVideoJobStatus?: 'queued' | 'running' | 'rendering' | 'completed' | 'failed'
   onSelectYoutube: (source: Source) => Promise<void>
   onRelink: () => void
   relinking: boolean
@@ -330,6 +343,33 @@ function VideoRecommendationPanel({
         </div>
       )}
 
+      {(generatingAiVideo || aiVideoJobStatus === 'completed' || aiVideoJobStatus === 'failed') && (
+        <div className="mb-3 rounded-lg border border-primary/20 bg-background/80 px-3 py-2.5 text-[12.5px]">
+          {generatingAiVideo && (
+            <div className="flex items-center gap-2 text-foreground">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              <span>
+                Generando video para <span className="font-medium text-ink">{module.name}</span> en segundo plano.
+                Puedes seguir trabajando en quizzes, infografías o laboratorios.
+                {typeof aiVideoJobProgress === 'number' ? ` Progreso: ${aiVideoJobProgress}%.` : ''}
+              </span>
+            </div>
+          )}
+          {!generatingAiVideo && aiVideoJobStatus === 'completed' && (
+            <div className="flex items-center gap-2 text-foreground">
+              <CheckCircle2 className="size-4 text-success" />
+              <span>El video ya quedó generado. Puedes revisarlo aquí o regenerarlo si cambió el módulo.</span>
+            </div>
+          )}
+          {!generatingAiVideo && aiVideoJobStatus === 'failed' && (
+            <div className="flex items-center gap-2 text-foreground">
+              <Film className="size-4 text-destructive" />
+              <span>El último render falló. Puedes reintentar desde “Generar AI video” o abrir el storyboard para ajustarlo.</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {submittedOwnVideoUrl && selectedMode === 'own' && (
         <div className="mb-3 rounded-lg bg-background/80 p-3">
           {customYoutubeId ? (
@@ -429,13 +469,26 @@ function VideoRecommendationPanel({
         <Button
           type="button"
           size="sm"
+          variant={storyboardVideoUrl ? 'default' : 'outline'}
+          disabled={generatingAiVideo}
+          onClick={() => {
+            setSelectedMode('ai')
+            onGenerateAiVideo()
+          }}
+        >
+          {generatingAiVideo ? <Loader2 className="animate-spin" /> : <Wand2 />}
+          {storyboardVideoUrl ? 'Regenerar AI video' : 'Generar AI video'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
           variant="outline"
           onClick={() => {
             setSelectedMode('ai')
-            onUseAiVideo()
+            onEditAiVideo()
           }}
         >
-          <Wand2 /> Generar AI video
+          <SquarePen /> Editar storyboard
         </Button>
         <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border-[1.5px] border-input bg-card px-3 text-[12px] font-medium transition-colors hover:border-primary">
           <UploadIcon /> Video propio
@@ -659,11 +712,18 @@ function ContentReviewPanel({
     refineContent,
     isLabGuideApproved,
     storyboardVideoUrlOf,
+    setStoryboardVideoUrl,
+    storyboardJobIdOf,
+    setStoryboardJobId,
+    clearStoryboardJobId,
+    activeJobs,
+    trackJob,
     replaceRouteSources,
     fetchRoutes,
   } = useStore()
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
+  const [backendVideoUrl, setBackendVideoUrl] = useState('')
   // Vinculación Source↔Módulo persistida (ADR-0012): si existe, prevalece sobre la heurística.
   const [linkedUrl, setLinkedUrl] = useState<string | null>(null)
   const [linkOrigin, setLinkOrigin] = useState<'llm' | 'heuristic' | null>(null)
@@ -675,6 +735,12 @@ function ContentReviewPanel({
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
   const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
+  const storyboardJobId = isVideo ? storyboardJobIdOf(route.id) : undefined
+  const resolvedStoryboardVideoUrl = backendVideoUrl || storyboardVideoUrl
+  const activeStoryboardJob = storyboardJobId ? activeJobs[storyboardJobId] : undefined
+  const generatingAiVideo = isVideo && Boolean(
+    activeStoryboardJob && activeStoryboardJob.status !== 'completed' && activeStoryboardJob.status !== 'failed',
+  )
 
   // Carga la vinculación persistida de este módulo (si la hay).
   useEffect(() => {
@@ -697,6 +763,68 @@ function ContentReviewPanel({
       active = false
     }
   }, [isVideo, route.id, module.id])
+
+  useEffect(() => {
+    if (!isVideo) return
+    let active = true
+    const params = new URLSearchParams({
+      route_id: route.id,
+      module_id: module.id,
+      component_kind: 'video',
+    })
+    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
+      .then((asset) => {
+        if (!active) return
+        const finalUrl = asset.storage_path || asset.video_url || ''
+        if (!finalUrl) return
+        setBackendVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [isVideo, route.id, module.id, setStoryboardVideoUrl])
+
+  useEffect(() => {
+    if (!isVideo || !storyboardJobId) return
+    if (activeStoryboardJob) return
+    void trackJob(storyboardJobId).catch(() => {})
+  }, [isVideo, storyboardJobId, activeStoryboardJob, trackJob])
+
+  useEffect(() => {
+    if (!isVideo || !storyboardJobId || !activeStoryboardJob) return
+    if (activeStoryboardJob.status === 'completed') {
+      const finalUrl = activeStoryboardJob.result?.video_url || activeStoryboardJob.result?.videoUrl || ''
+      if (finalUrl) {
+        setBackendVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+      }
+      clearStoryboardJobId(route.id)
+      toast.success('Video AI generado', {
+        id: `video-job-${route.id}-${module.id}`,
+        description: `${module.name} quedó renderizado en segundo plano.`,
+      })
+      return
+    }
+
+    if (activeStoryboardJob.status === 'failed') {
+      clearStoryboardJobId(route.id)
+      toast.error('Falló la generación del video AI', {
+        id: `video-job-${route.id}-${module.id}`,
+        description: activeStoryboardJob.error || `${module.name} necesita una nueva corrida o ajustes en storyboard.`,
+      })
+    }
+  }, [
+    isVideo,
+    storyboardJobId,
+    activeStoryboardJob,
+    route.id,
+    module.id,
+    module.name,
+    setStoryboardVideoUrl,
+    clearStoryboardJobId,
+  ])
 
   const heuristicVideo = isVideo ? findRecommendedYoutubeSource(route, module, content) : undefined
   const linkedVideo =
@@ -774,6 +902,40 @@ function ContentReviewPanel({
     }
   }
 
+  const generateAiVideo = async () => {
+    const toastId = `video-job-${route.id}-${module.id}`
+    toast.loading('Iniciando video AI...', {
+      id: toastId,
+      description: `El render de ${module.name} seguirá en segundo plano mientras avanzas en otros assets.`,
+    })
+
+    try {
+      const res = await api.request<{ job_id: string }>('/videos/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          route_id: route.id,
+          module_id: module.id,
+          component_kind: 'video',
+          component_id: null,
+          use_mock: false,
+        }),
+      })
+
+      setStoryboardJobId(route.id, res.job_id)
+      void trackJob(res.job_id).catch(() => {})
+
+      toast.success('Video AI en cola', {
+        id: toastId,
+        description: 'Puedes abrir el storyboard para afinarlo o seguir trabajando en otros contenidos.',
+      })
+    } catch (err) {
+      toast.error('No se pudo iniciar el video AI', {
+        id: toastId,
+        description: err instanceof Error ? err.message : 'Error desconocido',
+      })
+    }
+  }
+
   const selectYoutubeForModule = async (source: Source) => {
     if (!source.url) return
     try {
@@ -844,7 +1006,7 @@ function ContentReviewPanel({
                   const currentRatio = route.pack?.infografia?.aspectRatio || 'auto'
                   await api.request(`/learning-paths/${route.id}/infographic/regenerate`, {
                     method: 'POST',
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                       user_prompt: prompt,
                       aspect_ratio: currentRatio
                     }),
@@ -874,22 +1036,22 @@ function ContentReviewPanel({
       {isVideo && (
         <VideoRecommendationPanel
           route={route}
+          module={module}
           content={content}
           recommendedSource={recommendedVideo}
           secondarySource={secondaryYoutubeVideo}
           findingAnother={findingAnotherVideo}
-          storyboardVideoUrl={storyboardVideoUrl}
+          storyboardVideoUrl={resolvedStoryboardVideoUrl}
           onFindAnother={findAnotherYoutubeVideo}
           onSelectYoutube={selectYoutubeForModule}
           onRelink={relinkWithAI}
           relinking={relinking}
           linkOrigin={linkOrigin}
-          onUseAiVideo={() => {
-            toast.info('Flujo de video AI', {
-              description: 'Continúa con la revisión de guion y storyboard.',
-            })
-            router.push(`/ruta/${route.id}/video-storyboard`)
-          }}
+          generatingAiVideo={generatingAiVideo}
+          aiVideoJobProgress={activeStoryboardJob?.progress}
+          aiVideoJobStatus={activeStoryboardJob?.status}
+          onGenerateAiVideo={generateAiVideo}
+          onEditAiVideo={() => router.push(`/ruta/${route.id}/video-storyboard?module_id=${module.id}`)}
         />
       )}
 
@@ -1242,7 +1404,7 @@ export default function Ruta() {
           </span>
           {generateButton}
         </div>
-        
+
       </div>
     </div>
   )

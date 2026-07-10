@@ -38,3 +38,8 @@ testpaths = ["tests"]
 # un wheel del proyecto (evita el error de hatchling "unable to determine files").
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

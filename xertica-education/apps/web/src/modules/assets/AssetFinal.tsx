@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -27,6 +28,32 @@ export default function AssetFinal() {
   const videoUrl = route ? storyboardVideoUrlOf(route.id) : ''
   const [savingDrive, setSavingDrive] = useState(false)
   const [driveLink, setDriveLink] = useState<string | null>(null)
+  const [backendVideoUrl, setBackendVideoUrl] = useState('')
+  const videoUrl = backendVideoUrl || (route ? storyboardVideoUrlOf(route.id) : '')
+
+  useEffect(() => {
+    if (!route) return
+    const videoModule = route.modules.find((module) =>
+      module.contents.some((content) => content.kind === 'video')
+    )
+    if (!videoModule) return
+
+    let active = true
+    const params = new URLSearchParams({
+      route_id: route.id,
+      module_id: videoModule.id,
+      component_kind: 'video',
+    })
+    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
+      .then((asset) => {
+        if (!active) return
+        setBackendVideoUrl(asset.storage_path || asset.video_url || '')
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [route])
 
   if (!route) {
     return (

@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { Progress } from '@/shared/ui/progress'
-import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHeader'
+import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
 import { cn } from '@/shared/lib/utils'
 import { useStore } from '@/shared/store'
@@ -18,10 +18,6 @@ export default function Dashboard() {
         <div>
           <Eyebrow>Estudio de contenido · Impulso 2026</Eyebrow>
           <PageTitle className="text-[32px]">Rutas de aprendizaje</PageTitle>
-          <PageDescription>
-            Siete rutas en producción. Cada asset pasa por puntos de aprobación humana antes de
-            publicarse a Google Classroom.
-          </PageDescription>
         </div>
         <Button asChild className="flex-none">
           <Link href="/nueva-ruta">
