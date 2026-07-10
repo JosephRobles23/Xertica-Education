@@ -1,0 +1,5 @@
+# Ignore local package manager store
+.pnpm-store/
+
+# Ignore local agent scratch/temporary files
+.scratch/

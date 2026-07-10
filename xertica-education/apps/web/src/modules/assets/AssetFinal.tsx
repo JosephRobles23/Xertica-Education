@@ -16,7 +16,7 @@ import { QuizView } from '@/shared/content/QuizView'
 import { LabView } from '@/shared/content/LabView'
 import { getRoute } from '@/shared/data/routes'
 import { useStore } from '@/shared/store'
-import { api } from '@/shared/lib/api'
+import { fetchRenderedVideoAssetUrl } from '@/shared/lib/video-assets'
 
 export default function AssetFinal() {
   const { id } = useParams<{ id: string }>()
@@ -34,15 +34,10 @@ export default function AssetFinal() {
     if (!videoModule) return
 
     let active = true
-    const params = new URLSearchParams({
-      route_id: route.id,
-      module_id: videoModule.id,
-      component_kind: 'video',
-    })
-    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
-      .then((asset) => {
+    fetchRenderedVideoAssetUrl(route.id, videoModule.id)
+      .then((finalUrl) => {
         if (!active) return
-        setBackendVideoUrl(asset.storage_path || asset.video_url || '')
+        setBackendVideoUrl(finalUrl)
       })
       .catch(() => {})
     return () => {

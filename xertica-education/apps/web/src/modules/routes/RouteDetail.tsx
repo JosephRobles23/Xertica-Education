@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -41,6 +41,7 @@ import {
   type RouteModule,
   type Source,
 } from '@/shared/lib/types'
+import { fetchRenderedVideoAssetUrl, primaryVideoPreviewMode } from '@/shared/lib/video-assets'
 import { useStore } from '@/shared/store'
 import { cn } from '@/shared/lib/utils'
 
@@ -253,6 +254,11 @@ function VideoRecommendationPanel({
   const [approvingYoutube, setApprovingYoutube] = useState(false)
   const youtubeSource = recommendedSource ?? secondarySource
   const youtubePreview = youtubeSource ? makePreviewForSource(youtubeSource) : undefined
+  const previewMode = primaryVideoPreviewMode({
+    renderedVideoUrl: storyboardVideoUrl,
+    hasYoutubeRecommendation: Boolean(youtubeSource && youtubePreview),
+  })
+  const showGeneratedAiVideo = previewMode === 'ai'
   const customYoutubeId = submittedOwnVideoUrl ? youtubeVideoIdFromUrl(submittedOwnVideoUrl) : undefined
   const ownAssetName =
     ownVideoName ??
@@ -266,10 +272,12 @@ function VideoRecommendationPanel({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[13px] font-semibold text-ink">
-            {youtubeSource ? 'Video recomendado por IA' : 'Opciones de video'}
+            {showGeneratedAiVideo ? 'Video generado con IA' : youtubeSource ? 'Video recomendado por IA' : 'Opciones de video'}
           </div>
           <p className="mt-0.5 max-w-2xl text-[12px] leading-relaxed text-muted-foreground">
-            {youtubeSource
+            {showGeneratedAiVideo
+              ? 'Este asset ya tiene un render persistido. Puedes revisarlo aquí, regenerarlo o cambiar a otro origen si lo necesitas.'
+              : youtubeSource
               ? 'Elige la fuente de video para este asset durante la revisión del módulo.'
               : 'No encontramos un YouTube verificado; puedes usar el video IA, buscar otro o subir el tuyo.'}
           </p>
@@ -288,7 +296,16 @@ function VideoRecommendationPanel({
         </div>
       </div>
 
-      {youtubeSource && youtubePreview ? (
+      {showGeneratedAiVideo ? (
+        <div className="mb-3 rounded-lg bg-background/80 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="font-display text-[14px] font-medium text-ink">Video generado con IA</span>
+            <Badge variant="success">renderizado</Badge>
+            <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">Veo 3</span>
+          </div>
+          <ContentPreview kind="video" pack={route.pack} videoUrl={storyboardVideoUrl} />
+        </div>
+      ) : youtubeSource && youtubePreview ? (
         <div className="mb-3 rounded-lg bg-background/80 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="font-display text-[14px] font-medium text-ink">
@@ -741,6 +758,21 @@ function ContentReviewPanel({
   const generatingAiVideo = isVideo && Boolean(
     activeStoryboardJob && activeStoryboardJob.status !== 'completed' && activeStoryboardJob.status !== 'failed',
   )
+  const syncPersistedVideoAsset = useCallback(
+    async () => {
+      if (!isVideo) return ''
+      try {
+        const finalUrl = await fetchRenderedVideoAssetUrl(route.id, module.id)
+        if (!finalUrl) return ''
+        setBackendVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+        return finalUrl
+      } catch {
+        return ''
+      }
+    },
+    [isVideo, route.id, module.id, setStoryboardVideoUrl],
+  )
 
   // Carga la vinculación persistida de este módulo (si la hay).
   useEffect(() => {
@@ -766,25 +798,8 @@ function ContentReviewPanel({
 
   useEffect(() => {
     if (!isVideo) return
-    let active = true
-    const params = new URLSearchParams({
-      route_id: route.id,
-      module_id: module.id,
-      component_kind: 'video',
-    })
-    api.request<{ storage_path?: string | null; video_url?: string | null }>(`/videos/assets?${params.toString()}`)
-      .then((asset) => {
-        if (!active) return
-        const finalUrl = asset.storage_path || asset.video_url || ''
-        if (!finalUrl) return
-        setBackendVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [isVideo, route.id, module.id, setStoryboardVideoUrl])
+    void syncPersistedVideoAsset()
+  }, [isVideo, syncPersistedVideoAsset])
 
   useEffect(() => {
     if (!isVideo || !storyboardJobId) return
@@ -795,16 +810,21 @@ function ContentReviewPanel({
   useEffect(() => {
     if (!isVideo || !storyboardJobId || !activeStoryboardJob) return
     if (activeStoryboardJob.status === 'completed') {
-      const finalUrl = activeStoryboardJob.result?.video_url || activeStoryboardJob.result?.videoUrl || ''
-      if (finalUrl) {
-        setBackendVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
-      }
-      clearStoryboardJobId(route.id)
-      toast.success('Video AI generado', {
-        id: `video-job-${route.id}-${module.id}`,
-        description: `${module.name} quedó renderizado en segundo plano.`,
-      })
+      void (async () => {
+        const finalUrl =
+          activeStoryboardJob.result?.video_url ||
+          activeStoryboardJob.result?.videoUrl ||
+          await syncPersistedVideoAsset()
+        if (finalUrl) {
+          setBackendVideoUrl(finalUrl)
+          setStoryboardVideoUrl(route.id, finalUrl)
+        }
+        clearStoryboardJobId(route.id)
+        toast.success('Video AI generado', {
+          id: `video-job-${route.id}-${module.id}`,
+          description: `${module.name} quedó renderizado en segundo plano.`,
+        })
+      })()
       return
     }
 
@@ -822,6 +842,7 @@ function ContentReviewPanel({
     route.id,
     module.id,
     module.name,
+    syncPersistedVideoAsset,
     setStoryboardVideoUrl,
     clearStoryboardJobId,
   ])

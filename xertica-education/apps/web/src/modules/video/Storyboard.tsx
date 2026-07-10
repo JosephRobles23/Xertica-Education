@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Check, Info, RefreshCcw, SquarePen, Film, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react'
@@ -15,15 +15,12 @@ import { getRoute } from '@/shared/data/routes'
 import type { LearningRoute } from '@/shared/lib/types'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
+import { fetchRenderedVideoAssetUrl, type RenderedVideoAsset, renderedVideoUrlFromAsset } from '@/shared/lib/video-assets'
 
 export type VisualType = 'text_card' | 'hero_title' | 'stat_card' | 'callout' | 'comparison' | 'bar_chart' | 'line_chart' | 'pie_chart' | 'kpi_grid' | 'progress_bar' | 'terminal_scene' | 'screenshot_scene' | 'ai_video' | 'ai_illustration'
 
 type GroundingStatus = 'kb_grounded' | 'module_grounded'
 type StoryboardSource = 'idle' | 'backend' | 'fallback_invalid_target' | 'fallback_error' | 'fallback_empty'
-type RenderedVideoAsset = {
-  storage_path?: string | null
-  video_url?: string | null
-}
 type RenderPhase =
   | 'queueing'
   | 'tts'
@@ -246,8 +243,6 @@ export const buildReviewedStoryboard = (title: string, totalWordBudget: number, 
   })),
 })
 
-const videoUrlFromAsset = (asset: RenderedVideoAsset) => asset.storage_path || asset.video_url || ''
-
 // Prefers verified sources whose title or URL contains keywords from the route's
 // objective/topic. Falls back to any source URL, then customerContext, then google.com.
 const firstWalkthroughUrl = (route: LearningRoute): string => {
@@ -460,33 +455,38 @@ export default function Storyboard() {
   const savedVideoUrl = route ? storyboardVideoUrlOf(route.id) : ''
   const savedJobId = route ? storyboardJobIdOf(route.id) : undefined
   const resolvedVideoUrl = videoUrl || savedVideoUrl
+  const syncPersistedVideoAsset = useCallback(
+    async () => {
+      if (!route || !moduleId || !hasValidRenderTarget) return ''
+      try {
+        const finalUrl = await fetchRenderedVideoAssetUrl(route.id, moduleId)
+        if (!finalUrl) return ''
+        setVideoUrl(finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl)
+        return finalUrl
+      } catch {
+        return ''
+      }
+    },
+    [route, moduleId, hasValidRenderTarget, setStoryboardVideoUrl],
+  )
 
   useEffect(() => {
     if (!route || !moduleId || !hasValidRenderTarget) return
     let active = true
-    const params = new URLSearchParams({
-      route_id: route.id,
-      module_id: moduleId,
-      component_kind: 'video',
-    })
-
-    api.request<RenderedVideoAsset>(`/videos/assets?${params.toString()}`)
-      .then((asset) => {
+    syncPersistedVideoAsset()
+      .then((finalUrl) => {
         if (!active) return
-        const finalUrl = videoUrlFromAsset(asset)
         if (!finalUrl) return
-        setVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
         setRenderProgress(100)
         setRenderingState('success')
         clearStoryboardJobId(route.id)
       })
-      .catch(() => {})
 
     return () => {
       active = false
     }
-  }, [route, moduleId, hasValidRenderTarget, setStoryboardVideoUrl, clearStoryboardJobId])
+  }, [route, moduleId, hasValidRenderTarget, syncPersistedVideoAsset, clearStoryboardJobId])
 
   useEffect(() => {
     setReviewScenes(defaultReviewScenes)
@@ -566,6 +566,55 @@ export default function Storyboard() {
     route,
     savedJobId,
     savedVideoUrl,
+    activeStoryboardJob,
+    trackJob,
+    setStoryboardVideoUrl,
+    clearStoryboardJobId,
+    approveStoryboard,
+  ])
+
+  useEffect(() => {
+    if (!route || !savedJobId) return
+
+    if (!activeStoryboardJob) {
+      setRenderingState('rendering')
+      setRenderProgress((current) => (current > 0 ? current : 5))
+      return
+    }
+
+    setRenderProgress(activeStoryboardJob.progress)
+
+    if (activeStoryboardJob.status === 'completed') {
+      void (async () => {
+        const finalUrl =
+          renderedVideoUrlFromAsset(activeStoryboardJob.result as RenderedVideoAsset) ||
+          activeStoryboardJob.result?.videoUrl ||
+          await syncPersistedVideoAsset()
+        setRenderingState('success')
+        if (finalUrl) {
+          setVideoUrl(finalUrl)
+          setStoryboardVideoUrl(route.id, finalUrl)
+        }
+        clearStoryboardJobId(route.id)
+        approveStoryboard(route.id)
+        toast.success('¡Video generado con éxito!', { id: 'render-job' })
+      })()
+      return
+    }
+
+    if (activeStoryboardJob.status === 'failed') {
+      setRenderingState('failed')
+      clearStoryboardJobId(route.id)
+      toast.error('La generación del video falló', { id: 'render-job' })
+      return
+    }
+
+    setRenderingState('rendering')
+  }, [
+    route,
+    savedJobId,
+    activeStoryboardJob,
+    syncPersistedVideoAsset,
     setStoryboardVideoUrl,
     clearStoryboardJobId,
     approveStoryboard,

@@ -1,0 +1,55 @@
+EVALUACIÓN DE CONOCIMIENTO (QUIZ)
+Módulo: Evaluación del aprendizaje
+Cliente: la empresa del cliente
+Generado el: 2026-07-09 20:48:03
+======================================================================
+
+Pregunta 1: ¿Cuál es el objetivo principal de la evaluación del aprendizaje en el contexto de nuestra empresa?
+  A) Asignar una calificación numérica a cada colaborador para su expediente.
+  B) Identificar a los colaboradores con bajo rendimiento para tomar medidas disciplinarias.
+  C) Medir la efectividad de las capacitaciones e identificar áreas de mejora para los equipos.
+  D) Cumplir con un requisito administrativo del departamento de Recursos Humanos.
+
+  [Respuesta Correcta: C]
+  [Explicación: El fin primordial de la evaluación es entender si la formación fue efectiva y dónde necesitan más apoyo los equipos, permitiendo mejorar futuras capacitaciones.]
+----------------------------------------------------------------------
+
+Pregunta 2: Durante una capacitación sobre un nuevo software, el instructor realiza una pequeña encuesta a mitad de la sesión para comprobar si se está entendiendo un concepto clave. ¿Qué tipo de evaluación es esta?
+  A) Evaluación Formativa
+  B) Evaluación Sumativa
+  C) Evaluación Diagnóstica
+  D) Evaluación de Impacto
+
+  [Respuesta Correcta: A]
+  [Explicación: La evaluación formativa se realiza durante el proceso de aprendizaje para guiar y ajustar la enseñanza en tiempo real, asegurando la comprensión.]
+----------------------------------------------------------------------
+
+Pregunta 3: Si el objetivo es evaluar la habilidad práctica de un técnico para aplicar un nuevo protocolo de seguridad, ¿cuál sería el método de evaluación más adecuado?
+  A) Un examen escrito sobre la teoría del protocolo.
+  B) Pedirle que escriba un resumen del protocolo.
+  C) Un cuestionario de opción múltiple sobre el manual.
+  D) Una observación directa o simulación donde realice la tarea.
+
+  [Respuesta Correcta: D]
+  [Explicación: Para evaluar una habilidad práctica ('saber hacer'), el método más efectivo es observar al colaborador aplicando dicha habilidad en un escenario real o simulado.]
+----------------------------------------------------------------------
+
+Pregunta 4: Para que la retroalimentación (feedback) después de una evaluación sea verdaderamente útil para el desarrollo de un colaborador, ¿qué característica es la más importante?
+  A) Ser general y siempre positiva para no desmotivar.
+  B) Ser específica, constructiva y proponer acciones claras de mejora.
+  C) Comparar su resultado con el promedio del equipo.
+  D) Entregarse varias semanas después de la evaluación para tener más perspectiva.
+
+  [Respuesta Correcta: B]
+  [Explicación: Un feedback efectivo debe ser específico y accionable, indicando claramente qué se hizo bien y qué se puede mejorar, para guiar el desarrollo del colaborador.]
+----------------------------------------------------------------------
+
+Pregunta 5: ¿Por qué es importante para 'la empresa del cliente' no solo realizar evaluaciones, sino también analizar los resultados agregados de estas?
+  A) Para tener estadísticas que presentar en la reunión anual.
+  B) Para justificar el presupuesto del área de cafetería.
+  C) Para tomar decisiones estratégicas sobre futuros programas de formación y la asignación de recursos.
+  D) Para identificar a los empleados con las calificaciones más altas y darles un bono.
+
+  [Respuesta Correcta: C]
+  [Explicación: El análisis de los resultados globales permite a la empresa detectar tendencias, entender qué capacitaciones son más efectivas y dónde invertir recursos para el mayor impacto.]
+----------------------------------------------------------------------
