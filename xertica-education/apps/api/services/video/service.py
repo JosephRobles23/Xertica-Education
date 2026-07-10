@@ -739,8 +739,8 @@ class VideoService(VideoServiceInterface):
         for index, scene in enumerate(scenes):
             if not isinstance(scene, dict):
                 continue
-            self._repair_sparse_render_scene(scene)
             scene["visual_config"] = self._hydrate_visual_config(scene, index, title)
+            self._repair_sparse_render_scene(scene)
         return storyboard
 
     def _repair_sparse_render_scene(self, scene: dict) -> None:
@@ -750,13 +750,13 @@ class VideoService(VideoServiceInterface):
         focus = self._scene_focus_label(scene, "Idea clave")
 
         if visual_type == "screenshot_scene" and not (
-            config.get("url") and isinstance(config.get("steps"), list) and config["steps"]
+            isinstance(config.get("steps"), list) and config["steps"]
         ):
             self._replace_with_text_card(
                 scene,
                 title=focus,
                 subtitle="Demostracion visual no disponible; conserva la accion que debe aprenderse.",
-                rationale="Sin URL y pasos reales, una explicacion cualitativa evita fingir una interfaz.",
+                rationale="Sin pasos reales, una explicacion cualitativa evita fingir una interfaz.",
             )
         elif visual_type == "terminal_scene" and not config.get("steps"):
             self._replace_with_text_card(
@@ -802,6 +802,7 @@ class VideoService(VideoServiceInterface):
 
         if visual_type == "stat_card":
             config.setdefault("title", accent_title)
+            config.setdefault("stat", self._build_illustrative_stat(scene, index))
             config.setdefault("subtitle", focus)
             return config
 
@@ -823,6 +824,7 @@ class VideoService(VideoServiceInterface):
 
         if visual_type == "bar_chart":
             config.setdefault("title", accent_title)
+            config.setdefault("chartData", self._build_illustrative_chart_data(scene, index, count=4))
             config.setdefault("showValues", True)
             config.setdefault("showGrid", True)
             config.setdefault("chartAnimation", "grow-up")
@@ -839,21 +841,41 @@ class VideoService(VideoServiceInterface):
 
         if visual_type == "screenshot_scene":
             config.setdefault("title", accent_title or "Walkthrough")
+            steps = config.get("steps")
+            if not isinstance(steps, list) or not steps:
+                config["steps"] = [
+                    "cursor_move: 0.28 0.34",
+                    "click_pulse: 0.28 0.34",
+                    f"callout_balloon: 0.50 0.42 {focus[:90]}",
+                    "highlight_box: 0.18 0.24 0.64 0.28",
+                ]
+            config.setdefault("purpose", str(scene.get("pedagogical_intent") or focus)[:120])
+            config.setdefault("learning_outcome", str(scene.get("teaching_point") or focus)[:120])
             return config
 
         if visual_type == "kpi_grid":
             config.setdefault("title", accent_title or "Resumen de metricas")
             chart_data = config.get("chartData")
-            config.setdefault("columns", min(4, max(2, len(chart_data))))
+            if chart_data is None:
+                chart_data = self._build_illustrative_chart_data(scene, index, count=3)
+                config["chartData"] = chart_data
+            config.setdefault("columns", min(4, max(2, len(chart_data))) if isinstance(chart_data, list) else 3)
             config.setdefault("chartAnimation", "count-up")
             return config
 
         if visual_type == "pie_chart":
             config.setdefault("title", accent_title or "Distribucion")
             chart_data = config.get("chartData")
+            if chart_data is None:
+                chart_data = self._build_illustrative_chart_data(scene, index, count=3, total=100)
+                config["chartData"] = chart_data
             config.setdefault("donut", True)
             config.setdefault("centerLabel", "Composicion")
-            total = sum(float(item.get("value", 0)) for item in chart_data if isinstance(item, dict))
+            total = (
+                sum(float(item.get("value", 0)) for item in chart_data if isinstance(item, dict))
+                if isinstance(chart_data, list)
+                else 0
+            )
             config.setdefault("centerValue", f"{total:g}%" if total == 100 else f"{total:g}")
             config.setdefault("showLegend", True)
             config.setdefault("chartAnimation", "expand")
@@ -863,6 +885,8 @@ class VideoService(VideoServiceInterface):
             config.setdefault("title", accent_title or "Tendencia")
             series = config.get("chartSeries")
             config["chartSeries"] = self._normalize_line_chart_series(series, config.get("title") or focus)
+            if not config["chartSeries"] and series is None:
+                config["chartSeries"] = self._build_illustrative_line_series(scene, index)
             config.setdefault("showLegend", False)
             config.setdefault("showMarkers", True)
             config.setdefault("showGrid", True)
@@ -899,6 +923,59 @@ class VideoService(VideoServiceInterface):
             return config
 
         return config
+
+    def _build_illustrative_stat(self, scene: dict, index: int) -> str:
+        pattern = str(scene.get("teaching_pattern") or "").lower()
+        if "process" in pattern or "proceso" in pattern:
+            return "3 pasos"
+        if "synthesis" in pattern or "decision" in pattern:
+            return "1 accion"
+        return f"{index + 1} clave"
+
+    def _build_illustrative_chart_data(
+        self,
+        scene: dict,
+        index: int,
+        count: int,
+        total: Optional[int] = None,
+    ) -> list[dict]:
+        labels = self._chart_labels_for_scene(scene, count)
+        if total == 100:
+            if count == 3:
+                values = [45, 35, 20]
+            elif count == 4:
+                values = [35, 25, 22, 18]
+            else:
+                base = round(100 / count)
+                values = [base for _ in range(count)]
+                values[-1] += 100 - sum(values)
+        else:
+            start = 35 + (index % 3) * 5
+            values = [start + step * (12 + index % 4) for step in range(count)]
+        return [{"label": label, "value": values[i]} for i, label in enumerate(labels)]
+
+    def _build_illustrative_line_series(self, scene: dict, index: int) -> list[dict]:
+        label = self._scene_focus_label(scene, "Progreso")[:36]
+        base = 25 + (index % 3) * 5
+        points = [
+            {"x": 1, "y": base},
+            {"x": 2, "y": base + 18},
+            {"x": 3, "y": base + 36},
+            {"x": 4, "y": base + 50},
+        ]
+        return [{"label": label, "data": points}]
+
+    def _chart_labels_for_scene(self, scene: dict, count: int) -> list[str]:
+        pattern = str(scene.get("teaching_pattern") or "").lower()
+        if "process" in pattern or "proceso" in pattern:
+            labels = ["Explorar", "Aplicar", "Verificar", "Ajustar"]
+        elif "synthesis" in pattern or "decision" in pattern:
+            labels = ["Criterio", "Accion", "Evidencia", "Mejora"]
+        elif "modelo" in pattern or "mental" in pattern:
+            labels = ["Contexto", "Modelo", "Uso", "Resultado"]
+        else:
+            labels = ["Base", "Practica", "Aplicacion", "Impacto"]
+        return labels[:count]
 
     def _has_renderable_chart_data(self, chart_data: Any) -> bool:
         if not isinstance(chart_data, list) or not chart_data:
@@ -1137,26 +1214,7 @@ class VideoService(VideoServiceInterface):
             return None
 
     async def get_video_job_status(self, job_id: UUID) -> Optional[VideoJobResponse]:
-        # Check mock registry first.
-        mock_status = await self.mock_service.get_video_job_status(job_id)
-        if mock_status:
-            return mock_status
-
-        # Query database or fallback.
-        job = None
-        if self._supabase:
-            try:
-                res = self._supabase.table("jobs").select("*").eq("id", str(job_id)).execute()
-                if res.data:
-                    job = res.data[0]
-                elif job_id in self._fallback_jobs:
-                    job = self._fallback_jobs.get(job_id)
-            except Exception as e:
-                print(f"Supabase get job error in VideoService, falling back to memory: {e}")
-                job = self._fallback_jobs.get(job_id)
-        else:
-            job = self._fallback_jobs.get(job_id)
-
+        job = await self.get_video_job_record(job_id)
         if not job:
             return None
 
@@ -1176,6 +1234,38 @@ class VideoService(VideoServiceInterface):
             result=result_data,
             error=job.get("error")
         )
+
+    async def get_video_job_record(self, job_id: UUID) -> Optional[dict]:
+        """Return the shared Job shape so generic polling can resume video jobs."""
+        mock_status = await self.mock_service.get_video_job_status(job_id)
+        if mock_status:
+            now_str = datetime.now(timezone.utc).isoformat()
+            return {
+                "id": str(mock_status.job_id),
+                "type": "video_generation",
+                "status": mock_status.status.value,
+                "progress": mock_status.progress,
+                "created_at": now_str,
+                "updated_at": now_str,
+                "result": mock_status.result.model_dump() if mock_status.result else None,
+                "error": mock_status.error,
+            }
+
+        job = None
+        if self._supabase:
+            try:
+                res = self._supabase.table("jobs").select("*").eq("id", str(job_id)).execute()
+                if res.data:
+                    job = res.data[0]
+                elif job_id in self._fallback_jobs:
+                    job = self._fallback_jobs.get(job_id)
+            except Exception as e:
+                print(f"Supabase get job error in VideoService, falling back to memory: {e}")
+                job = self._fallback_jobs.get(job_id)
+        else:
+            job = self._fallback_jobs.get(job_id)
+
+        return job
 
     async def segment_video(self, video_url: str) -> List[dict]:
         """Segments long video into timestamped chunks.
@@ -1536,6 +1626,8 @@ class VideoService(VideoServiceInterface):
 
             final_url = executor.stage_outputs.get("upload", {}).get("url", "")
             render_provenance = self._build_render_provenance(effective_storyboard, storyboard_source)
+            if executor.visual_fallbacks:
+                render_provenance["visual_fallbacks"] = executor.visual_fallbacks
             result = {
                 "video_url": final_url,
                 "duration_seconds": round(total_duration, 2),
@@ -1560,10 +1652,11 @@ class VideoService(VideoServiceInterface):
             await self._update_job(job_id, JobStatus.FAILED, 100, error=str(e))
 
         finally:
-            try:
-                shutil.rmtree(temp_dir)
-            except Exception:
-                pass
+            remotion_job_dir = os.path.join(settings.remotion_composer_path, "public", str(job_id))
+            await asyncio.gather(
+                asyncio.to_thread(shutil.rmtree, temp_dir, True),
+                asyncio.to_thread(shutil.rmtree, remotion_job_dir, True),
+            )
     # ═══════════════════════════════════════════════════════════════════
     # DATABASE HELPERS
     # ═══════════════════════════════════════════════════════════════════

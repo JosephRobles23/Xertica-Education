@@ -1,13 +1,14 @@
 import asyncio
 import copy
 import os
+import tempfile
 import time
 import unittest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 from uuid import UUID, uuid4
 from main import app
-from config.dependencies import get_knowledge_base, get_video_service
+from config.dependencies import get_jobs_service, get_knowledge_base, get_video_service
 from models.dto.requests import StoryboardRequest
 from models.domain.kb import Citation, GroundedChunk
 from services.video.service import VideoService
@@ -336,9 +337,130 @@ class TestVideoAPI(unittest.TestCase):
         self.assertGreaterEqual(len(progress_updates), 3)
         self.assertTrue(
             any(progress > 5 for progress in progress_updates),
-            "Expected at least one heartbeat/progress bump while TTS is still running.",
+            "Expected progress after a scene completes.",
         )
         self.assertIn(24, progress_updates)
+
+    def test_remotion_render_keeps_api_event_loop_responsive(self):
+        """A long Remotion subprocess must not block job polling or other requests."""
+        executor = RenderExecutor(object())
+        executor.edit_decisions = {"cuts": []}
+
+        with tempfile.TemporaryDirectory() as composer_dir:
+            local_bin = os.path.join(composer_dir, "node_modules", ".bin", "remotion")
+            os.makedirs(os.path.dirname(local_bin), exist_ok=True)
+            open(local_bin, "wb").close()
+
+            def slow_render(command, **_kwargs):
+                time.sleep(0.25)
+                open(command[4], "wb").close()
+
+            async def render_and_measure_tick():
+                started = time.perf_counter()
+                task = asyncio.create_task(executor._stage_remotion_render(uuid4(), composer_dir))
+                await asyncio.sleep(0.05)
+                tick_delay = time.perf_counter() - started
+                await task
+                return tick_delay
+
+            with patch("services.video.executor.settings.remotion_composer_path", composer_dir), patch(
+                "services.video.executor.subprocess.run",
+                side_effect=slow_render,
+            ):
+                tick_delay = asyncio.run(render_and_measure_tick())
+
+        self.assertLess(tick_delay, 0.15)
+
+    def test_generated_media_failures_fall_back_to_native_teaching_scenes(self):
+        """Transient Veo/Imagen failures should not discard an otherwise valid video."""
+        class FailingVeo:
+            async def render_clip(self, *_args):
+                raise RuntimeError("Veo unavailable")
+
+        class FailingImagen:
+            async def generate_illustration(self, *_args):
+                raise RuntimeError("Imagen unavailable")
+
+        class FakeVideoService:
+            veo_adapter = FailingVeo()
+            imagen_adapter = FailingImagen()
+
+            async def _update_job(self, *_args, **_kwargs):
+                return None
+
+        scenes = [
+            {
+                "scene_number": 1,
+                "narration": "Una metáfora muestra cómo la evidencia cambia la decisión.",
+                "visual_type": "ai_video",
+                "visual_config": {"prompt": "cinematic evidence metaphor"},
+                "teaching_point": "La evidencia cambia decisiones.",
+                "pedagogical_intent": "Hacer visible la relación causal.",
+            },
+            {
+                "scene_number": 2,
+                "narration": "El modelo mental conecta pregunta, evidencia y acción.",
+                "visual_type": "ai_illustration",
+                "visual_config": {"prompt": "educational mental model"},
+                "teaching_point": "Pregunta, evidencia y acción forman un ciclo.",
+                "pedagogical_intent": "Explicar el modelo mental.",
+            },
+            {
+                "scene_number": 3,
+                "narration": "La interfaz guía una verificación concreta.",
+                "visual_type": "screenshot_scene",
+                "visual_config": {"url": "https://example.invalid", "steps": []},
+                "teaching_point": "Verificar antes de decidir.",
+                "pedagogical_intent": "Mostrar la acción verificable.",
+            },
+        ]
+        executor = RenderExecutor(FakeVideoService())
+        executor.durations = [5.0, 5.0, 5.0]
+
+        async def failed_capture(*_args):
+            return False
+
+        executor._capture_url_screenshot = failed_capture
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            asyncio.run(executor._stage_visual(uuid4(), scenes, temp_dir))
+
+        self.assertEqual([scene["visual_type"] for scene in scenes], ["callout", "callout", "callout"])
+        self.assertEqual(executor.visual_paths, ["", "", ""])
+        self.assertIn("evidencia", scenes[0]["visual_config"]["text"].lower())
+        fallbacks = sorted(executor.visual_fallbacks, key=lambda fallback: fallback["scene_number"])
+        self.assertEqual(
+            [fallback["original_visual_type"] for fallback in fallbacks],
+            ["ai_video", "ai_illustration", "screenshot_scene"],
+        )
+        self.assertEqual(fallbacks[0]["scene_number"], 1)
+
+    def test_generic_job_polling_can_resume_in_memory_video_jobs(self):
+        """The shared frontend poll endpoint must find video jobs after page navigation."""
+        class EmptyJobsService:
+            async def get_job_status(self, _job_id):
+                return None
+
+        job_id = uuid4()
+        service = VideoService()
+        service._supabase = None
+        service._fallback_jobs[job_id] = {
+            "id": str(job_id),
+            "type": "video_generation",
+            "status": "running",
+            "progress": 25,
+            "created_at": "2026-07-10T00:00:00+00:00",
+            "updated_at": "2026-07-10T00:00:00+00:00",
+            "result": None,
+            "error": None,
+        }
+        app.dependency_overrides[get_jobs_service] = lambda: EmptyJobsService()
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        response = self.client.get(f"/jobs/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "running")
 
     def test_generate_video_mock_returns_job_id(self):
         """POST /videos/generate with custom storyboard returns a valid job ID."""
@@ -522,8 +644,8 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(line_cut["chartSeries"][0]["data"][0], {"x": 1.0, "y": 10.0})
         self.assertEqual(line_cut["chartSeries"][0]["data"][4], {"x": 5.0, "y": 90.0})
 
-    def test_custom_storyboard_render_repairs_sparse_visual_configs_without_inventing_evidence(self):
-        """Sparse reviewed scenes stay renderable without fabricated metrics or commands."""
+    def test_custom_storyboard_render_hydrates_sparse_visual_configs(self):
+        """Sparse reviewed scenes keep their chosen visual type with illustrative config."""
         service = VideoService()
         storyboard = {
             "title": "Domina Mario Kart: Estrategias para Ganar",
@@ -557,6 +679,13 @@ class TestVideoAPI(unittest.TestCase):
                 },
                 {
                     "scene_number": 5,
+                    "narration": "Ejecutamos una verificacion simple.",
+                    "visual_type": "terminal_scene",
+                    "visual_config": {},
+                    "teaching_point": "Verificar el aprendizaje con una salida observable.",
+                },
+                {
+                    "scene_number": 6,
                     "narration": "Representamos la estrategia como un diagrama técnico aplicable al juego.",
                     "visual_type": "ai_illustration",
                     "visual_config": {},
@@ -567,14 +696,14 @@ class TestVideoAPI(unittest.TestCase):
 
         hydrated = service._hydrate_storyboard_for_render(copy.deepcopy(storyboard))
 
-        self.assertEqual(hydrated["scenes"][0]["visual_type"], "text_card")
-        self.assertIn("accion observable", hydrated["scenes"][0]["visual_config"]["title"])
+        self.assertEqual(hydrated["scenes"][0]["visual_type"], "screenshot_scene")
+        self.assertGreaterEqual(len(hydrated["scenes"][0]["visual_config"]["steps"]), 2)
 
-        self.assertEqual(hydrated["scenes"][1]["visual_type"], "callout")
-        self.assertIn("indicadores", hydrated["scenes"][1]["visual_config"]["text"])
+        self.assertEqual(hydrated["scenes"][1]["visual_type"], "kpi_grid")
+        self.assertGreaterEqual(len(hydrated["scenes"][1]["visual_config"]["chartData"]), 2)
 
-        self.assertEqual(hydrated["scenes"][2]["visual_type"], "callout")
-        self.assertIn("entrenamiento", hydrated["scenes"][2]["visual_config"]["text"])
+        self.assertEqual(hydrated["scenes"][2]["visual_type"], "pie_chart")
+        self.assertEqual(sum(item["value"] for item in hydrated["scenes"][2]["visual_config"]["chartData"]), 100)
 
         line_config = hydrated["scenes"][3]["visual_config"]
         self.assertEqual(line_config["chartSeries"][0]["label"], "Velocidad")
@@ -583,7 +712,10 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(line_config["xLabel"], "Intento")
         self.assertEqual(line_config["yLabel"], "Velocidad")
 
-        illustration_config = hydrated["scenes"][4]["visual_config"]
+        self.assertEqual(hydrated["scenes"][4]["visual_type"], "terminal_scene")
+        self.assertEqual(hydrated["scenes"][4]["visual_config"]["steps"][0]["kind"], "out")
+
+        illustration_config = hydrated["scenes"][5]["visual_config"]
         self.assertIn("prompt", illustration_config)
         self.assertIn("estrategia", illustration_config["prompt"].lower())
         self.assertIn("avoid biology", illustration_config["prompt"].lower())
@@ -798,6 +930,8 @@ class TestVideoAPI(unittest.TestCase):
         }
 
         captured_tasks = []
+        composer_workspace = tempfile.TemporaryDirectory()
+        self.addCleanup(composer_workspace.cleanup)
 
         def capture_task(coro):
             captured_tasks.append(coro)
@@ -805,10 +939,14 @@ class TestVideoAPI(unittest.TestCase):
 
         async def fake_execute(self, plan):
             temp_dir = f"/tmp/render_{plan.job_id}"
+            remotion_dir = os.path.join(composer_workspace.name, "public", str(plan.job_id))
             os.makedirs(os.path.join(temp_dir, "tts"), exist_ok=True)
             os.makedirs(os.path.join(temp_dir, "imagen"), exist_ok=True)
             os.makedirs(os.path.join(temp_dir, "veo"), exist_ok=True)
             os.makedirs(os.path.join(temp_dir, "remotion"), exist_ok=True)
+            os.makedirs(remotion_dir, exist_ok=True)
+            with open(os.path.join(remotion_dir, "output.mp4"), "wb") as handle:
+                handle.write(b"temporary remotion output")
 
             for relative_path in (
                 "tts/scene-1.wav",
@@ -825,7 +963,9 @@ class TestVideoAPI(unittest.TestCase):
 
         app.dependency_overrides[get_video_service] = lambda: service
 
-        with patch("services.video.service.asyncio.create_task", side_effect=capture_task), patch(
+        with patch("services.video.service.settings.remotion_composer_path", composer_workspace.name), patch(
+            "services.video.service.asyncio.create_task", side_effect=capture_task
+        ), patch(
             "services.video.executor.RenderExecutor.execute",
             new=fake_execute,
         ):
@@ -863,6 +1003,7 @@ class TestVideoAPI(unittest.TestCase):
 
         temp_dir = f"/tmp/render_{job_id}"
         self.assertFalse(os.path.exists(temp_dir))
+        self.assertFalse(os.path.exists(os.path.join(composer_workspace.name, "public", str(job_id))))
 
         status_response = self.client.get(f"/videos/jobs/{job_id}")
         self.assertEqual(status_response.status_code, 200)

@@ -30,6 +30,7 @@ class RenderExecutor:
         self.edit_decisions: Optional[dict] = None
         self.effective_storyboard: Optional[dict] = None
         self.total_duration: float = 0.0
+        self.visual_fallbacks: List[dict] = []
 
     async def execute(self, plan: RenderPlan) -> None:
         job_id = plan.job_id
@@ -72,15 +73,6 @@ class RenderExecutor:
             )
             for index, scene in enumerate(scenes)
         ]
-        heartbeat = asyncio.create_task(
-            self._heartbeat_stage_progress(
-                job_id=job_id,
-                stage_start=5,
-                stage_end=24,
-                tasks=tasks,
-            )
-        )
-
         try:
             for completed_count, task in enumerate(asyncio.as_completed(tasks), start=1):
                 result = await task
@@ -92,9 +84,11 @@ class RenderExecutor:
                     completed=completed_count,
                     total=total_scenes,
                 )
-        finally:
-            heartbeat.cancel()
-            await asyncio.gather(heartbeat, return_exceptions=True)
+        except Exception:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         for result in ordered_results:
             if result is None:
@@ -115,9 +109,9 @@ class RenderExecutor:
 
         merged_path = f"{temp_dir}/narration_merged.mp3"
         if len(self.audio_paths) > 1:
-            self._concat_audio_files(self.audio_paths, merged_path)
+            await asyncio.to_thread(self._concat_audio_files, self.audio_paths, merged_path)
         elif len(self.audio_paths) == 1:
-            shutil.copy(self.audio_paths[0], merged_path)
+            await asyncio.to_thread(shutil.copy, self.audio_paths[0], merged_path)
 
     async def _stage_visual(self, job_id: UUID, scenes: list, temp_dir: str):
         total_scenes = len(scenes)
@@ -128,15 +122,6 @@ class RenderExecutor:
             )
             for index, scene in enumerate(scenes)
         ]
-        heartbeat = asyncio.create_task(
-            self._heartbeat_stage_progress(
-                job_id=job_id,
-                stage_start=25,
-                stage_end=34,
-                tasks=tasks,
-            )
-        )
-
         try:
             for completed_count, task in enumerate(asyncio.as_completed(tasks), start=1):
                 result = await task
@@ -148,9 +133,11 @@ class RenderExecutor:
                     completed=completed_count,
                     total=total_scenes,
                 )
-        finally:
-            heartbeat.cancel()
-            await asyncio.gather(heartbeat, return_exceptions=True)
+        except Exception:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         for result in ordered_results:
             if result is None:
@@ -221,7 +208,15 @@ class RenderExecutor:
                 "--codec", "h264",
             ]
         try:
-            subprocess.run(cmd, check=True, cwd=composer_dir, capture_output=True, text=True, timeout=1200)
+            await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                check=True,
+                cwd=composer_dir,
+                capture_output=True,
+                text=True,
+                timeout=1200,
+            )
         except subprocess.CalledProcessError as e:
             print(f"Remotion render failed with code {e.returncode}")
             print(f"Remotion render stderr: {e.stderr}")
@@ -242,7 +237,13 @@ class RenderExecutor:
             "-of", "default=noprint_wrappers=1:nokey=1",
             output_path,
         ]
-        result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+        result = await asyncio.to_thread(
+            subprocess.run,
+            probe_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         lines = result.stdout.strip().split("\n")
         self.stage_outputs["validate"] = {
             "duration": float(lines[0]) if lines and lines[0] else 0.0,
@@ -253,8 +254,7 @@ class RenderExecutor:
         output_path = self.stage_outputs.get("remotion_render", {}).get("output_path", "")
         if not output_path or not os.path.exists(output_path):
             return
-        with open(output_path, "rb") as f:
-            video_data = f.read()
+        video_data = await asyncio.to_thread(Path(output_path).read_bytes)
         storage_path = f"videos/{job_id}/capsule.mp4"
         url = await self.video_service.storage_adapter.upload_file(
             settings.storage_bucket, storage_path, video_data
@@ -289,10 +289,10 @@ class RenderExecutor:
             print(f"Audio paths: {audio_paths}")
             raise subprocess.CalledProcessError(result.returncode, cmd)
 
-    async def _capture_url_screenshot(self, url: str, output_path: str):
+    async def _capture_url_screenshot(self, url: str, output_path: str) -> bool:
         if not url:
-            self._create_placeholder_image(output_path)
-            return
+            await asyncio.to_thread(self._create_placeholder_image, output_path)
+            return True
         try:
             from playwright.async_api import async_playwright
             async with async_playwright() as p:
@@ -302,9 +302,11 @@ class RenderExecutor:
                 await page.wait_for_timeout(1000)
                 await page.screenshot(path=output_path)
                 await browser.close()
+            return True
         except Exception as e:
             print(f"Screenshot capture failed for {url}: {e}")
-            self._create_placeholder_image(output_path)
+            await asyncio.to_thread(self._create_placeholder_image, output_path)
+            return True
 
     def _create_placeholder_image(self, output_path: str, width: int = 1920, height: int = 1080):
         try:
@@ -313,10 +315,14 @@ class RenderExecutor:
             draw = ImageDraw.Draw(img)
             for y in range(height):
                 ratio = y / height
-                r = int(15 + (30 - 15) * ratio)
-                g = int(23 + (27 - 23) * ratio)
-                b_val = int(42 + (75 - 42) * ratio)
+                r = int(12 + (24 - 12) * ratio)
+                g = int(22 + (44 - 22) * ratio)
+                b_val = int(38 + (58 - 38) * ratio)
                 draw.line([(0, y), (width, y)], fill=(r, g, b_val))
+            draw.rounded_rectangle((180, 150, 1740, 930), radius=36, outline=(92, 211, 181), width=6)
+            draw.rounded_rectangle((250, 230, 1650, 330), radius=20, fill=(26, 46, 70), outline=(244, 185, 66), width=3)
+            draw.rounded_rectangle((250, 380, 1050, 840), radius=24, fill=(18, 35, 55), outline=(86, 123, 156), width=3)
+            draw.rounded_rectangle((1120, 380, 1650, 840), radius=24, fill=(18, 35, 55), outline=(86, 123, 156), width=3)
             img.save(output_path, "PNG")
         except Exception:
             pass
@@ -360,26 +366,60 @@ class RenderExecutor:
         if visual_type == "ai_video":
             vid_path = f"{temp_dir}/visual_{scene_num}.mp4"
             prompt = config.get("prompt", "abstract cinematic animation, dark background, blue tones")
-            await self.video_service.veo_adapter.render_clip(prompt, duration, vid_path)
+            try:
+                await self._run_async_callable_in_thread(
+                    self.video_service.veo_adapter.render_clip,
+                    prompt,
+                    duration,
+                    vid_path,
+                )
+            except Exception as error:
+                self._fallback_generated_visual(scene, error)
+                return {"index": index, "path": "", "is_video": False}
             return {"index": index, "path": vid_path, "is_video": True}
 
         if visual_type == "ai_illustration":
             img_path = f"{temp_dir}/visual_{scene_num}.png"
             prompt = config.get("prompt", "educational diagram, clean design")
-            await self._run_async_callable_in_thread(
-                self.video_service.imagen_adapter.generate_illustration,
-                prompt,
-                img_path,
-            )
+            try:
+                await self._run_async_callable_in_thread(
+                    self.video_service.imagen_adapter.generate_illustration,
+                    prompt,
+                    img_path,
+                )
+            except Exception as error:
+                self._fallback_generated_visual(scene, error)
+                return {"index": index, "path": "", "is_video": False}
             return {"index": index, "path": img_path, "is_video": False}
 
         if visual_type == "screenshot_scene":
             img_path = f"{temp_dir}/visual_{scene_num}.png"
             url = config.get("url", "")
-            await self._capture_url_screenshot(url, img_path)
+            captured = await self._capture_url_screenshot(url, img_path)
+            if not captured:
+                self._fallback_generated_visual(scene, RuntimeError("screenshot unavailable"))
+                return {"index": index, "path": "", "is_video": False}
             return {"index": index, "path": img_path, "is_video": False}
 
         return {"index": index, "path": "", "is_video": False}
+
+    def _fallback_generated_visual(self, scene: dict, error: Exception) -> None:
+        original_visual_type = str(scene.get("visual_type") or "unknown")
+        teaching_point = str(scene.get("teaching_point") or scene.get("narration") or "Idea clave").strip()
+        intent = str(scene.get("pedagogical_intent") or "Idea clave").strip()
+        self.visual_fallbacks.append({
+            "scene_number": scene.get("scene_number"),
+            "original_visual_type": original_visual_type,
+            "fallback_visual_type": "callout",
+            "reason": str(error)[:240],
+        })
+        scene["visual_type"] = "callout"
+        scene["visual_config"] = {
+            "title": intent,
+            "text": teaching_point,
+            "callout_style": "tip",
+        }
+        print(f"Generated visual failed; using native callout: {error}")
 
     async def _update_stage_scene_progress(
         self,
@@ -395,34 +435,6 @@ class RenderExecutor:
         span = max(stage_end - stage_start, 0)
         progress = stage_start + round((completed / total) * span)
         await self.video_service._update_job(job_id, JobStatus.RUNNING, progress)
-
-    async def _heartbeat_stage_progress(
-        self,
-        job_id: UUID,
-        stage_start: int,
-        stage_end: int,
-        tasks: List[asyncio.Task],
-        interval_seconds: float = 1.5,
-    ) -> None:
-        # Keep the UI moving during long external calls even before the first
-        # scene completes, but never claim the stage is fully done.
-        if not tasks:
-            return
-
-        span = max(stage_end - stage_start, 0)
-        heartbeat_ceiling = stage_start + max(span - 2, 0)
-        progress = stage_start
-
-        while True:
-            if all(task.done() for task in tasks):
-                return
-
-            await asyncio.sleep(interval_seconds)
-            if all(task.done() for task in tasks):
-                return
-
-            progress = min(progress + 1, heartbeat_ceiling)
-            await self.video_service._update_job(job_id, JobStatus.RUNNING, progress)
 
     async def _run_async_callable_in_thread(self, async_callable, *args):
         return await asyncio.to_thread(self._run_async_callable_sync, async_callable, *args)

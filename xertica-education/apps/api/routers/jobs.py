@@ -9,8 +9,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
-from config.dependencies import get_jobs_service
+from config.dependencies import get_jobs_service, get_video_service
 from services.jobs.service import JobsService
+from services.video.service import VideoService
 from models.dto.requests import CreateJobRequest
 from models.dto.responses import JobResponse
 from typing import Dict
@@ -36,7 +37,8 @@ async def create_job(
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: UUID,
-    jobs_service: JobsService = Depends(get_jobs_service)
+    jobs_service: JobsService = Depends(get_jobs_service),
+    video_service: VideoService = Depends(get_video_service),
 ):
     """
     Retrieves the status and progress details of a specific job by its ID.
@@ -45,6 +47,7 @@ async def get_job(
     """
     job = await jobs_service.get_job_status(job_id)
     if not job:
+        job = await video_service.get_video_job_record(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-
