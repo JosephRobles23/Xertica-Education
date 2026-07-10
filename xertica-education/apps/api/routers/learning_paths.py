@@ -17,6 +17,7 @@ from config.dependencies import (
     get_source_link_repository, get_linker, get_route_structurer,
     get_infographic_service,
     get_approved_research_source_repository,
+    get_lab_service,
 )
 from config.settings import settings
 from services.route.service import RouteService
@@ -29,6 +30,7 @@ from repositories.sourcing.mapping import route_sources_to_domain
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
 from services.infographic.service import InfographicService
+from services.lab.service import LabService
 from models.domain.approved_research_source import ApprovedResearchSource
 from datetime import datetime, timezone
 from typing import Dict, Any, List
@@ -114,6 +116,48 @@ def _prepare_research_sources_for_route(sources: list[dict]) -> tuple[list[dict]
         for source in manual_candidates[MAX_MANUAL_REVIEW_SOURCES:]
     )
     return route_sources, auto_approved
+
+
+def _resolve_company_name(route: dict) -> str:
+    cust_ctx = route.get("customerContext", {}) or {}
+    company_name = cust_ctx.get("companyName") or cust_ctx.get("company")
+    if not company_name:
+        url = cust_ctx.get("url", "") or ""
+        if url:
+            domain = urlparse(url if url.startswith("http") else f"https://{url}").hostname or ""
+            parts = domain.replace("www.", "").split(".")
+            if parts:
+                company_name = parts[0].capitalize()
+    if not company_name:
+        company_name = cust_ctx.get("industry") or "la empresa del cliente"
+    return company_name
+
+
+def _derive_module_objective(module: dict, route: dict) -> str:
+    explicit = module.get("objective") or module.get("learningObjective") or module.get("learning_objective")
+    if explicit:
+        return explicit
+
+    description = module.get("description") or module.get("descripcion") or ""
+    summary = next(
+        (
+            content.get("summary")
+            for content in module.get("contents", [])
+            if content.get("summary")
+        ),
+        "",
+    )
+    route_objective = route.get("objective") or ""
+    return description or summary or route_objective or f"Aplicar {module.get('name', 'el modulo')} de forma practica."
+
+
+def _approved_route_sources(route: dict) -> list[dict]:
+    approved = []
+    for source in route.get("sources", []) or []:
+        status = source.get("status")
+        if source.get("verified") or status == "approved":
+            approved.append(source)
+    return approved
 
 
 logger = logging.getLogger(__name__)
@@ -761,6 +805,92 @@ async def regenerate_lesson(
     return updated
 
 
+@router.post("/{route_id}/modules/{module_id}/lab/regenerate", response_model=Dict[str, Any])
+async def regenerate_lab(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any] | None = None,
+    route_service: RouteService = Depends(get_route_service),
+    lab_service: LabService = Depends(get_lab_service),
+    approved_sources_repo=Depends(get_approved_research_source_repository),
+):
+    """
+    Genera o regenera un laboratorio practico para un modulo especifico.
+    Usa contexto de ruta, modulo, customer context, fuentes aprobadas y RAG.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    modules = route.get("modules", [])
+    target_module = next((module for module in modules if module.get("id") == module_id), None)
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    resolved_route_id = route_service._resolve_id(route_id)
+    user_prompt = payload.get("user_prompt") if payload else None
+    company_name = _resolve_company_name(route)
+    module_objective = _derive_module_objective(target_module, route)
+    customer_context = route.get("customerContext", {}) or {}
+
+    approved_repo_sources = await approved_sources_repo.list_by_route(resolved_route_id, module_id=module_id)
+    route_level_approved = _approved_route_sources(route)
+
+    approved_sources_by_key: dict[str, dict] = {}
+    for source in route_level_approved:
+        key = source.get("url") or source.get("title") or ""
+        if key:
+            approved_sources_by_key[key] = source
+
+    for source in approved_repo_sources:
+        key = source.url or source.title
+        approved_sources_by_key[key] = {
+            "id": str(source.id) if source.id else None,
+            "title": source.title,
+            "url": source.url,
+            "kind": source.source_type,
+            "verified": source.is_verified,
+            "status": source.status,
+            "toolName": source.tool_name,
+            "metadata": source.metadata,
+        }
+
+    approved_sources = list(approved_sources_by_key.values())
+
+    lab = await lab_service.generate_lab(
+        route_id=resolved_route_id,
+        module_id=module_id,
+        route_name=route.get("name", "Ruta"),
+        route_objective=route.get("objective", ""),
+        module_name=target_module.get("name", "Modulo"),
+        module_description=target_module.get("description", "Descripcion") or target_module.get("descripcion", ""),
+        module_objective=module_objective,
+        company_name=company_name,
+        customer_context=customer_context,
+        approved_sources=approved_sources,
+        user_prompt=user_prompt,
+    )
+
+    target_module["lab"] = {
+        key: value
+        for key, value in lab.items()
+        if key != "provenance"
+    }
+
+    for content in target_module.get("contents", []):
+        if content.get("kind") == "lab":
+            content["status"] = "generado"
+
+    pack = route.get("pack", {}) or {}
+    pack["lab"] = target_module["lab"]
+
+    updated = await route_service.update_route(route_id, {
+        "modules": modules,
+        "pack": pack,
+    })
+    return updated
+
+
 @router.post("/{route_id}/modules/{module_id}/infographic/regenerate", response_model=Dict[str, Any])
 async def regenerate_module_infographic(
     route_id: str,
@@ -850,5 +980,3 @@ async def regenerate_module_infographic(
         "modules": modules
     })
     return updated
-
-

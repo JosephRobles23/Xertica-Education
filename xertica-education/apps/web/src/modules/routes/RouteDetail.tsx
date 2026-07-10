@@ -742,6 +742,7 @@ function ContentReviewPanel({
   const label = KIND_LABEL[content.kind]
   const isVideo = content.kind === 'video'
   const isLab = content.kind === 'lab'
+  const hasStructuredLab = Boolean(module.lab?.instructions?.length || route.pack.lab.instructions?.length)
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
   const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
@@ -1052,6 +1053,27 @@ function ContentReviewPanel({
                     description: e instanceof Error ? e.message : 'Error desconocido',
                   })
                 }
+              } else if (content.kind === 'lab') {
+                const toastId = toast.loading('Generando laboratorio práctico…', {
+                  description: 'Combinando fuentes aprobadas, customer context y knowledge base.',
+                })
+                try {
+                  await api.request(`/learning-paths/${route.id}/modules/${module.id}/lab/regenerate`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      user_prompt: prompt,
+                    }),
+                  })
+                  refineContent(route.id, module.id, content.kind)
+                  await fetchRoutes()
+                  toast.success('Laboratorio regenerado con éxito', { id: toastId })
+                } catch (e) {
+                  console.error(e)
+                  toast.error('Error al regenerar el laboratorio', {
+                    id: toastId,
+                    description: e instanceof Error ? e.message : 'Error desconocido',
+                  })
+                }
               } else {
                 refineContent(route.id, module.id, content.kind)
               }
@@ -1103,6 +1125,41 @@ function ContentReviewPanel({
           </span>
           <ArrowRight className="size-4 text-primary" />
         </button>
+      )}
+
+      {isLab && !hasStructuredLab && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-dashed border-primary/35 bg-primary/5 px-3.5 py-3">
+          <div>
+            <div className="text-[13px] font-semibold text-ink">Laboratorio aún no generado</div>
+            <div className="mt-0.5 text-[11.5px] text-muted-foreground">
+              Genera una práctica real usando el contexto de la ruta, fuentes aprobadas y KB.
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const toastId = toast.loading('Generando laboratorio práctico…', {
+                description: 'Armando una actividad contextualizada para este módulo.',
+              })
+              try {
+                await api.request(`/learning-paths/${route.id}/modules/${module.id}/lab/regenerate`, {
+                  method: 'POST',
+                  body: JSON.stringify({}),
+                })
+                await fetchRoutes()
+                toast.success('Laboratorio generado', { id: toastId })
+              } catch (e) {
+                console.error(e)
+                toast.error('No se pudo generar el laboratorio', {
+                  id: toastId,
+                  description: e instanceof Error ? e.message : 'Error desconocido',
+                })
+              }
+            }}
+          >
+            <Sparkles /> Generar laboratorio
+          </Button>
+        </div>
       )}
 
       {isLab && labGuideOk && status !== 'aprobado' && (
