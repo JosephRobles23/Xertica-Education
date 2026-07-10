@@ -294,7 +294,7 @@ export function InfografiaView({
                 className="w-full text-xs gap-1.5 h-8"
                 onClick={() => handleRegenerate(aspectRatio)}
               >
-                <Sparkles className="size-3.5" /> Refinar
+                <Sparkles className="size-3.5" /> Generar
               </Button>
             )}
           </div>

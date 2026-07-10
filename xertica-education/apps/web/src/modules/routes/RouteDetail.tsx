@@ -1259,65 +1259,6 @@ export default function Ruta() {
           Ruta {routeOrderNo} · {route.name}
         </Eyebrow>
 
-        {/* Contexto del Cliente */}
-        {route.customerContext && (route.customerContext.companyName || route.customerContext.url || route.customerContext.industry || route.customerContext.area) && (
-          <Card className="mb-7 gap-2.5 border-l-[3px] border-l-accent p-5">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-accent-foreground">
-              Contexto del Cliente
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-[13px] text-muted-foreground">
-              {/* Show companyName; if absent, infer from URL domain */}
-              {(route.customerContext.companyName || route.customerContext.url) && (
-                <span>
-                  <span className="font-semibold text-ink">Empresa:</span>{' '}
-                  {route.customerContext.companyName
-                    || (() => {
-                        try {
-                          const raw = route.customerContext.url || ''
-                          const url = raw.startsWith('http') ? raw : `https://${raw}`
-                          const host = new URL(url).hostname.replace('www.', '')
-                          const name = host.split('.')[0] || ''
-                          if (!name) return raw
-                          return name.charAt(0).toUpperCase() + name.slice(1)
-                        } catch { return route.customerContext.url }
-                      })()
-                  }
-                </span>
-              )}
-              {route.customerContext.industry && (
-                <span>
-                  <span className="font-semibold text-ink">Industria:</span>{' '}
-                  {route.customerContext.industry}
-                </span>
-              )}
-              {route.customerContext.area && (
-                <span>
-                  <span className="font-semibold text-ink">Área:</span>{' '}
-                  {route.customerContext.area}
-                </span>
-              )}
-              {route.customerContext.audienceLevel && (
-                <span>
-                  <span className="font-semibold text-ink">Nivel:</span>{' '}
-                  {route.customerContext.audienceLevel}
-                </span>
-              )}
-              {route.customerContext.url && (
-                <span>
-                  <span className="font-semibold text-ink">URL:</span>{' '}
-                  <a
-                    href={route.customerContext.url.startsWith('http') ? route.customerContext.url : `https://${route.customerContext.url}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:text-primary/80"
-                  >
-                    {route.customerContext.url}
-                  </a>
-                </span>
-              )}
-            </div>
-          </Card>
-        )}
 
         {/* Módulo activo */}
         <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
