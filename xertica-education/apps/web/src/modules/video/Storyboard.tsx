@@ -396,8 +396,8 @@ export default function Storyboard() {
     }
   }
 
-  const savedVideoUrl = route ? storyboardVideoUrlOf(route.id) : ''
-  const savedJobId = route ? storyboardJobIdOf(route.id) : undefined
+  const savedVideoUrl = route ? storyboardVideoUrlOf(route.id, moduleId) : ''
+  const savedJobId = route ? storyboardJobIdOf(route.id, moduleId) : undefined
   const activeStoryboardJob = savedJobId ? activeJobs[savedJobId] : undefined
   const resolvedVideoUrl = videoUrl || savedVideoUrl
 
@@ -416,9 +416,9 @@ export default function Storyboard() {
         const finalUrl = videoUrlFromAsset(asset)
         if (!finalUrl) return
         setVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl, moduleId)
         setRenderingState('success')
-        clearStoryboardJobId(route.id)
+        clearStoryboardJobId(route.id, moduleId)
       })
       .catch(() => {})
 
@@ -443,7 +443,7 @@ export default function Storyboard() {
       if (savedVideoUrl) {
         setVideoUrl(savedVideoUrl)
         setRenderingState('success')
-        clearStoryboardJobId(route.id)
+        clearStoryboardJobId(route.id, moduleId)
         return
       }
 
@@ -460,11 +460,10 @@ export default function Storyboard() {
     route,
     savedJobId,
     savedVideoUrl,
+    moduleId,
     activeStoryboardJob,
     trackJob,
-    setStoryboardVideoUrl,
     clearStoryboardJobId,
-    approveStoryboard,
   ])
 
   useEffect(() => {
@@ -480,9 +479,9 @@ export default function Storyboard() {
       setRenderingState('success')
       setVideoUrl(finalUrl)
       if (finalUrl) {
-        setStoryboardVideoUrl(route.id, finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl, moduleId)
       }
-      clearStoryboardJobId(route.id)
+      clearStoryboardJobId(route.id, moduleId)
       approveStoryboard(route.id)
       toast.success('¡Video generado con éxito!', { id: 'render-job' })
       return
@@ -490,7 +489,7 @@ export default function Storyboard() {
 
     if (activeStoryboardJob.status === 'failed') {
       setRenderingState('failed')
-      clearStoryboardJobId(route.id)
+      clearStoryboardJobId(route.id, moduleId)
       toast.error('La generación del video falló', { id: 'render-job' })
       return
     }
@@ -500,6 +499,7 @@ export default function Storyboard() {
     route,
     savedJobId,
     activeStoryboardJob,
+    moduleId,
     setStoryboardVideoUrl,
     clearStoryboardJobId,
     approveStoryboard,
@@ -542,10 +542,10 @@ export default function Storyboard() {
         })
       })
       const jId = res.job_id
-      setStoryboardJobId(route.id, jId)
+      setStoryboardJobId(route.id, jId, moduleId)
       void trackJob(jId).catch(() => {
         setRenderingState('failed')
-        clearStoryboardJobId(route.id)
+        clearStoryboardJobId(route.id, moduleId)
         toast.error('La generación del video falló', { id: 'render-job' })
       })
 

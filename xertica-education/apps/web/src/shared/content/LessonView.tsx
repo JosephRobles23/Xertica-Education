@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { BookOpen, Download, Loader2, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { BookOpen, Check, Download, Loader2, Sparkles, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import type { LessonContent } from '@/shared/lib/types'
 import { api } from '@/shared/lib/api'
 import { useStore } from '@/shared/store'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
+import { Input } from '@/shared/ui/input'
+import { Textarea } from '@/shared/ui/textarea'
 
 const renderFormattedText = (text: string) => {
   if (!text) return null
@@ -32,17 +34,30 @@ export function LessonView({
   className,
   routeId,
   moduleId,
+  editing = false,
+  onSave,
+  onCancelEdit,
 }: {
   lesson: LessonContent
   className?: string
   routeId?: string
   moduleId?: string
+  editing?: boolean
+  onSave?: (lesson: LessonContent) => Promise<void>
+  onCancelEdit?: () => void
 }) {
   const [generating, setGenerating] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<LessonContent>(() => cloneLesson(lesson))
   const { fetchRoutes } = useStore()
 
   const hasLesson = lesson && lesson.sections && lesson.sections.length > 0
+
+  useEffect(() => {
+    if (!editing) return
+    setDraft(cloneLesson(lesson))
+  }, [editing, lesson])
 
   const handleGenerate = async () => {
     if (!routeId || !moduleId) return
@@ -114,6 +129,132 @@ export function LessonView({
             </>
           )}
         </Button>
+      </div>
+    )
+  }
+
+  if (editing) {
+    return (
+      <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
+        <div className="flex flex-col gap-4 md:col-span-2">
+          {draft.sections.map((section, index) => (
+            <div key={`${section.heading}-${index}`} className="rounded-xl border-[1.5px] bg-card p-4.5">
+              <div className="mb-3 flex items-center gap-2">
+                <BookOpen className="size-3.5 text-primary" />
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  Sección {index + 1}
+                </span>
+              </div>
+              <div className="space-y-3">
+                <Input
+                  value={section.heading}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      sections: prev.sections.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, heading: event.target.value } : item,
+                      ),
+                    }))
+                  }
+                  placeholder="Título de la sección"
+                />
+                <Textarea
+                  rows={8}
+                  value={section.body}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      sections: prev.sections.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, body: event.target.value } : item,
+                      ),
+                    }))
+                  }
+                  placeholder="Texto de la sección"
+                  className="resize-y"
+                />
+              </div>
+            </div>
+          ))}
+
+          {draft.terms.length > 0 && (
+            <div>
+              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                Términos clave
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {draft.terms.map((term, index) => (
+                  <div key={`${term.term}-${index}`} className="rounded-xl border-[1.5px] bg-card p-4">
+                    <div className="space-y-3">
+                      <Input
+                        value={term.term}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            terms: prev.terms.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, term: event.target.value } : item,
+                            ),
+                          }))
+                        }
+                        placeholder="Término"
+                      />
+                      <Textarea
+                        rows={4}
+                        value={term.def}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            terms: prev.terms.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, def: event.target.value } : item,
+                            ),
+                          }))
+                        }
+                        placeholder="Definición"
+                        className="resize-y"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border-[1.5px] border-accent bg-primary/6 p-4.5 shadow-(--shadow-soft)">
+            <div className="mb-2 text-[13px] font-semibold text-ink">Edición manual</div>
+            <p className="text-[11.5px] leading-snug text-muted-foreground">
+              Ajusta el texto directamente y guarda los cambios cuando quede listo para revisión humana.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  if (!onSave) return
+                  setSaving(true)
+                  try {
+                    await onSave(draft)
+                  } finally {
+                    setSaving(false)
+                  }
+                }}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Check /> Guardar cambios
+                  </>
+                )}
+              </Button>
+              <Button size="sm" variant="outline" onClick={onCancelEdit} disabled={saving}>
+                <X /> Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -203,4 +344,12 @@ export function LessonView({
       </div>
     </div>
   )
+}
+
+function cloneLesson(lesson: LessonContent): LessonContent {
+  return {
+    ...lesson,
+    sections: lesson.sections.map((section) => ({ ...section })),
+    terms: lesson.terms.map((term) => ({ ...term })),
+  }
 }

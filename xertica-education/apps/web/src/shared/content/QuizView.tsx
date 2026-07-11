@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Download, Loader2, RotateCcw, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Download, Loader2, RotateCcw, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
+import { Input } from '@/shared/ui/input'
 import { Textarea } from '@/shared/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import type { QuizContent } from '@/shared/lib/types'
@@ -15,18 +16,31 @@ export function QuizView({
   className,
   routeId,
   moduleId,
+  editing = false,
+  onSave,
+  onCancelEdit,
 }: {
   quiz: QuizContent
   className?: string
   routeId?: string
   moduleId?: string
+  editing?: boolean
+  onSave?: (quiz: QuizContent) => Promise<void>
+  onCancelEdit?: () => void
 }) {
   const [feedback, setFeedback] = useState('')
   const [generating, setGenerating] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<QuizContent>(() => cloneQuiz(quiz))
   const { fetchRoutes } = useStore()
 
   const hasQuiz = quiz && quiz.questions && quiz.questions.length > 0
+
+  useEffect(() => {
+    if (!editing) return
+    setDraft(cloneQuiz(quiz))
+  }, [editing, quiz])
 
   const handleGenerate = async () => {
     if (!routeId || !moduleId) return
@@ -101,6 +115,144 @@ export function QuizView({
             </>
           )}
         </Button>
+      </div>
+    )
+  }
+
+  if (editing) {
+    return (
+      <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
+        <div className="flex max-h-[700px] flex-col gap-4 overflow-y-auto pr-1 md:col-span-2">
+          {draft.questions.map((question, questionIndex) => (
+            <div key={`${question.q}-${questionIndex}`} className="rounded-xl border-[1.5px] bg-card p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="font-mono text-xs font-semibold text-primary">
+                  {String(questionIndex + 1).padStart(2, '0')}
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  Pregunta editable
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <Textarea
+                  rows={3}
+                  value={question.q}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      questions: prev.questions.map((item, itemIndex) =>
+                        itemIndex === questionIndex ? { ...item, q: event.target.value } : item,
+                      ),
+                    }))
+                  }
+                  placeholder="Texto de la pregunta"
+                  className="resize-y"
+                />
+
+                <div className="space-y-2">
+                  {question.opts.map((option, optionIndex) => {
+                    const isCorrect = optionIndex === question.correct
+                    return (
+                      <div key={`${option}-${optionIndex}`} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              questions: prev.questions.map((item, itemIndex) =>
+                                itemIndex === questionIndex ? { ...item, correct: optionIndex } : item,
+                              ),
+                            }))
+                          }
+                          className={cn(
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors',
+                            isCorrect
+                              ? 'border-success bg-success text-success-foreground'
+                              : 'border-input bg-background text-muted-foreground hover:border-primary',
+                          )}
+                        >
+                          {String.fromCharCode(65 + optionIndex)}
+                        </button>
+                        <Input
+                          value={option}
+                          onChange={(event) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              questions: prev.questions.map((item, itemIndex) =>
+                                itemIndex === questionIndex
+                                  ? {
+                                      ...item,
+                                      opts: item.opts.map((currentOption, currentOptionIndex) =>
+                                        currentOptionIndex === optionIndex ? event.target.value : currentOption,
+                                      ),
+                                    }
+                                  : item,
+                              ),
+                            }))
+                          }
+                          placeholder={`Opción ${String.fromCharCode(65 + optionIndex)}`}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <Textarea
+                  rows={4}
+                  value={question.explanation || ''}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      questions: prev.questions.map((item, itemIndex) =>
+                        itemIndex === questionIndex ? { ...item, explanation: event.target.value } : item,
+                      ),
+                    }))
+                  }
+                  placeholder="Explicación de la respuesta correcta"
+                  className="resize-y"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border-[1.5px] border-accent bg-primary/6 p-4.5 shadow-(--shadow-soft)">
+            <div className="mb-2 text-[13px] font-semibold text-ink">Edición manual</div>
+            <p className="text-[11.5px] leading-snug text-muted-foreground">
+              Puedes corregir preguntas, opciones y la respuesta correcta sin pedir otra generación.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  if (!onSave) return
+                  setSaving(true)
+                  try {
+                    await onSave(draft)
+                  } finally {
+                    setSaving(false)
+                  }
+                }}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Check /> Guardar cambios
+                  </>
+                )}
+              </Button>
+              <Button size="sm" variant="outline" onClick={onCancelEdit} disabled={saving}>
+                <X /> Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -249,4 +401,14 @@ export function QuizView({
       </div>
     </div>
   )
+}
+
+function cloneQuiz(quiz: QuizContent): QuizContent {
+  return {
+    ...quiz,
+    questions: quiz.questions.map((question) => ({
+      ...question,
+      opts: [...question.opts],
+    })),
+  }
 }

@@ -39,13 +39,19 @@ import { Eyebrow, PageTitle } from '@/shared/components/PageHeader'
 import { StatusBadge } from '@/shared/content/StatusBadge'
 import { ContentPreview } from '@/shared/content/ContentPreview'
 import { InfografiaView } from '@/shared/content/InfografiaView'
+import { LabView } from '@/shared/content/LabView'
+import { LessonView } from '@/shared/content/LessonView'
+import { QuizView } from '@/shared/content/QuizView'
 import { SourceVideoPreview } from '@/shared/content/SourceVideoPreview'
 import { RefinePopover } from '@/modules/routes/components/RefinePopover'
 import { api } from '@/shared/lib/api'
 import {
   KIND_LABEL,
+  type LabContent,
+  type LessonContent,
   type LearningRoute,
   type ModuleContentRef,
+  type QuizContent,
   type RouteModule,
   type Source,
 } from '@/shared/lib/types'
@@ -624,6 +630,8 @@ function ContentReviewPanel({
   const [findingAnotherVideo, setFindingAnotherVideo] = useState(false)
   const [relinking, setRelinking] = useState(false)
   const [backendVideoUrl, setBackendVideoUrl] = useState('')
+  const [startingAiVideo, setStartingAiVideo] = useState(false)
+  const [isManualEditing, setIsManualEditing] = useState(false)
   // Vinculación Source↔Módulo persistida (ADR-0012): si existe, prevalece sobre la heurística.
   const [linkedUrl, setLinkedUrl] = useState<string | null>(null)
   const [linkOrigin, setLinkOrigin] = useState<'llm' | 'heuristic' | null>(null)
@@ -635,12 +643,14 @@ function ContentReviewPanel({
   const hasStructuredLab = Boolean(module.lab?.instructions?.length || route.pack.lab.instructions?.length)
   const labGuideOk = isLabGuideApproved(route.id)
   const labNeedsReview = isLab && status !== 'aprobado' && !labGuideOk
-  const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id) : ''
-  const storyboardJobId = isVideo ? storyboardJobIdOf(route.id) : undefined
+  const storyboardVideoUrl = isVideo ? storyboardVideoUrlOf(route.id, module.id) : ''
+  const storyboardJobId = isVideo ? storyboardJobIdOf(route.id, module.id) : undefined
   const resolvedStoryboardVideoUrl = backendVideoUrl || storyboardVideoUrl
   const activeStoryboardJob = storyboardJobId ? activeJobs[storyboardJobId] : undefined
-  const generatingAiVideo = isVideo && Boolean(
-    activeStoryboardJob && activeStoryboardJob.status !== 'completed' && activeStoryboardJob.status !== 'failed',
+  const generatingAiVideo = isVideo && (
+    startingAiVideo || Boolean(
+      activeStoryboardJob && activeStoryboardJob.status !== 'completed' && activeStoryboardJob.status !== 'failed',
+    )
   )
 
   // Carga la vinculación persistida de este módulo (si la hay).
@@ -679,7 +689,7 @@ function ContentReviewPanel({
         const finalUrl = asset.storage_path || asset.video_url || ''
         if (!finalUrl) return
         setBackendVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl, module.id)
       })
       .catch(() => {})
     return () => {
@@ -694,14 +704,20 @@ function ContentReviewPanel({
   }, [isVideo, storyboardJobId, activeStoryboardJob, trackJob])
 
   useEffect(() => {
+    if (!isVideo || !storyboardJobId || activeStoryboardJob) {
+      setStartingAiVideo(false)
+    }
+  }, [isVideo, storyboardJobId, activeStoryboardJob])
+
+  useEffect(() => {
     if (!isVideo || !storyboardJobId || !activeStoryboardJob) return
     if (activeStoryboardJob.status === 'completed') {
       const finalUrl = activeStoryboardJob.result?.video_url || activeStoryboardJob.result?.videoUrl || ''
       if (finalUrl) {
         setBackendVideoUrl(finalUrl)
-        setStoryboardVideoUrl(route.id, finalUrl)
+        setStoryboardVideoUrl(route.id, finalUrl, module.id)
       }
-      clearStoryboardJobId(route.id)
+      clearStoryboardJobId(route.id, module.id)
       toast.success('Video AI generado', {
         id: `video-job-${route.id}-${module.id}`,
         description: `${module.name} quedó renderizado en segundo plano.`,
@@ -710,7 +726,7 @@ function ContentReviewPanel({
     }
 
     if (activeStoryboardJob.status === 'failed') {
-      clearStoryboardJobId(route.id)
+      clearStoryboardJobId(route.id, module.id)
       toast.error('Falló la generación del video AI', {
         id: `video-job-${route.id}-${module.id}`,
         description: activeStoryboardJob.error || `${module.name} necesita una nueva corrida o ajustes en storyboard.`,
@@ -802,6 +818,7 @@ function ContentReviewPanel({
 
   const generateAiVideo = async () => {
     const toastId = `video-job-${route.id}-${module.id}`
+    setStartingAiVideo(true)
     toast.loading('Iniciando video AI...', {
       id: toastId,
       description: `El render de ${module.name} seguirá en segundo plano mientras avanzas en otros assets.`,
@@ -819,14 +836,15 @@ function ContentReviewPanel({
         }),
       })
 
-      setStoryboardJobId(route.id, res.job_id)
-      void trackJob(res.job_id).catch(() => {})
+      setStoryboardJobId(route.id, res.job_id, module.id)
+      void trackJob(res.job_id).catch(() => setStartingAiVideo(false))
 
       toast.success('Video AI en cola', {
         id: toastId,
         description: 'Puedes abrir el storyboard para afinarlo o seguir trabajando en otros contenidos.',
       })
     } catch (err) {
+      setStartingAiVideo(false)
       toast.error('No se pudo iniciar el video AI', {
         id: toastId,
         description: err instanceof Error ? err.message : 'Error desconocido',
@@ -856,6 +874,77 @@ function ContentReviewPanel({
     </Button>
   )
 
+  const isManualEditable = content.kind === 'lesson' || content.kind === 'quiz' || content.kind === 'lab'
+  const currentEditableContent =
+    content.kind === 'lesson'
+      ? module.lesson || route.pack.lesson
+      : content.kind === 'quiz'
+        ? module.quiz || route.pack.quiz
+        : content.kind === 'lab'
+          ? module.lab || route.pack.lab
+          : null
+  const hasManualContent =
+    content.kind === 'lesson'
+      ? Boolean(currentEditableContent && 'sections' in currentEditableContent && currentEditableContent.sections.length > 0)
+      : content.kind === 'quiz'
+        ? Boolean(currentEditableContent && 'questions' in currentEditableContent && currentEditableContent.questions.length > 0)
+        : content.kind === 'lab'
+          ? Boolean(
+              currentEditableContent &&
+              'classroomText' in currentEditableContent &&
+              currentEditableContent.classroomText?.trim(),
+            ) ||
+            Boolean(
+              currentEditableContent &&
+              'steps' in currentEditableContent &&
+              currentEditableContent.steps.length > 0,
+            )
+          : false
+
+  const saveManualEdit = async (nextContent: LessonContent | QuizContent | LabContent) => {
+    const nextModules = route.modules.map((routeModule) => {
+      if (routeModule.id !== module.id) return routeModule
+
+      return {
+        ...routeModule,
+        [content.kind]: nextContent,
+        contents: routeModule.contents.map((item) =>
+          item.kind === content.kind ? { ...item, status: 'generado' } : item,
+        ),
+      }
+    })
+
+    const nextPack = {
+      ...route.pack,
+      [content.kind]: nextContent,
+    }
+
+    const toastId = toast.loading(`Guardando cambios manuales del ${label.toLowerCase()}…`)
+    try {
+      await api.request(`/learning-paths/${route.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          modules: nextModules,
+          pack: nextPack,
+        }),
+      })
+      refineContent(route.id, module.id, content.kind)
+      await fetchRoutes()
+      setIsManualEditing(false)
+      toast.success(`${label} actualizado`, {
+        id: toastId,
+        description: 'Los cambios manuales ya quedaron guardados en la ruta.',
+      })
+    } catch (error) {
+      console.error(error)
+      toast.error(`No se pudo guardar el ${label.toLowerCase()}`, {
+        id: toastId,
+        description: error instanceof Error ? error.message : 'Error desconocido',
+      })
+      throw error
+    }
+  }
+
   return (
     <div className="rounded-xl border-[1.5px] border-secondary bg-background/70 p-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -870,6 +959,16 @@ function ContentReviewPanel({
         </div>
         <div className="flex gap-2.5">
           {approveButton}
+          {isManualEditable && (
+            <Button
+              variant={isManualEditing ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setIsManualEditing((current) => !current)}
+              disabled={!hasManualContent}
+            >
+              <SquarePen /> {isManualEditing ? 'Editando' : 'Editar'}
+            </Button>
+          )}
           <RefinePopover
             label={label}
             onRefine={async (prompt) => {
@@ -1033,18 +1132,45 @@ function ContentReviewPanel({
 
       {!isVideo && (
         <div className="mb-4">
-          <ContentPreview
-            kind={content.kind}
-            pack={{
-              ...route.pack,
-              infografia: module.infografia || { title: '', bullets: [], footer: ['', ''] },
-              quiz: module.quiz || route.pack.quiz || { questions: [] },
-              lesson: module.lesson || route.pack.lesson,
-              lab: module.lab || route.pack.lab,
-            }}
-            routeId={route.id}
-            moduleId={module.id}
-          />
+          {content.kind === 'lesson' ? (
+            <LessonView
+              lesson={module.lesson || route.pack.lesson}
+              routeId={route.id}
+              moduleId={module.id}
+              editing={isManualEditing}
+              onSave={(nextLesson) => saveManualEdit(nextLesson)}
+              onCancelEdit={() => setIsManualEditing(false)}
+            />
+          ) : content.kind === 'quiz' ? (
+            <QuizView
+              quiz={module.quiz || route.pack.quiz || { questions: [] }}
+              routeId={route.id}
+              moduleId={module.id}
+              editing={isManualEditing}
+              onSave={(nextQuiz) => saveManualEdit(nextQuiz)}
+              onCancelEdit={() => setIsManualEditing(false)}
+            />
+          ) : content.kind === 'lab' ? (
+            <LabView
+              lab={module.lab || route.pack.lab}
+              editing={isManualEditing}
+              onSave={(nextLab) => saveManualEdit(nextLab)}
+              onCancelEdit={() => setIsManualEditing(false)}
+            />
+          ) : (
+            <ContentPreview
+              kind={content.kind}
+              pack={{
+                ...route.pack,
+                infografia: module.infografia || { title: '', bullets: [], footer: ['', ''] },
+                quiz: module.quiz || route.pack.quiz || { questions: [] },
+                lesson: module.lesson || route.pack.lesson,
+                lab: module.lab || route.pack.lab,
+              }}
+              routeId={route.id}
+              moduleId={module.id}
+            />
+          )}
         </div>
       )}
     </div>

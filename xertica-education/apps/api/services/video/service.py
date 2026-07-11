@@ -116,20 +116,15 @@ class VideoService(VideoServiceInterface):
                 use_mock=use_mock,
             )
 
-        render_target = None
-        if route_id and module_id:
-            render_target = {
+        render_target = (
+            {
                 "route_id": str(route_id),
                 "module_id": str(module_id),
                 "component_kind": component_kind or "video",
             }
-            if component_id is None:
-                component_id = await self._resolve_video_component_id(
-                    route_id=str(route_id),
-                    module_id=str(module_id),
-                    component_kind=component_kind or "video",
-                    create_if_missing=True,
-                )
+            if route_id and module_id
+            else None
+        )
 
         job_id = uuid4()
         now_str = datetime.now(timezone.utc).isoformat()
@@ -154,34 +149,67 @@ class VideoService(VideoServiceInterface):
         else:
             self._fallback_jobs[job_id] = job_data
 
-        # Determine the storyboard source.
-        storyboard = None
-        storyboard_source = "default_storyboard"
-        if custom_storyboard:
-            storyboard = custom_storyboard.model_dump()
-            storyboard_source = "reviewed_storyboard"
-        elif component_id:
-            storyboard = await self._get_or_create_storyboard(component_id)
-            storyboard_source = "component_storyboard"
-        else:
-            # Default demo storyboard showcasing all visual types.
-            storyboard = self._get_default_storyboard()
-
-        if component_id:
-            await self._ensure_video_asset_started(
-                component_id=component_id,
-                storyboard=storyboard,
-                storyboard_source=storyboard_source,
-            )
-
-        # Spawn the rendering pipeline as a background task.
+        # Storyboard generation can call the LLM. Keep it inside the job so every
+        # entry point acknowledges the render immediately.
         task = asyncio.create_task(
-            self._run_render_job(job_id, component_id, storyboard, storyboard_source, render_target)
+            self._prepare_and_run_render_job(
+                job_id=job_id,
+                component_id=component_id,
+                render_target=render_target,
+                custom_storyboard=custom_storyboard,
+            )
         )
         if task is not None:
             self._render_tasks.add(task)
             task.add_done_callback(self._render_tasks.discard)
         return job_id
+
+    async def _prepare_and_run_render_job(
+        self,
+        job_id: UUID,
+        component_id: Optional[UUID],
+        render_target: Optional[dict],
+        custom_storyboard: Optional[StoryboardRequest],
+    ) -> None:
+        """Prepare a render without delaying the ``POST /videos/generate`` response."""
+        try:
+            await self._update_job(job_id, JobStatus.RUNNING, 1)
+
+            if render_target and component_id is None:
+                component_id = await self._resolve_video_component_id(
+                    route_id=render_target["route_id"],
+                    module_id=render_target["module_id"],
+                    component_kind=render_target["component_kind"],
+                    create_if_missing=True,
+                )
+
+            if custom_storyboard:
+                storyboard = custom_storyboard.model_dump()
+                storyboard_source = "reviewed_storyboard"
+            elif component_id:
+                storyboard = await self._get_or_create_storyboard(component_id)
+                storyboard_source = "component_storyboard"
+            else:
+                storyboard = self._get_default_storyboard()
+                storyboard_source = "default_storyboard"
+
+            if component_id:
+                await self._ensure_video_asset_started(
+                    component_id=component_id,
+                    storyboard=storyboard,
+                    storyboard_source=storyboard_source,
+                )
+
+            await self._run_render_job(
+                job_id,
+                component_id,
+                storyboard,
+                storyboard_source,
+                render_target,
+            )
+        except Exception as error:
+            print(f"[Job {job_id}] Failed while preparing video render: {error}")
+            await self._update_job(job_id, JobStatus.FAILED, 100, error=str(error))
 
     async def generate_storyboard(
         self,

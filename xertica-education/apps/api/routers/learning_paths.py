@@ -29,7 +29,7 @@ from repositories.sourcing.interface import SourcingRepositoryInterface
 from repositories.sourcing.mapping import route_sources_to_domain
 from adapters.parser.simple import SimpleParserAdapter
 from models.common import JobStatus, as_uuid
-from services.infographic.service import InfographicService
+from services.infographic.service import InfographicGenerationError, InfographicService
 from services.lab.service import LabService
 from models.domain.approved_research_source import ApprovedResearchSource
 from datetime import datetime, timezone
@@ -639,16 +639,28 @@ async def regenerate_infographic(
     # Extract word budget or fallback
     word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
     
-    # Call infographic service with user_prompt and aspect_ratio
-    res = await infographic_service.generate_infographic(
-        component_id=component_id,
-        sources=route.get("modules", []),
-        company_name=company_name,
-        word_budget=word_budget,
-        user_prompt=user_prompt,
-        aspect_ratio=aspect_ratio,
-        route_name=route.get("name")
-    )
+    # Call infographic service with user_prompt and aspect_ratio. If generation
+    # fails, do not mutate the existing pack so the previous image remains shown.
+    try:
+        res = await infographic_service.generate_infographic(
+            component_id=component_id,
+            sources=route.get("modules", []),
+            company_name=company_name,
+            word_budget=word_budget,
+            user_prompt=user_prompt,
+            aspect_ratio=aspect_ratio,
+            route_name=route.get("name")
+        )
+    except InfographicGenerationError as exc:
+        raise HTTPException(
+            status_code=503 if exc.retryable else 502,
+            detail={
+                "message": str(exc),
+                "code": "infographic_generation_failed",
+                "retryable": exc.retryable,
+                "previous_asset_preserved": True,
+            },
+        ) from exc
     
     # Update the pack with infographic data, adding a cache-busting query parameter to the URL
     pack = route.get("pack", {}) or {}
@@ -963,17 +975,29 @@ async def regenerate_module_infographic(
     # Extract word budget or fallback
     word_budget = cust_ctx.get("wordBudget") or cust_ctx.get("word_budget") or 120
     
-    # Call infographic service with the specific module info
-    res = await infographic_service.generate_infographic(
-        component_id=component_id,
-        sources=[target_module],
-        company_name=company_name,
-        word_budget=word_budget,
-        user_prompt=user_prompt,
-        aspect_ratio=aspect_ratio,
-        route_name=target_module.get("name", "Módulo"),
-        is_module=True
-    )
+    # Call infographic service with the specific module info. If generation
+    # fails, leave the existing module infographic untouched.
+    try:
+        res = await infographic_service.generate_infographic(
+            component_id=component_id,
+            sources=[target_module],
+            company_name=company_name,
+            word_budget=word_budget,
+            user_prompt=user_prompt,
+            aspect_ratio=aspect_ratio,
+            route_name=target_module.get("name", "Módulo"),
+            is_module=True
+        )
+    except InfographicGenerationError as exc:
+        raise HTTPException(
+            status_code=503 if exc.retryable else 502,
+            detail={
+                "message": str(exc),
+                "code": "infographic_generation_failed",
+                "retryable": exc.retryable,
+                "previous_asset_preserved": True,
+            },
+        ) from exc
     
     # Update module's infographic content
     import time
