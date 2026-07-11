@@ -12,7 +12,7 @@ import { Progress } from '@/shared/ui/progress'
 import { Textarea } from '@/shared/ui/textarea'
 import { PageDescription, PageTitle } from '@/shared/components/PageHeader'
 import { getRoute } from '@/shared/data/routes'
-import type { LearningRoute } from '@/shared/lib/types'
+import type { LearningRoute, RouteModule } from '@/shared/lib/types'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
 
@@ -23,6 +23,12 @@ type StoryboardSource = 'idle' | 'backend' | 'fallback_invalid_target' | 'fallba
 type RenderedVideoAsset = {
   storage_path?: string | null
   video_url?: string | null
+}
+type GenerateStoryboardPayload = {
+  route_id: string
+  module_id: string
+  component_kind: 'video'
+  k: number
 }
 type RenderPhase =
   | 'queueing'
@@ -88,6 +94,12 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 export const isValidUuid = (value: string | undefined): value is string => Boolean(value && UUID_PATTERN.test(value))
 export const hasRenderTargetModuleId = (moduleId: string | undefined): moduleId is string => Boolean(moduleId && moduleId.trim().length > 0)
 export const canRenderAiStoryboard = (storyboardSource: StoryboardSource) => storyboardSource !== 'fallback_invalid_target'
+export const buildGenerateStoryboardPayload = (routeId: string, moduleId: string): GenerateStoryboardPayload => ({
+  route_id: routeId,
+  module_id: moduleId,
+  component_kind: 'video',
+  k: 4,
+})
 export const renderActionLabel = (
   renderingState: 'idle' | 'rendering' | 'success' | 'failed',
   hasExistingRender: boolean,
@@ -201,8 +213,12 @@ const firstWalkthroughUrl = (route: LearningRoute): string => {
 }
 
 
-const buildReviewScenes = (route: LearningRoute): ReviewScene[] => {
-  const lessonLead = route.pack.lesson.sections[0]?.body || route.objective || 'Capacitación integral en arquitectura de sistemas y flujos IA.'
+export const buildReviewScenes = (route: LearningRoute, module?: RouteModule): ReviewScene[] => {
+  const moduleVideo = module?.contents.find((content) => content.kind === 'video')?.summary
+  const moduleLesson = module?.contents.find((content) => content.kind === 'lesson')?.summary
+  const moduleName = module?.name || route.name
+  const moduleContext = moduleVideo || moduleLesson || route.objective
+  const lessonLead = moduleLesson || moduleContext || 'Objetivo pedagógico pendiente de definir.'
 
   const verifiedSources = route.sources.filter((source) => source.verified).slice(0, 3)
   const sourceBullets = verifiedSources.length
@@ -221,13 +237,13 @@ const buildReviewScenes = (route: LearningRoute): ReviewScene[] => {
       sceneNumber: 1,
       tag: 'Pregunta guía',
       budget: 120,
-      narration: `¿Por qué es fundamental dominar ${route.name}? Conectamos su objetivo con el negocio.`,
+      narration: `¿Por qué es fundamental dominar ${moduleName}? Conectamos este módulo con una decisión concreta.`,
       visualType: 'callout',
       visualConfig: {
         callout_style: 'info',
-        text: `¿Por qué importa ${route.name}?`,
+        text: `¿Por qué importa ${moduleName}?`,
       },
-      teachingPoint: `Conectar ${route.name} con una pregunta de aprendizaje concreta.`,
+      teachingPoint: `Conectar ${moduleName} con una pregunta de aprendizaje concreta.`,
       pedagogicalIntent: 'Abrir el video con una pregunta útil, no con una intro decorativa.',
       teachingPattern: 'framing_question',
       visualRationale: 'Un callout deja explícita la pregunta guía sin fingir una metáfora visual todavía no validada.',
@@ -240,8 +256,8 @@ const buildReviewScenes = (route: LearningRoute): ReviewScene[] => {
       narration: `Para entender los cimientos técnicos, examinamos la arquitectura de la solución: ${lessonLead}`,
       visualType: 'text_card',
       visualConfig: {
-        title: route.name,
-        subtitle: cleanBullets(route.pack.video.caption, ...sourceBullets).join(' • '),
+        title: moduleName,
+        subtitle: cleanBullets(moduleContext, ...sourceBullets).join(' • '),
       },
       teachingPoint: 'Construir un modelo mental inicial del tema.',
       pedagogicalIntent: 'Convertir el objetivo del módulo en una estructura visible.',
@@ -256,12 +272,12 @@ const buildReviewScenes = (route: LearningRoute): ReviewScene[] => {
       narration: 'Desglosamos las etapas fundamentales que sustentan este flujo para asegurar la calidad.',
       visualType: 'progress_bar',
       visualConfig: {
-        title: 'Pilares del Sistema',
+        title: `Pasos de ${moduleName}`,
         progress: 60,
         steps: cleanBullets(
-          route.pack.lesson.sections[0]?.heading,
-          route.pack.lesson.sections[1]?.heading,
-          route.pack.lesson.sections[2]?.heading,
+          moduleLesson,
+          moduleVideo,
+          module?.contents.find((content) => content.kind === 'lab')?.summary,
           'Control de calidad y verificación humana por compuertas'
         ),
       },
@@ -310,6 +326,32 @@ const buildReviewScenes = (route: LearningRoute): ReviewScene[] => {
   ]
 }
 
+const VisualTypePreview = ({ type }: { type: VisualType }) => {
+  const bars = type === 'bar_chart' || type === 'kpi_grid' || type === 'progress_bar'
+  const split = type === 'comparison'
+  const terminal = type === 'terminal_scene' || type === 'screenshot_scene'
+  const media = type === 'ai_video' || type === 'ai_illustration'
+  const chart = type === 'line_chart' || type === 'pie_chart'
+
+  return (
+    <div aria-hidden="true" className="relative h-10 w-16 shrink-0 overflow-hidden rounded-md border border-slate-700 bg-slate-950 p-1.5 text-slate-100">
+      {split ? (
+        <div className="grid h-full grid-cols-2 gap-1"><span className="rounded bg-rose-400/30" /><span className="rounded bg-emerald-400/30" /></div>
+      ) : terminal ? (
+        <div className="space-y-1"><div className="h-1 w-full rounded bg-slate-600" /><div className="h-1 w-3/4 rounded bg-cyan-300" /><div className="h-1 w-1/2 rounded bg-slate-300" /></div>
+      ) : bars ? (
+        <div className="flex h-full items-end gap-1"><span className="h-2 w-full bg-cyan-300" /><span className="h-4 w-full bg-amber-300" /><span className="h-6 w-full bg-emerald-300" /></div>
+      ) : chart ? (
+        <div className="m-auto mt-1 size-6 rounded-full border-[5px] border-cyan-300 border-r-amber-300" />
+      ) : media ? (
+        <div className="flex h-full items-center justify-center bg-gradient-to-br from-cyan-400/40 to-amber-300/30 text-sm">▶</div>
+      ) : (
+        <div className="space-y-1.5 pt-1"><div className="h-1.5 w-full rounded bg-amber-300" /><div className="h-1 w-4/5 rounded bg-slate-200" /></div>
+      )}
+    </div>
+  )
+}
+
 export default function Storyboard() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -327,7 +369,11 @@ export default function Storyboard() {
     trackJob,
   } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
-  const defaultReviewScenes = useMemo(() => (route ? buildReviewScenes(route) : []), [route])
+  const selectedModule = route?.modules.find((module) => module.id === moduleId)
+  const defaultReviewScenes = useMemo(
+    () => (route ? buildReviewScenes(route, selectedModule) : []),
+    [route, selectedModule],
+  )
   const hasValidRenderTarget = hasRenderTargetModuleId(moduleId)
 
   // Video generation/render states
@@ -353,6 +399,8 @@ export default function Storyboard() {
     }
 
     setStoryboardLoading(true)
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 90000)
     try {
       const data = await api.request<{
         storyboard: { scenes?: StoryboardScene[] }
@@ -361,7 +409,8 @@ export default function Storyboard() {
         '/videos/storyboard',
         {
           method: 'POST',
-          body: JSON.stringify({ route_id: route.id, module_id: moduleId }),
+          body: JSON.stringify(buildGenerateStoryboardPayload(route.id, moduleId)),
+          signal: controller.signal,
         },
       )
 
@@ -384,14 +433,19 @@ export default function Storyboard() {
         id: 'storyboard-fetch',
       })
       return false
-    } catch {
+    } catch (error) {
       setStoryboardSource('fallback_error')
       setStoryboardGrounding({ status: null, chunkCount: 0 })
-      toast.error('No se pudo cargar el storyboard del backend. Se mantiene el borrador actual para que puedas renderizar o volver a intentar.', {
-        id: 'storyboard-fetch',
-      })
+      const timedOut = error instanceof DOMException && error.name === 'AbortError'
+      toast.error(
+        timedOut
+          ? 'El backend tardó demasiado generando el storyboard. Se mantiene el borrador actual para que puedas renderizar o volver a intentar.'
+          : 'No se pudo cargar el storyboard del backend. Se mantiene el borrador actual para que puedas renderizar o volver a intentar.',
+        { id: 'storyboard-fetch' },
+      )
       return false
     } finally {
+      window.clearTimeout(timeoutId)
       setStoryboardLoading(false)
     }
   }
@@ -537,7 +591,7 @@ export default function Storyboard() {
           module_id: moduleId,
           component_kind: 'video',
           component_id: null,
-          custom_storyboard: buildReviewedStoryboard(route.name, totalBudget, reviewScenes),
+          custom_storyboard: buildReviewedStoryboard(selectedModule?.name || route.name, totalBudget, reviewScenes),
           use_mock: false
         })
       })
@@ -624,7 +678,7 @@ export default function Storyboard() {
             <div>
               <h2 className="mb-1 font-display text-lg font-medium text-ink">Storyboard del video</h2>
               <p className="text-[13px] text-muted-foreground">
-                {storyboardSource === 'backend' ? 'Versión ligada a la ruta real.' : 'Borrador listo para usar.'} Objetivo {route.pack.video.duration || '02:00'} · {totalWords} palabras totales.
+                {storyboardSource === 'backend' ? 'Versión ligada al Módulo real.' : 'Borrador específico del Módulo.'} {selectedModule?.name || 'Módulo'} · objetivo {route.pack.video.duration || '02:00'} · {totalWords} palabras.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-start gap-3 sm:justify-end">
@@ -782,30 +836,23 @@ export default function Storyboard() {
                   </div>
                   {isEditing ? (
                     <>
-                      <div className="flex items-center gap-3">
-                        <label className="shrink-0 text-[11px] font-medium text-muted-foreground">
-                          Tipo visual:
-                        </label>
-                        <select
-                          value={scene.visualType}
-                          onChange={(e) => {
-                            setReviewScenes((current) =>
-                              current.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? updateSceneVisualType(item, e.target.value as VisualType)
-                                  : item,
-                              ),
-                            )
-                          }}
-                          className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        >
+                      <fieldset>
+                        <legend className="mb-2 text-[11px] font-medium text-muted-foreground">Tipo visual · elige por el ejemplo</legend>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {(Object.keys(VISUAL_META) as VisualType[]).map((type) => (
-                            <option key={type} value={type}>
-                              {VISUAL_META[type].tag} — {type}
-                            </option>
+                            <button
+                              key={type}
+                              type="button"
+                              aria-pressed={scene.visualType === type}
+                              onClick={() => setReviewScenes((current) => current.map((item, itemIndex) => itemIndex === index ? updateSceneVisualType(item, type) : item))}
+                              className={`flex min-w-0 items-center gap-2 rounded-lg border p-2 text-left transition-colors ${scene.visualType === type ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'border-input bg-background hover:bg-muted/50'}`}
+                            >
+                              <VisualTypePreview type={type} />
+                              <span className="min-w-0 text-[11px] font-medium leading-tight text-ink">{VISUAL_META[type].tag}</span>
+                            </button>
                           ))}
-                        </select>
-                      </div>
+                        </div>
+                      </fieldset>
                       <Textarea
                         value={scene.narration}
                         onChange={(event) => {

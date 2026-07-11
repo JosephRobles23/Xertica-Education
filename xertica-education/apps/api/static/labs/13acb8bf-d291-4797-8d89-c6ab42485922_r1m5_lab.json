@@ -1,0 +1,109 @@
+{
+  "title": "Laboratorio: Resolviendo un Desacuerdo Técnico con IA",
+  "objective": "Aplicar un modelo de comunicación asertiva para resolver un desacuerdo técnico con un líder, utilizando Gemini como asistente de redacción.",
+  "scenario": "Eres un colaborador junior en Xertica y has descubierto una función en BigQuery más eficiente. Tu líder de proyecto, presionado por los plazos, rechaza tu sugerencia de usarla, prefiriendo el método tradicional. Debes comunicarte con él para presentar tu propuesta de manera constructiva, buscando una solución que beneficie al proyecto sin ignorar sus preocupaciones.",
+  "estimatedTimeMinutes": 30,
+  "difficulty": "beginner",
+  "tools": [
+    {
+      "name": "Gemini para Google Workspace",
+      "purpose": "Asistente para analizar el contexto del conflicto y redactar un borrador de email asertivo y profesional.",
+      "url": "https://workspace.google.com/solutions/ai/"
+    }
+  ],
+  "prerequisites": [
+    "Conocimiento del modelo de comunicación asertiva visto en el módulo.",
+    "Acceso a una cuenta de Google con Gemini habilitado."
+  ],
+  "instructions": [
+    {
+      "step": 1,
+      "title": "Analiza el Conflicto",
+      "description": "Antes de escribir, define por escrito los intereses clave de ambas partes. Tu interés (eficiencia, innovación) y el de tu líder (cumplir plazos, minimizar riesgos). Reconocer la perspectiva del otro es fundamental para una resolución exitosa.",
+      "expectedResult": "Una lista simple con los intereses de cada parte identificados.",
+      "tip": null
+    },
+    {
+      "step": 2,
+      "title": "Diseña tu \"Prompt Maestro\" para Gemini",
+      "description": "Crea un prompt detallado para Gemini. Incluye tu rol, el de tu líder, el contexto del desacuerdo y el tono deseado (asertivo, respetuoso, colaborativo). Un buen prompt es la clave para obtener un resultado útil.",
+      "expectedResult": null,
+      "tip": "No pidas solo 'escribe un email'. Dale a la IA un personaje y un objetivo claro."
+    },
+    {
+      "step": 3,
+      "title": "Genera y Refina tu Borrador",
+      "description": "Utiliza tu prompt en Gemini para generar un borrador inicial del email. Luego, personalízalo: ajusta el tono, añade detalles técnicos específicos y asegúrate de que suene como tú y sea apropiado para la cultura de Xertica.",
+      "expectedResult": "Un primer borrador de email generado por IA, listo para ser editado.",
+      "tip": null
+    },
+    {
+      "step": 4,
+      "title": "Estructura el Email Final",
+      "description": "Organiza tu borrador refinado en un Google Doc. Verifica que contenga una apertura empática, una propuesta basada en datos, una sugerencia de bajo riesgo para probar tu idea y un cierre que invite a la colaboración.",
+      "expectedResult": "El borrador final del email, limpio y estructurado, listo para ser entregado.",
+      "tip": null
+    }
+  ],
+  "deliverable": {
+    "description": "Un borrador de email en un Google Doc, dirigido a tu líder de proyecto, para abordar el desacuerdo técnico.",
+    "format": "Enlace a un Google Doc con permisos de...",
+    "successCriteria": [
+      "El email sigue una estructura de comunicación asertiva: empatía, hechos, propuesta y cierre colaborativo.",
+      "La propuesta está fundamentada en datos o beneficios claros (p. ej. eficiencia, costos) y no solo en una...",
+      "El tono es profesional, respetuoso y busca una solución conjunta, no 'ganar' la discusión."
+    ]
+  },
+  "reflectionQuestions": [
+    "¿Cómo te ayudó Gemini a separar la emoción de los hechos al redactar el email?",
+    "¿Qué parte de la estructura del email crees que es más efectiva para convencer a un líder sin..."
+  ],
+  "sourceReferences": [
+    {
+      "sourceId": "9939db1d-a4e2-4ece-a912-8631a841ca88",
+      "title": "Gemini en Google Workspace",
+      "url": "https://workspace.google.com/resources/ai/"
+    },
+    {
+      "sourceId": "391c9bff-0058-47b4-b40a-8add08bf9299",
+      "title": "Gemini API y Documentación para Desarrolladores",
+      "url": "https://ai.google.dev/api"
+    }
+  ],
+  "safetyNotes": [
+    "Recuerda: Gemini es un asistente. Siempre revisa y personaliza el contenido generado para asegurar que refleje tu voz y el contexto específico de Xertica..."
+  ],
+  "steps": [
+    {
+      "title": "Analiza el Conflicto",
+      "desc": "Antes de escribir, define por escrito los intereses clave de ambas partes. Tu interés (eficiencia, innovación) y el de tu líder (cumplir plazos, minimizar riesgos). Reconocer la perspectiva del otro es fundamental para una resolución exitosa.",
+      "tool": "Gemini para Google Workspace",
+      "tip": null
+    },
+    {
+      "title": "Diseña tu \"Prompt Maestro\" para Gemini",
+      "desc": "Crea un prompt detallado para Gemini. Incluye tu rol, el de tu líder, el contexto del desacuerdo y el tono deseado (asertivo, respetuoso, colaborativo). Un buen prompt es la clave para obtener un resultado útil.",
+      "tool": "Gemini para Google Workspace",
+      "tip": "No pidas solo 'escribe un email'. Dale a la IA un personaje y un objetivo claro."
+    },
+    {
+      "title": "Genera y Refina tu Borrador",
+      "desc": "Utiliza tu prompt en Gemini para generar un borrador inicial del email. Luego, personalízalo: ajusta el tono, añade detalles técnicos específicos y asegúrate de que suene como tú y sea apropiado para la cultura de Xertica.",
+      "tool": "Gemini para Google Workspace",
+      "tip": null
+    },
+    {
+      "title": "Estructura el Email Final",
+      "desc": "Organiza tu borrador refinado en un Google Doc. Verifica que contenga una apertura empática, una propuesta basada en datos, una sugerencia de bajo riesgo para probar tu idea y un cierre que invite a la colaboración.",
+      "tool": "Gemini para Google Workspace",
+      "tip": null
+    }
+  ],
+  "console": [
+    "[ ] Analiza el Conflicto",
+    "[ ] Diseña tu \"Prompt Maestro\" para Gemini",
+    "[ ] Genera y Refina tu Borrador",
+    "[ ] Estructura el Email Final"
+  ],
+  "classroomText": "¡Hola, equipo de Xertica! \n\nEn el mundo de la tecnología, los desacuerdos técnicos son inevitables y, de hecho, pueden ser muy saludables si se manejan bien. Son una oportunidad para innovar y encontrar la mejor solución, no para \"ganar\" una discusión. En este laboratorio, vamos a simular un escenario común y a usar una herramienta que ya es parte de nuestro día a día para navegarlo con éxito.\n\n---\n\n### Tu Desafío\n\nImagina que estás en un proyecto de análisis de datos para un cliente importante. Descubres una nueva función en BigQuery que podría procesar los datos un 30% más rápido y de forma más barata. Tu líder de proyecto, con el deadline pisándole los talones, prefiere usar el método tradicional que, aunque más lento, es conocido y seguro. Te ha dicho en una reunión: \"No tenemos tiempo para experimentos. Usemos lo que ya funciona\".\n\n### Tu Misión\n\nTu objetivo es aplicar el modelo de comunicación asertiva para abordar este desacuerdo, preparando un borrador de email para tu líder. No se trata de imponer tu idea, sino de presentarla de forma constructiva y profesional, buscando una solución conjunta. Y para ello, usarás Gemini como tu asistente de redacción.\n\n### Pasos a Seguir\n\n**1. Analiza el Conflicto (5 min)**\nAntes de escribir, piensa. En un borrador, anota los intereses de ambas partes. Tu interés: eficiencia, ahorro, aprendizaje. El interés de tu líder: cumplir con la fecha de entrega, minimizar riesgos, mantener la confianza del cliente. Entender su perspectiva es el primer paso para encontrar un punto medio.\n\n**2. Diseña tu \"Prompt Maestro\" para Gemini (10 min)**\nNo le pidas a Gemini \"escribe un email\". Guíalo. Tu prompt debe darle el contexto, el rol que debe asumir y el objetivo. \n\n> **⚡ Prompt Maestro de ejemplo:**\n> \"Actúa como un desarrollador junior de TI en la empresa Xertica, que quiere comunicarse asertivamente con su líder de proyecto. Redacta un borrador de email para proponer el uso de una nueva función de BigQuery en lugar del método tradicional. El tono debe ser respetuoso, colaborativo y basarse en datos. Reconoce la preocupación del líder por el deadline, pero resalta los beneficios (30% más rápido) y sugiere una forma de mitigar el riesgo (ej. hacer una pequeña prueba).\"\n\n**3. Genera y Refina tu Borrador (10 min)**\nUsa tu prompt en Gemini. La primera versión que te dé es solo el punto de partida. Ahora es tu turno: ajústala, personalízala con tu propia voz, añade detalles técnicos específicos (puedes inventarlos si es necesario) y asegúrate de que el tono es el adecuado para la cultura de Xertica. La IA te da la estructura, tú le das el alma.\n\n**4. Estructura el Email Final (5 min)**\nOrganiza tu borrador final en un Google Doc. Asegúrate de que tenga estas cuatro partes clave: \n- **Apertura empática:** \"Entiendo perfectamente tu preocupación por el deadline…\"\n- **Hechos y datos:** \"Hice un análisis y esta nueva función podría reducir los tiempos…\"\n- **Propuesta clara y de bajo riesgo:** \"¿Qué te parece si dedico 2 horas a una prueba controlada para validarlo?\"\n- **Cierre colaborativo:** \"Me gustaría conocer tu opinión al respecto y encontrar la mejor vía juntos.\"\n\n---\n\n### ✔️ Entregable\n\nComparte un **Google Doc** con el borrador final de tu email. \n\n**Criterios de éxito:**\n*   El email es asertivo, no pasivo ni agresivo.\n*   La propuesta está respaldada por un beneficio claro (eficiencia, costo) y ofrece una forma de mitigar el riesgo.\n*   El tono es profesional y busca alinear objetivos, demostrando que entiendes las presiones del proyecto.\n\n### ✨ Tips Rápidos\n\n*   **Enfócate en el \"porqué\" compartido:** Ambos quieren lo mejor para el proyecto y el cliente. Usa eso como tu punto de partida.\n*   **La IA es tu copiloto, no el piloto:** Úsala para superar el bloqueo de la página en blanco y para pulir tu lenguaje, pero la estrategia y la empatía son tuyas."
+}

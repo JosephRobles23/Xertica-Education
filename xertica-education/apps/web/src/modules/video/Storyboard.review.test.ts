@@ -1,5 +1,7 @@
 import {
   buildReviewedStoryboard,
+  buildGenerateStoryboardPayload,
+  buildReviewScenes,
   canRenderAiStoryboard,
   hasRenderTargetModuleId,
   isValidUuid,
@@ -9,6 +11,7 @@ import {
   updateSceneNarration,
   type StoryboardScene,
 } from './Storyboard'
+import { getRoute } from '@/shared/data/routes'
 
 const backendScene: StoryboardScene = {
   scene_number: 1,
@@ -25,6 +28,20 @@ const backendScene: StoryboardScene = {
 const reviewScene = sceneToReviewScene(backendScene, { groundingStatus: 'module_grounded' })
 const editedScene = updateSceneNarration(reviewScene, 'Narración revisada antes del render.')
 const payload = buildReviewedStoryboard('Módulo de prueba', 180, [editedScene])
+const storyboardPayload = buildGenerateStoryboardPayload('1774a628-a2a9-4711-a2fb-db676fb1806f', 'r1m1')
+
+const route = getRoute('01')!
+const secondModule = route.modules[1]
+const moduleOneScenes = buildReviewScenes(route, route.modules[0])
+const moduleTwoScenes = buildReviewScenes(route, secondModule)
+
+if (moduleOneScenes[0]?.narration === moduleTwoScenes[0]?.narration) {
+  throw new Error('El borrador local debe cambiar con el Módulo, no repetirse para toda la Ruta.')
+}
+
+if (!secondModule || !moduleTwoScenes.some((scene) => JSON.stringify(scene.visualConfig).includes(secondModule.name))) {
+  throw new Error('El visual del borrador debe contener contexto del Módulo seleccionado.')
+}
 
 if (reviewScene.teachingPoint !== backendScene.teaching_point) {
   throw new Error('La revisión debe mostrar el teaching point real del backend.')
@@ -44,6 +61,14 @@ if (payload.scenes[0]?.narration !== editedScene.narration) {
 
 if (payload.scenes[0]?.visual_rationale !== backendScene.visual_rationale) {
   throw new Error('El render debe preservar la razón visual aprobada.')
+}
+
+if (storyboardPayload.component_kind !== 'video' || storyboardPayload.k !== 4) {
+  throw new Error('La llamada al storyboard debe enviar el Render Target completo al backend.')
+}
+
+if (storyboardPayload.route_id !== '1774a628-a2a9-4711-a2fb-db676fb1806f' || storyboardPayload.module_id !== 'r1m1') {
+  throw new Error('La llamada al storyboard debe preservar route_id y module_id sin transformarlos.')
 }
 
 if (!hasRenderTargetModuleId('r1m1')) {

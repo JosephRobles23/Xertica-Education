@@ -1,0 +1,55 @@
+EVALUACIÓN DE CONOCIMIENTO (QUIZ)
+Módulo: Optimización de Tareas
+Cliente: la empresa del cliente
+Generado el: 2026-07-10 15:49:50
+======================================================================
+
+Pregunta 1: ¿Cuál es el principal beneficio de integrar Gemini en los flujos de trabajo de "la empresa del cliente" para la optimización de tareas?
+  A) Aumentar la cantidad de reuniones de equipo para discutir los resultados.
+  B) Reemplazar completamente la necesidad de supervisión humana en todos los procesos.
+  C) Automatizar tareas repetitivas y liberar tiempo para actividades de mayor valor estratégico.
+  D) Limitar el acceso a la información para mejorar la seguridad de los datos.
+
+  [Respuesta Correcta: C]
+  [Explicación: Gemini ayuda a manejar tareas rutinarias, permitiendo que el equipo se concentre en problemas complejos y decisiones estratégicas que requieren ingenio humano.]
+----------------------------------------------------------------------
+
+Pregunta 2: ¿Qué tipo de tarea es un candidato ideal para ser optimizado con la ayuda de Gemini en "la empresa del cliente"?
+  A) Resumir documentos largos o cadenas de correos para extraer los puntos clave.
+  B) Tomar la decisión final sobre la estrategia de expansión de la empresa.
+  C) Realizar evaluaciones de desempeño confidenciales del personal.
+  D) Establecer la visión y misión de un nuevo proyecto.
+
+  [Respuesta Correcta: A]
+  [Explicación: Gemini es excelente para procesar y sintetizar grandes volúmenes de texto, lo que lo hace perfecto para generar resúmenes rápidos y precisos, ahorrando tiempo de lectura.]
+----------------------------------------------------------------------
+
+Pregunta 3: Al utilizar Gemini para solicitar ayuda, ¿qué elemento es crucial para obtener resultados útiles y relevantes para los proyectos de "la empresa del cliente"?
+  A) Escribir la solicitud en menos de cinco palabras para ser conciso.
+  B) Usar un lenguaje lo más ambiguo posible para fomentar la creatividad de la IA.
+  C) Pedirle a la herramienta que tome la decisión final por nosotros.
+  D) Proporcionar un "prompt" claro, con contexto específico y definiendo el resultado esperado.
+
+  [Respuesta Correcta: D]
+  [Explicación: La calidad de la respuesta de Gemini depende directamente de la calidad de la solicitud. Un prompt detallado y con contexto guía a la IA para generar una salida más precisa y útil.]
+----------------------------------------------------------------------
+
+Pregunta 4: ¿Cuál es el rol más importante de un colaborador de "la empresa del cliente" al utilizar contenido generado por Gemini (como borradores de correos o reportes)?
+  A) Aceptar y utilizar el contenido tal como se genera, sin ninguna modificación.
+  B) Revisar, verificar la exactitud y ajustar el contenido al tono y los objetivos de la empresa.
+  C) Descartar siempre la primera sugerencia que ofrece la herramienta.
+  D) Medir el tiempo exacto que le tomó a Gemini generar la respuesta.
+
+  [Respuesta Correcta: B]
+  [Explicación: Gemini es un asistente poderoso, pero la responsabilidad final recae en el usuario. Es fundamental validar la información y adaptarla al contexto específico de "la empresa del cliente".]
+----------------------------------------------------------------------
+
+Pregunta 5: Además de automatizar la redacción, ¿de qué otra manera estratégica puede Gemini ayudar a mejorar la productividad en "la empresa del cliente"?
+  A) Reemplazando el software de contabilidad de la empresa.
+  B) Realizando llamadas de ventas a clientes potenciales de forma autónoma.
+  C) Actuando como un "sparring partner" para explorar ángulos de un problema o generar planes de proyecto.
+  D) Otorgando acceso a las credenciales de los sistemas internos para agilizar el login.
+
+  [Respuesta Correcta: C]
+  [Explicación: Usar a Gemini para debatir ideas o estructurar planes permite a los equipos explorar más posibilidades en menos tiempo, mejorando la calidad de la planificación y la innovación.]
+----------------------------------------------------------------------

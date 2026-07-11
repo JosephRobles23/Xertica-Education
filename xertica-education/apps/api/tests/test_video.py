@@ -909,15 +909,20 @@ class TestVideoAPI(unittest.TestCase):
                     "rightLabel": "Con evidencia",
                     "rightValue": "Verifica",
                 },
+            }, {
+                "scene_number": 2,
+                "narration": "Seguimos una secuencia legible.",
+                "visual_type": "progress_bar",
+                "visual_config": {"title": "Proceso", "progress": 50, "steps": ["Contexto", "Decision"]},
             }],
         }
 
         edit_decisions = asyncio.run(transform_storyboard_to_edit_decisions(
             storyboard=storyboard,
             audio_paths=[],
-            durations=[5.0],
-            visual_paths=[""],
-            visual_is_video=[False],
+            durations=[5.0, 5.0],
+            visual_paths=["", ""],
+            visual_is_video=[False, False],
             music_path=None,
             captions=None,
             total_duration=5.0,
@@ -927,6 +932,9 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(edit_decisions["theme"], "xertica-education")
         self.assertEqual(edit_decisions["themeConfig"]["accentColor"], "#F4B942")
         self.assertEqual(edit_decisions["cuts"][0]["title"], "Misma pregunta, distinto criterio")
+        for cut in edit_decisions["cuts"]:
+            self.assertEqual(cut["backgroundColor"], "#F8FAFC")
+            self.assertEqual(cut["color"], "#0F172A")
 
     def test_generate_video_uses_reviewed_storyboard_as_render_source_of_truth(self):
         """POST /videos/generate renders from the reviewed storyboard and retains provenance."""

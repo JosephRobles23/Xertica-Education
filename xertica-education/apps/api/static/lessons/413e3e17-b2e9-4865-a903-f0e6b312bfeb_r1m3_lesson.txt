@@ -1,0 +1,23 @@
+LECCIÓN DE ESTUDIO
+Módulo: Funciones básicas de Gemini en sheets
+Cliente: la empresa del cliente
+Generado el: 2026-07-10 19:59:46
+======================================================================
+
+1. 1. ¡Hola, Gemini! Tu Primer Comando para Generar Datos
+------------------------------------------------------
+La función principal para interactuar con la IA es `GEMINI()`. Puedes usarla para crear contenido directamente en tus celdas, como listas, ideas o textos, acelerando tareas de planificación y creatividad en **la empresa del cliente**. Simplemente escribe tu solicitud (prompt) entre comillas. Ejemplo de Código: =GEMINI("Genera 5 slogans para un nuevo producto de software de 'la empresa del cliente'")
+
+2. 2. Organización Automática: Clasifica Información al Instante
+-------------------------------------------------------------
+Ahorra horas de trabajo manual pidiendo a Gemini que categorice grandes volúmenes de datos. Es ideal para analizar el feedback de clientes o resultados de encuestas, asignando etiquetas como 'Positivo', 'Negativo' o por departamento, de forma rápida y consistente. Ejemplo Práctico: Con comentarios de usuarios en la columna A, usa en la celda B2: =GEMINI("Clasifica este comentario en 'Soporte', 'Ventas' o 'Producto': " & A2)
+
+3. 3. Extracción Precisa de Datos Clave
+------------------------------------
+Gemini puede leer un bloque de texto y extraer la información específica que necesitas, limpiando y estructurando tus datos para un análisis más sencillo. Pídele que encuentre correos, números de pedido o fechas de un texto largo y desordenado. Ejemplo de Código: =GEMINI("Extrae el número de factura del texto en la celda C2: " & C2)
+
+TÉRMINOS CLAVE (GLOSARIO)
+=========================
+* Función GEMINI(): Es el comando que se escribe en una celda de Google Sheets para hacer una petición a la inteligencia artificial de Google, activando sus capacidades de análisis y generación de texto.
+* Prompt: La instrucción o pregunta específica y detallada que le das a Gemini dentro de la función. Un buen prompt es clave para obtener una respuesta útil y precisa.
+* Concatenación (&): Es el uso del símbolo '&' para unir el texto de tu instrucción (prompt) con el contenido de otra celda. Permite aplicar la función de Gemini de forma dinámica a los datos de tu hoja.

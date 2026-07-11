@@ -2,6 +2,8 @@ from pathlib import Path
 
 STAT_CARD_ACCENT_COLORS = ["#22C7B8", "#F4B942", "#70D6A5", "#F27D5A"]
 CHART_COLORS = ["#22C7B8", "#F4B942", "#70D6A5", "#F27D5A", "#58A6D8", "#D6E76C"]
+LEGIBLE_DATA_BACKGROUND = "#F8FAFC"
+LEGIBLE_DATA_TEXT = "#0F172A"
 
 XERTICA_EDUCATION_THEME = {
     "primaryColor": "#22C7B8",
@@ -123,6 +125,7 @@ def _build_cut(
             **base, "type": "comparison", "title": config.get("title", ""),
             "leftLabel": config.get("leftLabel", ""), "leftValue": config.get("leftValue", ""),
             "rightLabel": config.get("rightLabel", ""), "rightValue": config.get("rightValue", ""),
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND, "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "bar_chart":
@@ -131,6 +134,7 @@ def _build_cut(
             "chartData": config.get("chartData", []),
             "showValues": config.get("showValues", True), "showGrid": config.get("showGrid", True),
             "chartAnimation": config.get("chartAnimation", "grow-up"), "chartColors": CHART_COLORS,
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND, "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "line_chart":
@@ -146,6 +150,8 @@ def _build_cut(
             "yLabel": config.get("yLabel", ""),
             "chartAnimation": config.get("chartAnimation", "draw"),
             "chartColors": CHART_COLORS,
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND,
+            "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "pie_chart":
@@ -155,6 +161,7 @@ def _build_cut(
             "centerLabel": config.get("centerLabel", ""), "centerValue": config.get("centerValue", ""),
             "showLegend": config.get("showLegend", True),
             "chartAnimation": config.get("chartAnimation", "expand"), "chartColors": CHART_COLORS,
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND, "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "kpi_grid":
@@ -162,6 +169,7 @@ def _build_cut(
             **base, "type": "kpi_grid", "title": config.get("title", ""),
             "chartData": config.get("chartData", []), "columns": config.get("columns"),
             "chartAnimation": config.get("chartAnimation", "count-up"), "chartColors": CHART_COLORS,
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND, "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "progress_bar":
@@ -174,6 +182,8 @@ def _build_cut(
             "progressLabel": config.get("progressLabel", ""),
             "progressAnimation": config.get("progressAnimation", "step"),
             "progressColor": config.get("progressColor", CHART_COLORS[idx % len(CHART_COLORS)]),
+            "backgroundColor": LEGIBLE_DATA_BACKGROUND,
+            "color": LEGIBLE_DATA_TEXT,
         }
 
     elif visual_type == "terminal_scene":

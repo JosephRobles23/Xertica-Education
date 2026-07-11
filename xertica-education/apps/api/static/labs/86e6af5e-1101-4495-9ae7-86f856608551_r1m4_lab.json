@@ -1,0 +1,109 @@
+{
+  "title": "Laboratorio: Acelerando el Análisis de Datos con Gemini y BigQuery",
+  "objective": "Utilizar Gemini para analizar y resumir datos simulados de BigQuery, generando un informe ejecutivo de forma eficiente.",
+  "scenario": "El equipo de producto necesita entender urgentemente las principales quejas de los usuarios del último mes. Los datos están en una tabla de BigQuery, pero no hay tiempo para que un analista cree un dashboard. Tu misión es usar Gemini para obtener insights rápidos de una muestra de estos datos y preparar un resumen para la reunión de mañana. Debes identificar patrones y las 3 quejas más comunes.",
+  "estimatedTimeMinutes": 30,
+  "difficulty": "beginner",
+  "tools": [
+    {
+      "name": "Gemini",
+      "purpose": "Analizar los datos y generar el resumen.",
+      "url": "https://gemini.google.com/"
+    },
+    {
+      "name": "BigQuery",
+      "purpose": "Fuente de los datos (simulada en el laboratorio).",
+      "url": null
+    }
+  ],
+  "prerequisites": [
+    "Acceso a la interfaz web de Gemini.",
+    "Comprensión básica de un problema de negocio que requiere análisis de datos."
+  ],
+  "instructions": [
+    {
+      "step": 1,
+      "title": "Analiza la Evidencia",
+      "description": "Familiarízate con la muestra de 10 tickets de soporte extraídos de BigQuery. Léelos para entender el tipo de problemas que reportan los usuarios y detectar patrones iniciales antes de usar la IA.",
+      "expectedResult": "Comprensión del contexto de los datos a analizar.",
+      "tip": null
+    },
+    {
+      "step": 2,
+      "title": "Construye tu \"Prompt Maestro\"",
+      "description": "Usa la plantilla de prompt provista para dar instrucciones claras y específicas a Gemini. Debes pedirle que actúe como un analista, identifique 3 categorías, las cuente y genere un resumen. Completa el prompt con los datos del paso anterior.",
+      "expectedResult": null,
+      "tip": "La calidad de tu prompt determinará la calidad de la respuesta. Ser específico es clave."
+    },
+    {
+      "step": 3,
+      "title": "Interroga a Gemini",
+      "description": "Abre la interfaz de Gemini, pega tu prompt completo con los datos y ejecuta la consulta. Observa la respuesta y evalúa si cumple con tus instrucciones.",
+      "expectedResult": "Una respuesta de texto generada por Gemini que contiene el análisis solicitado.",
+      "tip": null
+    },
+    {
+      "step": 4,
+      "title": "Crea tu Reporte Ejecutivo",
+      "description": "La IA te dio los insights, ahora comunícalos. Basándote en la respuesta de Gemini, redacta un párrafo de 2-3 frases para un email a tu manager, resumiendo el problema más urgente y su impacto.",
+      "expectedResult": "Un párrafo conciso y accionable listo para ser enviado.",
+      "tip": null
+    }
+  ],
+  "deliverable": {
+    "description": "Un único documento de Google Docs que demuestre el proceso completo de análisis y síntesis.",
+    "format": "Google Doc",
+    "successCriteria": [
+      "Incluye el prompt final utilizado.",
+      "Contiene la respuesta completa y sin editar de Gemini.",
+      "Presenta un resumen ejecutivo claro, conciso y basado en los hallazgos."
+    ]
+  },
+  "reflectionQuestions": [
+    "¿Cuánto tiempo crees que te habría llevado este análisis de forma manual, sin Gemini?",
+    "¿Qué otra tarea repetitiva o de análisis de tu día a día podrías acelerar o automatizar con una..."
+  ],
+  "sourceReferences": [
+    {
+      "sourceId": "e050aa08-1cd7-4764-a1de-7841b376f885",
+      "title": "Guía para principiantes de Gemini",
+      "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/beginners-guide"
+    }
+  ],
+  "safetyNotes": [
+    "Recuerda nunca utilizar datos reales de clientes o información sensible de la empresa en herramientas de IA públicas. Este ejercicio usa datos simulados."
+  ],
+  "steps": [
+    {
+      "title": "Analiza la Evidencia",
+      "desc": "Familiarízate con la muestra de 10 tickets de soporte extraídos de BigQuery. Léelos para entender el tipo de problemas que reportan los usuarios y detectar patrones iniciales antes de usar la IA.",
+      "tool": "Gemini",
+      "tip": null
+    },
+    {
+      "title": "Construye tu \"Prompt Maestro\"",
+      "desc": "Usa la plantilla de prompt provista para dar instrucciones claras y específicas a Gemini. Debes pedirle que actúe como un analista, identifique 3 categorías, las cuente y genere un resumen. Completa el prompt con los datos del paso anterior.",
+      "tool": "Gemini",
+      "tip": "La calidad de tu prompt determinará la calidad de la respuesta. Ser específico es clave."
+    },
+    {
+      "title": "Interroga a Gemini",
+      "desc": "Abre la interfaz de Gemini, pega tu prompt completo con los datos y ejecuta la consulta. Observa la respuesta y evalúa si cumple con tus instrucciones.",
+      "tool": "Gemini",
+      "tip": null
+    },
+    {
+      "title": "Crea tu Reporte Ejecutivo",
+      "desc": "La IA te dio los insights, ahora comunícalos. Basándote en la respuesta de Gemini, redacta un párrafo de 2-3 frases para un email a tu manager, resumiendo el problema más urgente y su impacto.",
+      "tool": "Gemini",
+      "tip": null
+    }
+  ],
+  "console": [
+    "[ ] Analiza la Evidencia",
+    "[ ] Construye tu \"Prompt Maestro\"",
+    "[ ] Interroga a Gemini",
+    "[ ] Crea tu Reporte Ejecutivo"
+  ],
+  "classroomText": "### Laboratorio Práctico: Acelerando el Análisis de Datos con Gemini ¡Es hora de la acción! En este laboratorio, dejarás la teoría atrás para usar Gemini y resolver un problema de negocio real y urgente. Demostrarás cómo la IA puede transformar tu productividad y convertirte en un analista de datos improvisado, pero súper eficiente. --- #### **Tu Desafío** El equipo de producto necesita entender urgentemente las principales quejas de los usuarios sobre la nueva versión de la app. Los datos están en una tabla de BigQuery, pero no hay tiempo para que un analista prepare un dashboard complejo: ¡la reunión es mañana! Tu misión es usar Gemini para obtener insights rápidos de una muestra de estos datos y preparar un resumen para el equipo. Debes identificar patrones y las 3 quejas más comunes. --- #### **¡Manos a la Obra!** **Paso 1: Analiza la Evidencia** Primero, familiarízate con la data. Aquí tienes una muestra de los tickets de soporte extraídos de BigQuery. Léelos para entender el tipo de problemas que reportan los usuarios. No tienes que ser un experto, solo ten una idea general del contenido. ``` ID, Comentario 101, No puedo iniciar sesión, me sale 'error 403'. 102, La app va muy lenta después de la última actualización. 103, Dónde está mi historial de pedidos? No lo encuentro. 104, El botón de pago no funciona, se queda pensando. 105, La interfaz nueva es confusa, no sé dónde están las cosas. 106, Intento resetear mi contraseña pero nunca llega el correo. 107, La app se cierra sola cuando abro la sección de perfil. 108, La lentitud es insoportable, sobre todo al cargar imágenes. 109, Aparece un error de login 'credenciales inválidas' aunque son correctas. 110, Me gustaría volver al diseño anterior, este es poco usable. ``` **Paso 2: Construye tu \"Prompt Maestro\"** No le pidas a Gemini \"resume esto\". Sé un profesional. Usa este prompt como base y adáptalo. Tu objetivo es que la IA actúe como un analista de datos senior, identifique temas, los cuente y resuma los hallazgos clave. **▶️ Prompt Maestro (Plantilla):** `Actúa como un analista de datos experto. A partir de la siguiente muestra de tickets de soporte extraídos de una tabla de BigQuery, realiza estas tres tareas: 1. Identifica y nombra las 3 categorías de problemas más frecuentes. 2. Proporciona un conteo exacto de cuántos tickets corresponden a cada una de esas 3 categorías. 3. Escribe un resumen ejecutivo de 100 palabras explicando los hallazgos y el impacto para el usuario. Los datos son:` `[PEGA AQUÍ LA TABLA DE DATOS DEL PASO 1]` **Paso 3: Interroga a Gemini** Abre la interfaz de Gemini. Copia y pega tu \"Prompt Maestro\" ya completo (con la tabla de datos incluida al final) y ejecuta la consulta. Observa cómo Gemini procesa la información y te da una respuesta estructurada. ¿Es útil? ¿Respondió a lo que pediste? **Paso 4: Crea tu Reporte Ejecutivo** La IA hizo el trabajo pesado, ahora te toca a ti darle el toque de genio. Basándote en la respuesta de Gemini, redacta un párrafo breve y directo (2-3 frases) para un email a tu manager, resumiendo el problema principal que debe atenderse con urgencia. Sé claro y conciso. --- #### **✅ Tu Entregable** Sube un único documento de Google Docs que contenga: 1. El \"Prompt Maestro\" final que utilizaste. 2. La respuesta completa que te dio Gemini (sin editar, copia y pega). 3. Tu reporte ejecutivo final (el párrafo para el email). --- #### **💡 Pro-Tips** * **Conversa y refina:** Si la primera respuesta no es perfecta, ¡no te rindas! Puedes refinarla con un nuevo prompt como: \"Excelente, ahora formatea las categorías como una lista con viñetas\" o \"Haz el resumen más técnico, enfocado en impacto de backend\". * **El contexto es rey:** Observa cómo al decirle que los datos vienen de \"BigQuery\" y que actúe como \"analista de datos experto\", predispones a Gemini a dar una respuesta..."
+}

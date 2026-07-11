@@ -1,0 +1,37 @@
+¡Hola, equipo!
+
+¿Listos para dejar de ser los 'perseguidores de tareas' oficiales? En este módulo exploramos cómo la automatización puede ser nuestra aliada para que ninguna decisión o compromiso se pierda en el limbo digital. Ahora es tu turno de pasar de la teoría a la acción y diseñar una solución real.
+
+**Tu desafío: Automatizar el seguimiento de reuniones**
+
+Tu equipo tiene reuniones de proyecto muy productivas, pero el seguimiento es un caos. Las tareas y decisiones importantes se quedan enterradas en actas de reunión que nadie vuelve a leer, en hilos de chat interminables o en cadenas de emails. Tu misión es diseñar un 'blueprint' de automatización que resuelva este problema de raíz. No necesitas programar nada, solo usar tu ingenio y lo que aprendimos para diseñar el flujo perfecto.
+
+**¡Manos a la obra!**
+
+**Paso 1: Diagnostica el problema**
+Imagina el acta de la última reunión de proyecto. Seguramente contenía frases como: *"Juan se encargará de investigar proveedores antes del viernes"*, *"Necesitamos que el equipo de diseño prepare un mockup para la próxima semana"* y *"María validará el presupuesto con finanzas"*. 
+
+Tu tarea: Abre un nuevo Google Doc y escribe al menos 3 de estas 'tareas perdidas' que típicamente surgirían en una de tus reuniones.
+
+**Paso 2: Diseña el 'Blueprint' de Automatización**
+Piensa en un flujo lógico. ¿Qué evento debería disparar la automatización? ¿Qué debería pasar después? En tu Google Doc, crea una sección llamada "Blueprint" y define:
+*   **Disparador (Trigger):** Ej. "Cuando un nuevo Google Doc con el título '[ACTA]' se guarda en la carpeta compartida del proyecto".
+*   **Proceso:** Ej. "Un agente de IA analiza el contenido del documento".
+*   **Acciones:** Ej. "1. Extrae las tareas, responsables y fechas límite. 2. Crea una tarjeta en nuestro tablero de Trello/Asana/Google Tasks. 3. Envía una notificación por Google Chat al responsable con un enlace a la tarea".
+
+**Paso 3: Crea tu 'Prompt Maestro'**
+Para que la IA del paso anterior funcione, necesita instrucciones claras. En tu documento, escribe un "Prompt Maestro" que le darías a la IA para que procese el acta.
+
+> **Prompt Maestro de ejemplo:**
+> `Analiza el siguiente texto de un acta de reunión. Extrae todas las tareas accionables. Para cada tarea, identifica: (1) la acción específica, (2) la persona responsable y (3) la fecha límite si se menciona. Devuelve la información en una lista con formato TAREA | RESPONSABLE | FECHA.`
+
+**Paso 4: Prepara el Pitch de Implementación**
+En no más de 100 palabras, escribe un párrafo para tu manager o equipo. Explica qué problema resuelve tu 'blueprint', qué beneficios traerá (ahorro de tiempo, cero tareas olvidadas, mayor accountability) y qué herramientas propones usar (pueden ser las que ya usan o las que crees ideales).
+
+**✨ Tip Pro:** ¡Sé específico! En lugar de decir "crear una tarea", di "crear una tarea en el proyecto 'Lanzamiento Q3' de Asana y asignarla a [Responsable]". La especificidad es la clave de una buena automatización.
+
+**Entregable:**
+
+Comparte el enlace a tu Google Doc con permisos de 'Comentarista'. Asegúrate de que incluya las 'tareas perdidas', tu 'Blueprint', tu 'Prompt Maestro' y tu pitch de implementación.
+
+¡Este es el primer paso para recuperar horas de trabajo y enfocarnos en lo que de verdad importa! ¡A diseñar!

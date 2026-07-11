@@ -1,0 +1,54 @@
+¡Es hora de poner a prueba tus nuevas habilidades! En este laboratorio, dejarás la teoría para convertirte en un analista de datos potenciado por IA. Tu misión: transformar una avalancha de feedback de clientes en insights claros y accionables, todo sin salir de Google Sheets.
+
+**Escenario y Desafío**
+
+El equipo de producto acaba de lanzar una nueva función y te ha entregado una exportación con los primeros comentarios de los clientes. Los datos están en crudo, sin formato. Tu gerente necesita un resumen rápido de los temas principales para la reunión de mañana. ¡No hay tiempo para leer cientos de líneas! Debes usar Gemini en Sheets para procesar esta data y presentar los hallazgos clave.
+
+---
+
+**🎯 Tu Misión en 4 Pasos:**
+
+**Paso 1: Prepara tu Espacio de Trabajo**
+
+Crea una nueva Google Sheet. Nómbrala "Análisis de Feedback - [Tu Nombre]". Copia y pega estos datos de ejemplo en la pestaña, comenzando en la celda A1.
+
+| TicketID | FeedbackText |
+|---|---|
+| 743 | La nueva interfaz es muy rápida, ¡me encanta! |
+| 744 | No encuentro el botón para exportar el reporte. ¿Lo movieron? |
+| 745 | Sería genial si pudieran añadir una integración con nuestro CRM. |
+| 746 | El sistema se colgó dos veces al intentar guardar mis cambios. |
+| 747 | Gracias por la nueva función de dashboards, es justo lo que necesitábamos. |
+| 748 | El color del nuevo menú es un poco difícil de leer. |
+| 749 | Me gustaría poder programar los envíos de reportes. |
+| 750 | ¡Error 502 al cargar la página principal! Ayuda. |
+
+**Paso 2: Clasificación Automática de Feedback**
+
+En la celda C1, escribe el encabezado "Categoría". Ahora, en la celda C2, usa la magia de Gemini para clasificar el primer comentario. Escribe esta fórmula: `=GEMINI.FILL("Clasifica el comentario en B2 como: 'Problema Técnico', 'Sugerencia de Producto', o 'Comentario Positivo'", B2)`. Arrastra la fórmula hacia abajo para clasificar el resto de los comentarios al instante.
+
+**Paso 3: Análisis de Sentimiento**
+
+Ahora vamos a medir el "mood" de los clientes. En D1, añade el encabezado "Sentimiento". En D2, utiliza una nueva fórmula para analizar el tono: `=GEMINI.FILL("Analiza el sentimiento del texto en B2 y responde solo con: 'Positivo', 'Negativo' o 'Neutro'", B2)`. Arrastra la fórmula y observa cómo Gemini entiende la intención detrás de las palabras.
+
+**Paso 4: Genera un Resumen Ejecutivo para tu Gerente**
+
+¡Es hora del gran final! Selecciona todo tu rango de datos (A1:D10). Abre la barra lateral de Gemini (el ícono ✨ a la derecha) y asegúrate de que el rango seleccionado aparezca. Ahora, usa este **Prompt Maestro** para obtener tus insights:
+
+`Basado en la tabla de datos, escribe un resumen ejecutivo de 3 bullets para un gerente. Incluye el problema técnico más mencionado y la sugerencia de producto más popular.`
+
+Copia y pega la respuesta de Gemini en una celda combinada debajo de tus datos.
+
+---
+
+**✅ Entregable**
+
+Comparte el enlace a tu Google Sheet configurado como "Cualquier persona con el enlace puede ver".
+
+*   **Criterio 1:** La hoja contiene las columnas "Categoría" y "Sentimiento" generadas con fórmulas de Gemini.
+*   **Criterio 2:** Las fórmulas son funcionales y los resultados son coherentes con los datos.
+*   **Criterio 3:** El resumen ejecutivo generado por Gemini está incluido y es relevante para los datos analizados.
+
+**💡 Tip Profesional:**
+
+*   ¡Experimenta! Si Gemini no te da exactamente lo que buscas la primera vez, modifica ligeramente tu prompt. Por ejemplo, puedes ser más específico: "...responde *únicamente* con una de estas tres opciones". La precisión en el prompt mejora drásticamente el resultado.

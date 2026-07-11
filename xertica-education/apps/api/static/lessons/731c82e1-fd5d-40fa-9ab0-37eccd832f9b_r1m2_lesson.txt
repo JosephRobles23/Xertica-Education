@@ -1,0 +1,37 @@
+LECCIÓN DE ESTUDIO
+Módulo: Estilos de Aprendizaje
+Cliente: la empresa del cliente
+Generado el: 2026-07-10 16:57:21
+======================================================================
+
+1. 1. ¿Qué es un Estilo de Aprendizaje y cómo te impacta en 'la empresa del cliente'?
+----------------------------------------------------------------------------------
+Un estilo de aprendizaje es tu manera preferida y más eficiente de absorber, procesar y retener nueva información. Conocer tu estilo te permite ser más autónomo y efectivo en tu desarrollo profesional, ya que podrás adaptar los cursos y materiales de 'la empresa del cliente' para aprender más rápido y con mayor profundidad. No se trata de una limitación, sino de una poderosa herramienta de autogestión.
+
+Ejemplo Práctico: Un desarrollador se da cuenta de que entiende mejor una nueva librería de código viendo un video tutorial (visual) que leyendo la documentación oficial (lecto-escritor).
+
+2. 2. Estilos Visual y Auditivo: Ver para creer, escuchar para entender
+--------------------------------------------------------------------
+Los aprendices visuales procesan mejor la información a través de gráficos, diagramas, mapas mentales y videos. Los aprendices auditivos, en cambio, prefieren escuchar explicaciones, participar en debates, podcasts o grabar reuniones para repasarlas. Identificar si te inclinas por uno de estos te ayudará a buscar los recursos adecuados en nuestra intranet o al colaborar con tu equipo.
+
+Ejemplo Práctico: Para entender un nuevo proceso de ventas, un learner visual crea un diagrama de flujo, mientras que un learner auditivo pide a su manager que se lo explique en una llamada y lo graba.
+
+3. 3. Estilos Lecto-escritor y Kinestésico: Escribir para asimilar, hacer para dominar
+-----------------------------------------------------------------------------------
+El estilo lecto-escritor se beneficia de leer manuales, tomar notas detalladas y hacer listas. Disfrutan de la información presentada en texto. Por otro lado, el aprendizaje kinestésico se basa en la experiencia directa: 'aprender haciendo'. Estas personas necesitan interactuar físicamente con el tema, ya sea a través de simulaciones, prácticas en un entorno de prueba o construyendo un prototipo.
+
+Ejemplo de Código: Un aprendiz kinestésico, al aprender una nueva función de API, no se detiene en la teoría y prefiere escribir y ejecutar un pequeño script de prueba inmediatamente.
+
+```python
+import requests
+# Probando el endpoint de usuarios
+response = requests.get('https://api.empresa.com/v1/users/test')
+print(response.status_code)
+```
+
+TÉRMINOS CLAVE (GLOSARIO)
+=========================
+* Estilo de Aprendizaje: La preferencia individual sobre cómo una persona percibe, procesa, internaliza y recuerda información nueva. Los modelos más comunes incluyen el Visual, Auditivo, Lecto-escritor y Kinestésico (VARK).
+* Kinestésico: Relativo al aprendizaje a través de la experiencia física, el movimiento y la práctica directa ('aprender haciendo'). Es un enfoque eminentemente práctico.
+* Aprendizaje Multimodal: Estrategia que consiste en combinar técnicas de varios estilos de aprendizaje para reforzar la comprensión y retención de un tema. Es el enfoque más flexible y efectivo.
+* Diagrama de Flujo: Herramienta visual que representa secuencialmente los pasos de un proceso o algoritmo. Muy útil para aprendices visuales para entender sistemas complejos.

@@ -1,0 +1,24 @@
+LECCIÓN DE ESTUDIO
+Módulo: Resolución de Problemas
+Cliente: la empresa del cliente
+Generado el: 2026-07-10 17:56:05
+======================================================================
+
+1. 1. Diagnóstico Preciso: De Síntoma a Hecho
+------------------------------------------
+El primer paso para resolver cualquier problema en la plataforma de 'la empresa del cliente' es entenderlo a fondo. No te quedes con un "no funciona"; indaga para obtener los hechos. Recolecta información específica como qué acción se intentaba realizar, qué mensaje de error apareció y cuándo ocurrió. La clave es poder replicar el problema para observarlo directamente. Ejemplo Práctico: Un usuario reporta: 'No puedo generar el reporte de ventas'. Una descripción útil sería: 'Al ir a Reportes > Ventas Mensuales, seleccionar el mes de agosto y hacer clic en 'Generar', la página carga indefinidamente sin mostrar el PDF'.
+
+2. 2. Aislamiento de la Causa: La Técnica del Descarte
+---------------------------------------------------
+Una vez que entiendes el problema, debes aislar su origen. En nuestra plataforma, las causas comunes suelen estar en tres áreas: los datos ingresados, los permisos del usuario o un factor técnico (como la caché del navegador). Procede descartando sistemáticamente estas posibilidades, de la más simple a la más compleja, para encontrar la causa raíz sin perder tiempo. Ejemplo Práctico: Para el problema del reporte, verificas: 1) ¿Tiene el usuario el permiso 'Generar Reportes'? Sí. 2) ¿Funciona con otro mes (julio)? Sí. 3) ¿Hay datos de ventas en agosto? No. Causa aislada: el problema no es la plataforma, sino la ausencia de datos para ese período.
+
+3. 3. Solución y Documentación: Aplicar, Verificar y Compartir
+-----------------------------------------------------------
+Con la causa raíz identificada, aplica la solución más directa y lógica. Si el problema era un permiso, asígnalo. Si era un dato faltante, informa cómo ingresarlo. Después de aplicar la solución, siempre verifica con el usuario que el problema esté resuelto. Finalmente, documenta el caso de forma breve en nuestra base de conocimiento para que otros puedan resolverlo más rápido en el futuro. Ejemplo de Código: Un ejemplo de nota rápida para nuestra base de conocimiento interna podría ser: `Problema: Reporte de ventas no carga. Causa: Faltan datos de ventas para el mes seleccionado. Solución: Instruir al usuario sobre cómo cargar datos de ventas a través del módulo de 'Cargas Masivas'.`
+
+TÉRMINOS CLAVE (GLOSARIO)
+=========================
+* Causa Raíz: El problema fundamental y original que, una vez resuelto, evita que el inconveniente vuelva a ocurrir. No es solo el síntoma visible.
+* Pasos para Reproducir (PPR): Una secuencia de acciones claras y detalladas que permiten a cualquier persona recrear de manera fiable un error o comportamiento inesperado en la plataforma.
+* Base de Conocimiento: Nuestro repositorio centralizado de información donde documentamos problemas comunes y sus soluciones para agilizar la resolución de futuras incidencias.
+* Solución Temporal (Workaround): Una solución provisional que permite al usuario continuar con su trabajo aunque la causa raíz del problema aún no haya sido resuelta de forma definitiva.

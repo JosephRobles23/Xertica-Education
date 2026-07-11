@@ -1,0 +1,55 @@
+EVALUACIÓN DE CONOCIMIENTO (QUIZ)
+Módulo: Gestión del Tiempo y Productividad
+Cliente: Xertica
+Generado el: 2026-07-10 09:38:41
+======================================================================
+
+Pregunta 1: En un entorno de proyectos de tecnología como el de Xertica, ¿cuál es el objetivo principal de aplicar técnicas de gestión del tiempo y productividad?
+  A) A. Trabajar más horas para entregar los proyectos antes de la fecha límite.
+  B) B. Responder a todos los correos y mensajes de chat de forma inmediata.
+  C) C. Aumentar el valor entregado a los clientes y alcanzar los objetivos estratégicos, no solo estar ocupado.
+  D) D. Documentar cada minuto del día para justificar las horas facturadas.
+
+  [Respuesta Correcta: C]
+  [Explicación: La verdadera productividad no se mide por las horas trabajadas, sino por el impacto y el valor generado. El objetivo es enfocar el esfuerzo en lo que realmente importa.]
+----------------------------------------------------------------------
+
+Pregunta 2: Te encuentras con una tarea urgente pero de bajo impacto (ej. un reporte interno rápido) y una tarea importante pero no urgente (ej. planificar la arquitectura de un nuevo proyecto). Según la Matriz de Eisenhower, ¿cómo deberías proceder?
+  A) A. Hacer la tarea urgente primero, ya que la presión del tiempo es mayor.
+  B) B. Realizar ambas tareas al mismo tiempo (multitasking) para ser más eficiente.
+  C) C. Ignorar la tarea urgente porque no es importante y centrarse en la planificación.
+  D) D. Agendar tiempo de calidad para la tarea importante (planificar) y delegar o hacer rápidamente la tarea urgente sin que desvíe tus prioridades.
+
+  [Respuesta Correcta: D]
+  [Explicación: La Matriz de Eisenhower enseña a priorizar y agendar lo 'Importante y No Urgente' para el trabajo estratégico, mientras se gestiona lo 'Urgente' de forma que no domine la agenda.]
+----------------------------------------------------------------------
+
+Pregunta 3: Para una tarea que requiere alta concentración, como desarrollar una nueva funcionalidad o analizar datos de un cliente, ¿qué técnica es ideal para mantener el enfoque en un entorno remoto?
+  A) A. La técnica Pomodoro, que alterna bloques de trabajo enfocado con breves descansos.
+  B) B. Trabajar sin parar hasta terminar, para no perder el hilo de pensamiento.
+  C) C. Revisar el correo y el chat cada 10 minutos para no perderse ninguna actualización.
+  D) D. Dividir la tarea en muchas partes pequeñas y alternar entre ellas y otras tareas.
+
+  [Respuesta Correcta: A]
+  [Explicación: Esta técnica ayuda a mantener una alta concentración durante periodos definidos y previene la fatiga mental con descansos programados, ideal para el 'deep work'.]
+----------------------------------------------------------------------
+
+Pregunta 4: En el entorno de trabajo de Xertica, que valora la colaboración remota, ¿cuál es una práctica recomendada para gestionar las comunicaciones por chat (ej. Google Chat) y maximizar la productividad?
+  A) A. Mantener las notificaciones activadas en todo momento para ofrecer respuestas inmediatas a los compañeros.
+  B) B. Establecer bloques de tiempo específicos para revisar y responder mensajes, favoreciendo la comunicación asíncrona.
+  C) C. Utilizar el chat para todas las comunicaciones, incluyendo decisiones complejas y estratégicas de proyecto.
+  D) D. Responder los mensajes solo al final del día para evitar interrupciones.
+
+  [Respuesta Correcta: B]
+  [Explicación: Permite periodos de trabajo ininterrumpido ('deep work') mientras se mantiene una comunicación fluida con el equipo, sin crear una cultura de interrupción constante.]
+----------------------------------------------------------------------
+
+Pregunta 5: Para ser más efectivo en tus proyectos en Xertica, se recomienda pasar de un modo de trabajo 'reactivo' a uno 'proactivo'. ¿Qué acción representa mejor un enfoque proactivo?
+  A) A. Comenzar el día leyendo la bandeja de entrada y respondiendo a lo que llegó primero.
+  B) B. Estar siempre disponible para reuniones no planificadas que surjan durante el día.
+  C) C. Planificar la semana con antelación, definiendo objetivos claros y bloqueando tiempo para las tareas clave.
+  D) D. Resolver los problemas únicamente cuando se convierten en una emergencia para el cliente.
+
+  [Respuesta Correcta: C]
+  [Explicación: Ser proactivo significa tomar el control de tu agenda y dirigir tus esfuerzos hacia tus prioridades, en lugar de dejar que las interrupciones externas dicten tu día.]
+----------------------------------------------------------------------
