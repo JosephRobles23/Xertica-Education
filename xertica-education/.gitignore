@@ -43,3 +43,15 @@ apps/api/public/
 apps/api/static/videos/*.mp4
 apps/api/scratch_test_image.png
 apps/api/static/bg_music.mp3
+
+# OpenMontage is kept locally, but only the renderer used by Xertica is vendored.
+openmontage/*
+openmontage/.env.example
+!openmontage/LICENSE
+!openmontage/remotion-composer/
+!openmontage/remotion-composer/**
+openmontage/remotion-composer/node_modules/
+openmontage/remotion-composer/out/
+openmontage/remotion-composer/projects/
+openmontage/remotion-composer/public/
+openmontage/remotion-composer/titled_video_props.json

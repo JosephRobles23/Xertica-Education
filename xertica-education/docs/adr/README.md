@@ -40,5 +40,6 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0017](0017-concept-explanation-video-quality-strategy.md) · Video | Estrategia de calidad para Videos de Explicación Conceptual | Aceptado |
 | [0017](0017-deep-research-source-review-policy.md) · Research | Política de revisión de fuentes de Deep Research | Aceptado |
 | [0018](0018-infografia-quiz-generation-flows.md) · Assets | Flujos de generacion de Infografia y Quiz | Aceptado |
+| [0020](0020-vendor-openmontage-source.md) · Video | OpenMontage como código vendorizado | Aceptado · supersede 0010 |
 
 > ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.
