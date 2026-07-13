@@ -187,11 +187,11 @@ interface AppStore {
 
   isStoryboardApproved: (routeId: string) => boolean
   approveStoryboard: (routeId: string) => void
-  storyboardVideoUrlOf: (routeId: string) => string
-  setStoryboardVideoUrl: (routeId: string, videoUrl: string) => void
-  storyboardJobIdOf: (routeId: string) => string | undefined
-  setStoryboardJobId: (routeId: string, jobId: string) => void
-  clearStoryboardJobId: (routeId: string) => void
+  storyboardVideoUrlOf: (routeId: string, moduleId?: string) => string
+  setStoryboardVideoUrl: (routeId: string, videoUrl: string, moduleId?: string) => void
+  storyboardJobIdOf: (routeId: string, moduleId?: string) => string | undefined
+  setStoryboardJobId: (routeId: string, jobId: string, moduleId?: string) => void
+  clearStoryboardJobId: (routeId: string, moduleId?: string) => void
 
   isLabGuideApproved: (routeId: string) => boolean
   approveLabGuide: (routeId: string) => void
@@ -244,6 +244,8 @@ const writeJSON = <T,>(key: string, value: T) => {
 
 let idSeed = 100
 const nextId = () => `p${++idSeed}`
+const storyboardTargetKey = (routeId: string, moduleId?: string) =>
+  moduleId ? `${routeId}:${moduleId}:video` : routeId
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [briefText, setBriefText] = useState('')
@@ -569,25 +571,26 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const storyboardVideoUrlOf = useCallback(
-    (routeId: string) => storyboardVideoUrl[routeId] ?? '',
+    (routeId: string, moduleId?: string) => storyboardVideoUrl[storyboardTargetKey(routeId, moduleId)] ?? '',
     [storyboardVideoUrl],
   )
-  const setStoryboardVideoUrl = useCallback((routeId: string, videoUrl: string) => {
-    setStoryboardVideoUrlState((prev) => ({ ...prev, [routeId]: videoUrl }))
+  const setStoryboardVideoUrl = useCallback((routeId: string, videoUrl: string, moduleId?: string) => {
+    setStoryboardVideoUrlState((prev) => ({ ...prev, [storyboardTargetKey(routeId, moduleId)]: videoUrl }))
   }, [])
 
   const storyboardJobIdOf = useCallback(
-    (routeId: string) => storyboardJobId[routeId],
+    (routeId: string, moduleId?: string) => storyboardJobId[storyboardTargetKey(routeId, moduleId)],
     [storyboardJobId],
   )
-  const setStoryboardJobId = useCallback((routeId: string, jobId: string) => {
-    setStoryboardJobIdState((prev) => ({ ...prev, [routeId]: jobId }))
+  const setStoryboardJobId = useCallback((routeId: string, jobId: string, moduleId?: string) => {
+    setStoryboardJobIdState((prev) => ({ ...prev, [storyboardTargetKey(routeId, moduleId)]: jobId }))
   }, [])
-  const clearStoryboardJobId = useCallback((routeId: string) => {
+  const clearStoryboardJobId = useCallback((routeId: string, moduleId?: string) => {
     setStoryboardJobIdState((prev) => {
-      if (!(routeId in prev)) return prev
+      const key = storyboardTargetKey(routeId, moduleId)
+      if (!(key in prev)) return prev
       const next = { ...prev }
-      delete next[routeId]
+      delete next[key]
       return next
     })
   }, [])

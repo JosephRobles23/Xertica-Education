@@ -1,0 +1,40 @@
+¡Hola, líder!
+
+La cultura de equipo en un entorno remoto no surge por accidente, se diseña con intención. Los espacios para la charla informal, el reconocimiento y la conexión humana desaparecen si no los creamos activamente. Este laboratorio no es teórico; es tu oportunidad para pasar de la idea a la acción.
+
+### Tu Desafío
+
+Como líder en Xertica, has notado que, aunque la productividad es buena, la cohesión del equipo ha disminuido. Las interacciones son puramente transaccionales. Tu misión es diseñar y comunicar una iniciativa de cultura de equipo de bajo costo y alto impacto para el próximo trimestre.
+
+### ¡Manos a la obra!
+
+**1. Diagnostica tu principal brecha cultural (5 min)**
+
+Antes de proponer una solución, define el problema. ¿Falta reconocimiento entre pares? ¿Hay poca interacción informal? ¿Los nuevos miembros se sienten aislados? Elige UN solo problema clave que quieras resolver en tu equipo. Anótalo en una frase clara, por ejemplo: "Mi equipo no tiene espacios para conversaciones no relacionadas con el trabajo".
+
+**2. Idea una iniciativa específica (5 min)**
+
+Ahora, idea una actividad concreta y sencilla para abordar esa brecha. Evita ideas vagas como "hacer más reuniones". Sé específico: "Crear un canal de Slack #CafecitoVirtual y usar un bot para emparejar a dos personas al azar cada semana para una charla de 15 minutos".
+
+*   **Prompt Maestro para ideas:** "Actúa como un coach de equipos remotos. Dame 5 ideas de actividades de team building de bajo esfuerzo para un equipo de tecnología que sufre de [inserta aquí tu brecha cultural]"
+
+**3. Diseña el comunicado en Canva (15 min)**
+
+Una buena idea mal comunicada no funciona. Usa Canva para crear un visual atractivo (formato post para red social o A4) que anuncie tu iniciativa. Tu diseño debe responder de forma clara y visual:
+
+*   **Qué:** ¿Cuál es la iniciativa?
+*   **Por qué:** ¿Qué problema soluciona o qué beneficio trae?
+*   **Cómo:** ¿Cuáles son los pasos para participar? ¿Cuándo empieza?
+
+**4. Define cómo medirás el éxito (5 min)**
+
+¿Cómo sabrás si tu iniciativa funcionó? No necesitas un dashboard complejo. Define 1 o 2 métricas de éxito simples y accionables. Por ejemplo: "Lograr que el 70% del equipo participe al menos una vez en el primer mes" o "Recibir 3+ menciones positivas sobre la iniciativa en nuestra próxima retro". Inclúyelas en tu documento o en las notas de tu entrega.
+
+### 🚀 Tu Entregable
+
+Publica aquí el enlace compartible de tu diseño en Canva (¡asegúrate de que cualquiera con el enlace pueda verlo!) y añade en un comentario las métricas de éxito que definiste.
+
+### 💡 Tips Pro
+
+*   **Menos es más:** No intentes solucionar todo a la vez. Elige una iniciativa pequeña y fácil de adoptar. El éxito de esta primera te dará impulso para la siguiente.
+*   **Hazlo visual:** Usa íconos, imágenes de equipo (si las tienes) y los colores de la marca para que tu comunicado en Canva sea memorable y se sienta parte de la cultura de Xertica.

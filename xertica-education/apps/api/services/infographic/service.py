@@ -1,6 +1,7 @@
 import os
 import io
 import base64
+import asyncio
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Literal
@@ -20,6 +21,17 @@ from PIL import Image
 from config.settings import settings
 from .interface import InfographicServiceInterface
 from supabase import create_client
+
+IMAGE_GENERATION_TIMEOUT = httpx.Timeout(connect=20.0, read=300.0, write=30.0, pool=20.0)
+IMAGE_GENERATION_MAX_ATTEMPTS = 3
+
+
+class InfographicGenerationError(RuntimeError):
+    """Raised when the external image provider fails in a user-actionable way."""
+
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 def extract_grounded_points(sources: List[Dict[str, Any]], word_budget: int) -> List[str]:
     """
@@ -218,6 +230,39 @@ def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str
 
     return prompt
 
+
+def _is_transient_http_status(status_code: int) -> bool:
+    return status_code == 429 or 500 <= status_code < 600
+
+
+def _is_transient_generation_error(error: Exception) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        return _is_transient_http_status(error.response.status_code)
+    return isinstance(
+        error,
+        (
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.PoolTimeout,
+            httpx.ReadError,
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+            httpx.WriteError,
+            httpx.WriteTimeout,
+        ),
+    )
+
+
+def _summarize_generation_error(error: Exception) -> str:
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"OpenAI Image API returned HTTP {error.response.status_code}: {error.response.text[:500]}"
+    if isinstance(error, httpx.TimeoutException):
+        return "OpenAI Image API timed out while generating or downloading the image."
+    if isinstance(error, httpx.TransportError):
+        return f"OpenAI Image API transport failed: {error}"
+    return str(error)
+
+
 class InfographicService(InfographicServiceInterface):
     def __init__(self):
         self._supabase = None
@@ -265,10 +310,8 @@ class InfographicService(InfographicServiceInterface):
         # Resolve the image size from the aspect ratio parameter
         image_size = ASPECT_RATIO_SIZES.get(aspect_ratio, ASPECT_RATIO_SIZES["auto"])
         
-        # Real API call — timeout raised to 300s because gpt-image-2 can take 2+ min
-        # for high-resolution images.
-        async def attempt_call(target_prompt: str) -> bytes:
-            async with httpx.AsyncClient(timeout=300.0) as client:
+        async def call_image_api_once(target_prompt: str) -> bytes:
+            async with httpx.AsyncClient(timeout=IMAGE_GENERATION_TIMEOUT) as client:
                 headers = {
                     "Authorization": f"Bearer {openai_key}",
                     "Content-Type": "application/json"
@@ -315,6 +358,33 @@ class InfographicService(InfographicServiceInterface):
                         response=response
                     )
 
+        async def attempt_call(target_prompt: str) -> bytes:
+            last_error: Exception | None = None
+            for attempt in range(1, IMAGE_GENERATION_MAX_ATTEMPTS + 1):
+                try:
+                    return await call_image_api_once(target_prompt)
+                except Exception as error:
+                    if not _is_transient_generation_error(error):
+                        raise
+
+                    last_error = error
+                    if attempt >= IMAGE_GENERATION_MAX_ATTEMPTS:
+                        break
+
+                    delay_seconds = 2 ** (attempt - 1)
+                    print(
+                        "Transient OpenAI Image API failure "
+                        f"(attempt {attempt}/{IMAGE_GENERATION_MAX_ATTEMPTS}): {error}. "
+                        f"Retrying in {delay_seconds}s."
+                    )
+                    await asyncio.sleep(delay_seconds)
+
+            message = _summarize_generation_error(last_error) if last_error else "OpenAI Image API failed."
+            raise InfographicGenerationError(
+                f"No se pudo generar la infografía por un fallo temporal del proveedor de imágenes. {message}",
+                retryable=True,
+            )
+
         try:
             png_bytes = await attempt_call(prompt)
         except Exception as e:
@@ -339,7 +409,12 @@ class InfographicService(InfographicServiceInterface):
                     print(f"Fallback generation also failed: {fallback_err}")
                     raise fallback_err
             else:
-                raise e
+                if isinstance(e, InfographicGenerationError):
+                    raise
+                raise InfographicGenerationError(
+                    f"No se pudo generar la infografía con el proveedor de imágenes. {_summarize_generation_error(e)}",
+                    retryable=False,
+                ) from e
 
         # Step 4: Wrap PNG in PDF using Pillow
         pdf_bytes = None

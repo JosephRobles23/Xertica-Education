@@ -1,0 +1,30 @@
+LECCIÓN DE ESTUDIO
+Módulo: Escucha Activa
+Cliente: Xertica
+Generado el: 2026-07-10 19:09:48
+======================================================================
+
+1. 1. Más Allá de Oír: La Escucha Activa en Xertica
+------------------------------------------------
+La escucha activa no es solo oír palabras, es un compromiso para comprender el mensaje completo, incluyendo el contexto y la intención. En Xertica, donde las soluciones tecnológicas son complejas, escuchar activamente a un líder asegura que entendemos no solo la tarea, sino el 'porqué' detrás de ella, evitando retrabajos y alineando esfuerzos con los objetivos estratégicos. 
+
+**Ejemplo Práctico:** Un líder dice: 'Necesitamos mejorar la performance del dashboard'. En lugar de empezar a optimizar todo, una escucha activa te lleva a indagar el problema de fondo: 'Entendido. ¿El problema es el tiempo de carga para los usuarios o la precisión de los datos que se muestran?'.
+
+2. 2. Técnicas Clave: Parafraseo y Reflejo
+---------------------------------------
+Para confirmar tu comprensión y demostrar que estás conectado, utiliza el parafraseo y el reflejo. Parafrasear es repetir la idea con tus propias palabras para validar la información técnica, mientras que reflejar es nombrar la emoción que percibes. Esto construye confianza y claridad de inmediato. 
+
+**Ejemplo Práctico:** Tu líder dice con urgencia: '¡Este despliegue es crítico y no puede fallar!'. Tu respuesta: 'Entiendo, la prioridad es asegurar un despliegue sin errores (parafraseo). Noto que esto es un punto de alta presión para el equipo ahora mismo (reflejo)'.
+
+3. 3. Impulsando la Claridad con Preguntas Poderosas
+-------------------------------------------------
+Transforma la conversación de un monólogo a un diálogo colaborativo usando preguntas abiertas (qué, cómo, cuál, por qué). Estas preguntas invitan a tu líder a profundizar, revelando información crucial que no se menciona en la superficie y posicionándote como un partner estratégico, no solo un ejecutor. 
+
+**Ejemplo Práctico:** En vez de una pregunta cerrada como '¿Entonces empiezo con la API?', prueba con una pregunta poderosa: 'Para asegurar que entrego el valor esperado, ¿cuál es el resultado final que esta integración debe habilitar para el cliente?'.
+
+TÉRMINOS CLAVE (GLOSARIO)
+=========================
+* Escucha Activa: Proceso de comunicación que implica una atención plena al mensaje del interlocutor, no solo para entender las palabras, sino también los sentimientos, ideas o pensamientos subyacentes.
+* Parafraseo: Técnica que consiste en verbalizar con tus propias palabras lo que crees que la otra persona ha dicho, con el fin de verificar la comprensión y demostrar que estás prestando atención.
+* Pregunta Poderosa: Una pregunta abierta y reflexiva que estimula el pensamiento, desafía suposiciones y genera claridad, en lugar de buscar una simple respuesta de 'sí' o 'no'.
+* Reflejo (Emocional): Acción de verbalizar la emoción o sentimiento que se percibe en el hablante. Su objetivo es mostrar empatía y validar la experiencia emocional de la otra persona, fortaleciendo la conexión.

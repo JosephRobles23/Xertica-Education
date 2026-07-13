@@ -1,0 +1,55 @@
+EVALUACIÓN DE CONOCIMIENTO (QUIZ)
+Módulo: Evaluación Final
+Cliente: Xertica
+Generado el: 2026-07-10 19:10:44
+======================================================================
+
+Pregunta 1: ¿Cuál es el objetivo principal de la Evaluación Final en una ruta de aprendizaje de Xertica?
+  A) Memorizar la mayor cantidad de conceptos teóricos.
+  B) Validar que el participante puede aplicar los conocimientos para resolver problemas de negocio reales.
+  C) Completar un requisito administrativo para obtener un certificado.
+  D) Evaluar la velocidad de escritura de código del participante.
+
+  [Respuesta Correcta: B]
+  [Explicación: La evaluación busca confirmar que las habilidades adquiridas son aplicables a desafíos empresariales, que es el foco principal de la capacitación de Xertica.]
+----------------------------------------------------------------------
+
+Pregunta 2: Además del conocimiento teórico, ¿qué habilidad clave busca medir la Evaluación Final de forma prioritaria?
+  A) La capacidad de participar en todas las clases en vivo.
+  B) La rapidez para encontrar respuestas en la documentación oficial.
+  C) La habilidad para integrar distintas herramientas y conceptos en una solución cohesiva.
+  D) La memoria para recordar la sintaxis exacta de los comandos.
+
+  [Respuesta Correcta: C]
+  [Explicación: Los proyectos reales rara vez dependen de una sola herramienta; la evaluación valora la capacidad de combinar servicios y conceptos para crear una solución completa.]
+----------------------------------------------------------------------
+
+Pregunta 3: Pensando en tu preparación, ¿cuál es la estrategia más efectiva para superar con éxito la Evaluación Final?
+  A) Estudiar únicamente los resúmenes teóricos un día antes de la entrega.
+  B) Memorizar el contenido de todas las presentaciones del curso.
+  C) Ignorar los laboratorios prácticos y centrarse solo en la teoría.
+  D) Repasar los casos de uso y laboratorios prácticos, entendiendo el 'porqué' de las soluciones implementadas.
+
+  [Respuesta Correcta: D]
+  [Explicación: Entender la lógica y la aplicación práctica a través de los laboratorios es más efectivo que la memorización, ya que la evaluación se centra en la resolución de problemas.]
+----------------------------------------------------------------------
+
+Pregunta 4: ¿De qué manera impacta la aprobación de la Evaluación Final en el rol de un profesional dentro de un proyecto con Xertica?
+  A) Demuestra la preparación para asumir responsabilidades y aplicar las nuevas competencias de forma autónoma en proyectos.
+  B) Es simplemente un trámite final que no tiene impacto en las responsabilidades futuras.
+  C) Garantiza un ascenso o aumento de sueldo de forma automática.
+  D) Confirma que el profesional ya no necesitará consultar documentación técnica.
+
+  [Respuesta Correcta: A]
+  [Explicación: Aprobar la evaluación es una señal de competencia y confianza, habilitando al profesional para contribuir activamente y con autonomía en los proyectos.]
+----------------------------------------------------------------------
+
+Pregunta 5: Al recibir retroalimentación sobre tu Evaluación Final, ¿cuál es su propósito fundamental en tu desarrollo profesional?
+  A) Únicamente justificar la calificación numérica obtenida.
+  B) Comparar tu desempeño con el de otros compañeros del curso.
+  C) Identificar áreas de oportunidad y reforzar el aprendizaje para tu crecimiento continuo.
+  D) Es un paso formal que no requiere ninguna acción posterior.
+
+  [Respuesta Correcta: C]
+  [Explicación: La retroalimentación es una herramienta de aprendizaje clave para consolidar conocimientos e identificar qué habilidades se deben seguir desarrollando.]
+----------------------------------------------------------------------

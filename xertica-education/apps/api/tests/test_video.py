@@ -490,6 +490,114 @@ class TestVideoAPI(unittest.TestCase):
         job_id = UUID(job_id_str)
         self.assertIsInstance(job_id, UUID)
 
+    def test_auto_storyboard_render_is_queued_before_storyboard_generation(self):
+        """Route-page renders must return a Job before the scriptwriter starts."""
+        service = VideoService()
+        service._supabase = None
+        captured_tasks = []
+        storyboard_started = False
+
+        async def slow_storyboard(_component_id):
+            nonlocal storyboard_started
+            storyboard_started = True
+            return {
+                "title": "Storyboard automatico",
+                "total_word_budget": 120,
+                "scenes": [],
+            }
+
+        async def fake_render(*_args):
+            return None
+
+        def capture_task(coro):
+            captured_tasks.append(coro)
+            return None
+
+        def close_captured_tasks():
+            for coro in captured_tasks:
+                coro.close()
+
+        self.addCleanup(close_captured_tasks)
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        with patch("services.video.service.asyncio.create_task", side_effect=capture_task), patch.object(
+            service, "_get_or_create_storyboard", side_effect=slow_storyboard
+        ), patch.object(service, "_run_render_job", new=fake_render):
+            response = self.client.post(
+                "/videos/generate",
+                json={
+                    "route_id": "route-1",
+                    "module_id": "module-1",
+                    "component_kind": "video",
+                    "use_mock": False,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(storyboard_started)
+        self.assertEqual(len(captured_tasks), 1)
+
+    def test_video_assets_are_isolated_by_render_target_module(self):
+        """Two video components in one Ruta must retain their own rendered URLs."""
+        service = VideoService()
+        service._supabase = None
+        captured_tasks = []
+
+        def capture_task(coro):
+            captured_tasks.append(coro)
+            return None
+
+        async def fake_execute(executor, plan):
+            storyboard = plan.storyboard.model_dump()
+            executor.total_duration = 8.0
+            executor.stage_outputs["upload"] = {
+                "url": f"https://example.com/videos/{storyboard['title']}.mp4"
+            }
+
+        def close_captured_tasks():
+            for coro in captured_tasks:
+                coro.close()
+
+        self.addCleanup(close_captured_tasks)
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        with patch("services.video.service.asyncio.create_task", side_effect=capture_task), patch(
+            "services.video.executor.RenderExecutor.execute", new=fake_execute
+        ):
+            for module_id, title in (("module-a", "video-a"), ("module-b", "video-b")):
+                response = self.client.post(
+                    "/videos/generate",
+                    json={
+                        "route_id": "route-1",
+                        "module_id": module_id,
+                        "component_kind": "video",
+                        "custom_storyboard": {
+                            "title": title,
+                            "total_word_budget": 120,
+                            "scenes": [],
+                        },
+                        "use_mock": False,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+
+            for task in captured_tasks:
+                asyncio.run(task)
+
+        first_asset = self.client.get(
+            "/videos/assets",
+            params={"route_id": "route-1", "module_id": "module-a", "component_kind": "video"},
+        )
+        second_asset = self.client.get(
+            "/videos/assets",
+            params={"route_id": "route-1", "module_id": "module-b", "component_kind": "video"},
+        )
+
+        self.assertEqual(first_asset.status_code, 200)
+        self.assertEqual(second_asset.status_code, 200)
+        self.assertEqual(first_asset.json()["storage_path"], "https://example.com/videos/video-a.mp4")
+        self.assertEqual(second_asset.json()["storage_path"], "https://example.com/videos/video-b.mp4")
+
     def test_get_video_job_status(self):
         """GET /videos/jobs/{job_id} returns status and progress updates."""
         # First trigger generation to get a real job ID
@@ -801,15 +909,20 @@ class TestVideoAPI(unittest.TestCase):
                     "rightLabel": "Con evidencia",
                     "rightValue": "Verifica",
                 },
+            }, {
+                "scene_number": 2,
+                "narration": "Seguimos una secuencia legible.",
+                "visual_type": "progress_bar",
+                "visual_config": {"title": "Proceso", "progress": 50, "steps": ["Contexto", "Decision"]},
             }],
         }
 
         edit_decisions = asyncio.run(transform_storyboard_to_edit_decisions(
             storyboard=storyboard,
             audio_paths=[],
-            durations=[5.0],
-            visual_paths=[""],
-            visual_is_video=[False],
+            durations=[5.0, 5.0],
+            visual_paths=["", ""],
+            visual_is_video=[False, False],
             music_path=None,
             captions=None,
             total_duration=5.0,
@@ -819,6 +932,9 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(edit_decisions["theme"], "xertica-education")
         self.assertEqual(edit_decisions["themeConfig"]["accentColor"], "#F4B942")
         self.assertEqual(edit_decisions["cuts"][0]["title"], "Misma pregunta, distinto criterio")
+        for cut in edit_decisions["cuts"]:
+            self.assertEqual(cut["backgroundColor"], "#F8FAFC")
+            self.assertEqual(cut["color"], "#0F172A")
 
     def test_generate_video_uses_reviewed_storyboard_as_render_source_of_truth(self):
         """POST /videos/generate renders from the reviewed storyboard and retains provenance."""

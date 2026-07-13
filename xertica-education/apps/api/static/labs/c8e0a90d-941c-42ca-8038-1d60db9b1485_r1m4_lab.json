@@ -1,0 +1,102 @@
+{
+  "title": "Diseña tu próxima iniciativa de cultura de equipo remoto",
+  "objective": "Diseñar una iniciativa concreta y comunicarla visualmente para fortalecer la cultura de un equipo remoto en Xertica.",
+  "scenario": "Eres un líder en Xertica y has notado que la cohesión de tu equipo remoto ha disminuido. Las interacciones son muy transaccionales y falta conexión. Tu misión es diseñar una iniciativa simple y de bajo costo para el próximo trimestre que fomente la cultura de equipo, y crear el material de comunicación para lanzarla.",
+  "estimatedTimeMinutes": 30,
+  "difficulty": "beginner",
+  "tools": [
+    {
+      "name": "Canva",
+      "purpose": "Diseñar el material de comunicación visual para la iniciativa de cultura.",
+      "url": "https://www.canva.com"
+    }
+  ],
+  "prerequisites": [
+    "Conocimientos básicos de liderazgo de equipos.",
+    "Cuenta activa en Canva (puede ser la versión gratuita)."
+  ],
+  "instructions": [
+    {
+      "step": 1,
+      "title": "Diagnostica tu principal brecha cultural",
+      "description": "Identifica y anota en una frase clara el principal desafío cultural que enfrenta tu equipo remoto. Por ejemplo: falta de reconocimiento, poca interacción informal o aislamiento de nuevos miembros. Enfócate en un solo problema para que la solución sea más efectiva.",
+      "expectedResult": "Una frase que define claramente el problema a resolver.",
+      "tip": null
+    },
+    {
+      "step": 2,
+      "title": "Idea una iniciativa específica",
+      "description": "Basado en tu diagnóstico, brainstorma una actividad concreta, simple y de bajo esfuerzo para abordar el problema. Por ejemplo, 'cafés virtuales aleatorios semanales' o un 'canal de kudos'. Usa el prompt maestro sugerido si necesitas inspiración.",
+      "expectedResult": null,
+      "tip": "Piensa en actividades que no requieran más de 15-20 minutos por persona a la semana para maximizar la adopción."
+    },
+    {
+      "step": 3,
+      "title": "Diseña el comunicado en Canva",
+      "description": "Usa Canva para crear un visual de una sola página que anuncie tu iniciativa al equipo. El diseño debe ser atractivo y responder tres preguntas clave de forma muy clara: ¿Qué es la iniciativa?, ¿Por qué la hacemos? y ¿Cómo se puede participar?",
+      "expectedResult": "Un diseño en Canva (p. ej., un post o un flyer) que comunica la iniciativa.",
+      "tip": null
+    },
+    {
+      "step": 4,
+      "title": "Define cómo medirás el éxito",
+      "description": "Establece 1 o 2 métricas simples para evaluar el impacto de tu iniciativa. No necesitas BigQuery; piensa en indicadores cualitativos o cuantitativos sencillos, como 'tasa de participación del 70%' o 'feedback positivo en la siguiente reunión de equipo'.",
+      "expectedResult": "Una o dos métricas de éxito claras y medibles.",
+      "tip": null
+    }
+  ],
+  "deliverable": {
+    "description": "Un enlace público al diseño de Canva que anuncia tu iniciativa de cultura remota, acompañado de las métricas de éxito que has definido.",
+    "format": "URL de Canva (público) y texto con las...",
+    "successCriteria": [
+      "La iniciativa propuesta aborda directamente la brecha cultural identificada en el paso 1.",
+      "El diseño de Canva es claro, visualmente atractivo y explica el qué, por qué y cómo de la...",
+      "Se definen al menos una métrica de éxito concreta y realista."
+    ]
+  },
+  "reflectionQuestions": [
+    "¿Qué barreras podrías encontrar al implementar esta iniciativa y cómo podrías mitigarlas?",
+    "Si la iniciativa es un éxito, ¿cómo podrías escalarla o convertirla en una práctica recurrente para otros equipos..."
+  ],
+  "sourceReferences": [
+    {
+      "sourceId": "469a45e6-2e62-496a-b2f5-8e1bb8ff7a4f",
+      "title": "Consejos para el trabajo remoto y la colaboración en equipo",
+      "url": "https://slack.com/blog/collaboration/remote-work-tips"
+    }
+  ],
+  "safetyNotes": [],
+  "steps": [
+    {
+      "title": "Diagnostica tu principal brecha cultural",
+      "desc": "Identifica y anota en una frase clara el principal desafío cultural que enfrenta tu equipo remoto. Por ejemplo: falta de reconocimiento, poca interacción informal o aislamiento de nuevos miembros. Enfócate en un solo problema para que la solución sea más efectiva.",
+      "tool": "Canva",
+      "tip": null
+    },
+    {
+      "title": "Idea una iniciativa específica",
+      "desc": "Basado en tu diagnóstico, brainstorma una actividad concreta, simple y de bajo esfuerzo para abordar el problema. Por ejemplo, 'cafés virtuales aleatorios semanales' o un 'canal de kudos'. Usa el prompt maestro sugerido si necesitas inspiración.",
+      "tool": "Canva",
+      "tip": "Piensa en actividades que no requieran más de 15-20 minutos por persona a la semana para maximizar la adopción."
+    },
+    {
+      "title": "Diseña el comunicado en Canva",
+      "desc": "Usa Canva para crear un visual de una sola página que anuncie tu iniciativa al equipo. El diseño debe ser atractivo y responder tres preguntas clave de forma muy clara: ¿Qué es la iniciativa?, ¿Por qué la hacemos? y ¿Cómo se puede participar?",
+      "tool": "Canva",
+      "tip": null
+    },
+    {
+      "title": "Define cómo medirás el éxito",
+      "desc": "Establece 1 o 2 métricas simples para evaluar el impacto de tu iniciativa. No necesitas BigQuery; piensa en indicadores cualitativos o cuantitativos sencillos, como 'tasa de participación del 70%' o 'feedback positivo en la siguiente reunión de equipo'.",
+      "tool": "Canva",
+      "tip": null
+    }
+  ],
+  "console": [
+    "[ ] Diagnostica tu principal brecha cultural",
+    "[ ] Idea una iniciativa específica",
+    "[ ] Diseña el comunicado en Canva",
+    "[ ] Define cómo medirás el éxito"
+  ],
+  "classroomText": "¡Hola, líder!\n\nLa cultura de equipo en un entorno remoto no surge por accidente, se diseña con intención. Los espacios para la charla informal, el reconocimiento y la conexión humana desaparecen si no los creamos activamente. Este laboratorio no es teórico; es tu oportunidad para pasar de la idea a la acción.\n\n### Tu Desafío\n\nComo líder en Xertica, has notado que, aunque la productividad es buena, la cohesión del equipo ha disminuido. Las interacciones son puramente transaccionales. Tu misión es diseñar y comunicar una iniciativa de cultura de equipo de bajo costo y alto impacto para el próximo trimestre.\n\n### ¡Manos a la obra!\n\n**1. Diagnostica tu principal brecha cultural (5 min)**\n\nAntes de proponer una solución, define el problema. ¿Falta reconocimiento entre pares? ¿Hay poca interacción informal? ¿Los nuevos miembros se sienten aislados? Elige UN solo problema clave que quieras resolver en tu equipo. Anótalo en una frase clara, por ejemplo: \"Mi equipo no tiene espacios para conversaciones no relacionadas con el trabajo\".\n\n**2. Idea una iniciativa específica (5 min)**\n\nAhora, idea una actividad concreta y sencilla para abordar esa brecha. Evita ideas vagas como \"hacer más reuniones\". Sé específico: \"Crear un canal de Slack #CafecitoVirtual y usar un bot para emparejar a dos personas al azar cada semana para una charla de 15 minutos\".\n\n*   **Prompt Maestro para ideas:** \"Actúa como un coach de equipos remotos. Dame 5 ideas de actividades de team building de bajo esfuerzo para un equipo de tecnología que sufre de [inserta aquí tu brecha cultural]\"\n\n**3. Diseña el comunicado en Canva (15 min)**\n\nUna buena idea mal comunicada no funciona. Usa Canva para crear un visual atractivo (formato post para red social o A4) que anuncie tu iniciativa. Tu diseño debe responder de forma clara y visual:\n\n*   **Qué:** ¿Cuál es la iniciativa?\n*   **Por qué:** ¿Qué problema soluciona o qué beneficio trae?\n*   **Cómo:** ¿Cuáles son los pasos para participar? ¿Cuándo empieza?\n\n**4. Define cómo medirás el éxito (5 min)**\n\n¿Cómo sabrás si tu iniciativa funcionó? No necesitas un dashboard complejo. Define 1 o 2 métricas de éxito simples y accionables. Por ejemplo: \"Lograr que el 70% del equipo participe al menos una vez en el primer mes\" o \"Recibir 3+ menciones positivas sobre la iniciativa en nuestra próxima retro\". Inclúyelas en tu documento o en las notas de tu entrega.\n\n### 🚀 Tu Entregable\n\nPublica aquí el enlace compartible de tu diseño en Canva (¡asegúrate de que cualquiera con el enlace pueda verlo!) y añade en un comentario las métricas de éxito que definiste.\n\n### 💡 Tips Pro\n\n*   **Menos es más:** No intentes solucionar todo a la vez. Elige una iniciativa pequeña y fácil de adoptar. El éxito de esta primera te dará impulso para la siguiente.\n*   **Hazlo visual:** Usa íconos, imágenes de equipo (si las tienes) y los colores de la marca para que tu comunicado en Canva sea memorable y se sienta parte de la cultura de Xertica."
+}

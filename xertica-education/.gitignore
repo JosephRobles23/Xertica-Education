@@ -51,3 +51,15 @@ apps/api/static/quizzes/
 apps/api/static/labs/
 apps/api/static/videos/
 apps/api/static/xertica-education-assets/
+
+# OpenMontage is kept locally, but only the renderer used by Xertica is vendored.
+openmontage/*
+openmontage/.env.example
+!openmontage/LICENSE
+!openmontage/remotion-composer/
+!openmontage/remotion-composer/**
+openmontage/remotion-composer/node_modules/
+openmontage/remotion-composer/out/
+openmontage/remotion-composer/projects/
+openmontage/remotion-composer/public/
+openmontage/remotion-composer/titled_video_props.json

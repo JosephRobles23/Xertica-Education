@@ -25,17 +25,16 @@ export default function AssetFinal() {
   const { routes, storyboardVideoUrlOf } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
   const labModule = route?.modules.find((module) => module.lab?.instructions?.length || module.lab?.steps?.length)
+  const videoModule = route?.modules.find((module) =>
+    module.contents.some((content) => content.kind === 'video')
+  )
   const [savingDrive, setSavingDrive] = useState(false)
   const [driveLink, setDriveLink] = useState<string | null>(null)
   const [backendVideoUrl, setBackendVideoUrl] = useState('')
-  const videoUrl = backendVideoUrl || (route ? storyboardVideoUrlOf(route.id) : '')
+  const videoUrl = backendVideoUrl || (route && videoModule ? storyboardVideoUrlOf(route.id, videoModule.id) : '')
 
   useEffect(() => {
-    if (!route) return
-    const videoModule = route.modules.find((module) =>
-      module.contents.some((content) => content.kind === 'video')
-    )
-    if (!videoModule) return
+    if (!route || !videoModule) return
 
     let active = true
     const params = new URLSearchParams({
@@ -52,7 +51,7 @@ export default function AssetFinal() {
     return () => {
       active = false
     }
-  }, [route])
+  }, [route, videoModule])
 
   if (!route) {
     return (
