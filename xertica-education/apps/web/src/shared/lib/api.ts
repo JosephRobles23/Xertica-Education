@@ -95,6 +95,27 @@ export const api = {
     });
   },
 
+  async saveRouteBundleToGoogleDrive(
+    routeId: string,
+    accessToken: string,
+    filename?: string
+  ): Promise<{
+    file_id: string;
+    name: string;
+    mime_type: string;
+    web_view_link?: string;
+    included_count?: number;
+    skipped_count?: number;
+  }> {
+    return this.request(`/learning-paths/${routeId}/export/google-drive/all`, {
+      method: 'POST',
+      body: JSON.stringify({
+        access_token: accessToken,
+        filename,
+      }),
+    });
+  },
+
   /**
    * Create a background task orchestration job
    */

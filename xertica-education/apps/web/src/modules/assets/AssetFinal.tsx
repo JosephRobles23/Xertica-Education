@@ -72,18 +72,18 @@ export default function AssetFinal() {
   const saveToDrive = async () => {
     if (!route) return
     setSavingDrive(true)
-    const toastId = toast.loading('Guardando asset final en Google Drive...')
+    const toastId = toast.loading('Guardando paquete completo en Google Drive...')
     try {
       const accessToken = await authorizeGoogleDrive()
-      const uploaded = await api.saveRouteToGoogleDrive(
+      const uploaded = await api.saveRouteBundleToGoogleDrive(
         route.id,
         accessToken,
-        `${route.name || route.id} - asset final.md`,
+        `${route.name || route.id} - assets.zip`,
       )
       setDriveLink(uploaded.web_view_link ?? null)
-      toast.success('Asset guardado en Google Drive', {
+      toast.success('Paquete guardado en Google Drive', {
         id: toastId,
-        description: uploaded.name,
+        description: `${uploaded.name}${uploaded.included_count !== undefined ? ` · ${uploaded.included_count} archivos` : ''}`,
       })
     } catch (err) {
       toast.error('No se pudo guardar en Drive', {
@@ -147,7 +147,7 @@ export default function AssetFinal() {
             </Button>
           )}
           <Button variant="outline-primary" onClick={saveToDrive} disabled={savingDrive}>
-            <FolderUp /> {savingDrive ? 'Guardando...' : 'Save to Google Drive'}
+            <FolderUp /> {savingDrive ? 'Guardando...' : 'Save all to Google Drive'}
           </Button>
           <Button
             variant="outline-destructive"
