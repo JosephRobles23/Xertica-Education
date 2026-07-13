@@ -108,26 +108,7 @@ class LabService(LabServiceInterface):
             detected_tools=detected_tools,
         )
 
-        txt_content = normalized.get("classroomText") or self._build_classroom_text(normalized)
-        normalized["classroomText"] = txt_content
-        pdf_bytes = self._generate_pdf_bytes(txt_content)
-
-        # Persistencia vía storage adapter (ADR-0022): bucket con fallback
-        # local en dev; el path sigue la convención del Spine.
-        filename_prefix = f"{route_id}_{module_id}_lab"
-        base_path = f"{route_id}/{module_id}/lab"
-        json_bytes = json.dumps(normalized, ensure_ascii=False, indent=2).encode("utf-8")
-
-        normalized["txtUrl"] = await self.storage.upload_file(
-            settings.storage_bucket, f"{base_path}/{filename_prefix}.txt", txt_content.encode("utf-8")
-        )
-        normalized["pdfUrl"] = await self.storage.upload_file(
-            settings.storage_bucket, f"{base_path}/{filename_prefix}.pdf", pdf_bytes
-        )
-        normalized["jsonUrl"] = await self.storage.upload_file(
-            settings.storage_bucket, f"{base_path}/{filename_prefix}.json", json_bytes
-        )
-        normalized["storagePath"] = f"{base_path}/{filename_prefix}.pdf"
+        await self.save_lab_files(route_id, module_id, normalized)
         normalized["groundingStatus"] = "kb-grounded" if kb_hits else "module-grounded"
         normalized["provenance"] = {
             "approved_sources": approved_sources,
@@ -142,6 +123,33 @@ class LabService(LabServiceInterface):
             "detected_tools": detected_tools,
         }
         return normalized
+
+    async def save_lab_files(self, route_id: UUID | str, module_id: str, lab: Dict[str, Any]) -> Dict[str, Any]:
+        txt_content = (lab.get("classroomText") or self._build_classroom_text(lab)).strip()
+        lab["classroomText"] = txt_content
+        pdf_bytes = self._generate_pdf_bytes(txt_content)
+
+        filename_prefix = f"{route_id}_{module_id}_lab"
+        base_path = f"{route_id}/{module_id}/lab"
+        lab["txtUrl"] = await self.storage.upload_file(
+            settings.storage_bucket,
+            f"{base_path}/{filename_prefix}.txt",
+            txt_content.encode("utf-8"),
+        )
+        lab["pdfUrl"] = await self.storage.upload_file(
+            settings.storage_bucket,
+            f"{base_path}/{filename_prefix}.pdf",
+            pdf_bytes,
+        )
+        lab["storagePath"] = f"{base_path}/{filename_prefix}.pdf"
+
+        json_bytes = json.dumps(lab, ensure_ascii=False, indent=2).encode("utf-8")
+        lab["jsonUrl"] = await self.storage.upload_file(
+            settings.storage_bucket,
+            f"{base_path}/{filename_prefix}.json",
+            json_bytes,
+        )
+        return lab
 
     def _build_prompt(
         self,
@@ -569,61 +577,166 @@ class LabService(LabServiceInterface):
         return "\n".join(line for line in lines if line is not None).strip()
 
     def _generate_pdf_bytes(self, text: str) -> bytes:
-        try:
-            from PIL import Image, ImageDraw, ImageFont
-        except Exception as e:
-            raise RuntimeError("Pillow is required to generate lab PDFs") from e
+        printable_text = self._plain_text_for_pdf(text)
+        lines = self._pdf_layout_lines(printable_text)
 
-        width = 900
-        margin = 56
-        line_height = 28
-        paragraph_gap = 14
-        try:
-            font = ImageFont.truetype("Arial.ttf", 18)
-            title_font = ImageFont.truetype("Arial Bold.ttf", 24)
-        except Exception:
-            font = ImageFont.load_default()
-            title_font = font
+        page_width = 612
+        page_height = 792
+        margin_x = 54
+        margin_top = 58
+        margin_bottom = 54
+        line_height = 15
+        heading_line_height = 20
 
-        probe = Image.new("RGB", (width, 200), "white")
-        draw = ImageDraw.Draw(probe)
-        max_text_width = width - (margin * 2)
-        wrapped_lines: List[tuple[str, bool]] = []
+        pages: List[List[tuple[str, bool]]] = []
+        current_page: List[tuple[str, bool]] = []
+        y = page_height - margin_top
+        first_line = True
 
-        for paragraph in text.splitlines():
-            if not paragraph.strip():
-                wrapped_lines.append(("", False))
+        for line, is_heading in lines:
+            needed = heading_line_height if is_heading else line_height
+            if y - needed < margin_bottom and current_page:
+                pages.append(current_page)
+                current_page = []
+                y = page_height - margin_top
+            current_page.append((line, is_heading or first_line))
+            y -= needed
+            first_line = False
+
+        if current_page:
+            pages.append(current_page)
+        if not pages:
+            pages = [[("Laboratorio práctico", True)]]
+
+        objects: List[bytes] = []
+        objects.append(b'')  # 1 catalog, filled after page ids are known
+        objects.append(b'')  # 2 pages tree
+        objects.append(b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>')
+
+        page_ids: List[int] = []
+        for page_lines in pages:
+            page_id = len(objects) + 1
+            content_id = page_id + 1
+            page_ids.append(page_id)
+            content = self._pdf_page_content(page_lines, page_height, margin_x, margin_top)
+            objects.append(
+                f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] '
+                f'/Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>'.encode('ascii')
+            )
+            objects.append(b'<< /Length ' + str(len(content)).encode('ascii') + b' >>\nstream\n' + content + b'\nendstream')
+
+        kids = ' '.join(f'{page_id} 0 R' for page_id in page_ids)
+        objects[0] = b'<< /Type /Catalog /Pages 2 0 R >>'
+        objects[1] = f'<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>'.encode('ascii')
+
+        output = bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+        offsets = [0]
+        for index, obj in enumerate(objects, start=1):
+            offsets.append(len(output))
+            output.extend(f'{index} 0 obj\n'.encode('ascii'))
+            output.extend(obj)
+            output.extend(b'\nendobj\n')
+
+        xref_offset = len(output)
+        output.extend(f'xref\n0 {len(objects) + 1}\n'.encode('ascii'))
+        output.extend(b'0000000000 65535 f \n')
+        for offset in offsets[1:]:
+            output.extend(f'{offset:010d} 00000 n \n'.encode('ascii'))
+        output.extend(
+            f'trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n'.encode('ascii')
+        )
+        return bytes(output)
+
+    def _plain_text_for_pdf(self, text: str) -> str:
+        clean = re.sub(r"\r\n?", "\n", text or "")
+        clean = re.sub(r"^#{1,6}\s+", "", clean, flags=re.MULTILINE)
+        clean = re.sub(r"^>\s?", "", clean, flags=re.MULTILINE)
+        clean = re.sub(r"^[-*]\s+", "- ", clean, flags=re.MULTILINE)
+        clean = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", clean)
+        clean = re.sub(r"\*\*\*([^*]+)\*\*\*", r"\1", clean)
+        clean = re.sub(r"\*\*([^*]+)\*\*", r"\1", clean)
+        clean = re.sub(r"__([^_]+)__", r"\1", clean)
+        clean = re.sub(r"`([^`]+)`", r"\1", clean)
+        clean = re.sub(r"[\U00010000-\U0010ffff]", "", clean)
+        return re.sub(r"\n{3,}", "\n\n", clean).strip()
+
+    def _pdf_layout_lines(self, text: str) -> List[tuple[str, bool]]:
+        import textwrap
+
+        wrapped: List[tuple[str, bool]] = []
+        for paragraph_index, paragraph in enumerate(text.split("\n")):
+            stripped = paragraph.strip()
+            if not stripped:
+                if wrapped and wrapped[-1][0]:
+                    wrapped.append(("", False))
                 continue
-            use_title_font = len(wrapped_lines) == 0
-            active_font = title_font if use_title_font else font
-            words = paragraph.split()
-            current = ""
-            for word in words:
-                candidate = f"{current} {word}".strip()
-                bbox = draw.textbbox((0, 0), candidate, font=active_font)
-                if bbox[2] - bbox[0] <= max_text_width or not current:
-                    current = candidate
-                else:
-                    wrapped_lines.append((current, use_title_font))
-                    current = word
-                    use_title_font = False
-                    active_font = font
-            if current:
-                wrapped_lines.append((current, use_title_font))
 
-        height = margin * 2
-        for line, _is_title in wrapped_lines:
-            height += paragraph_gap if not line else line_height
-        image = Image.new("RGB", (width, max(height, 1200)), "white")
-        draw = ImageDraw.Draw(image)
-        y = margin
-        for line, is_title in wrapped_lines:
+            is_heading = paragraph_index == 0 or self._looks_like_heading(stripped)
+            prefix = ""
+            body = stripped
+            bullet_match = re.match(r"^([-•])\s+(.+)$", stripped)
+            numbered_match = re.match(r"^(\d+\.\s+)(.+)$", stripped)
+            if bullet_match:
+                prefix = "- "
+                body = bullet_match.group(2)
+            elif numbered_match:
+                prefix = numbered_match.group(1)
+                body = numbered_match.group(2)
+
+            width = 72 if is_heading else 88
+            lines = textwrap.wrap(
+                body,
+                width=width,
+                initial_indent=prefix,
+                subsequent_indent=" " * len(prefix),
+                break_long_words=False,
+                replace_whitespace=True,
+            ) or [prefix.rstrip() or body]
+            wrapped.extend((line, is_heading and index == 0) for index, line in enumerate(lines))
+
+        return wrapped
+
+    def _looks_like_heading(self, value: str) -> bool:
+        normalized = value.strip().rstrip(":")
+        if len(normalized) > 55 or normalized.endswith((".", ",", ";")):
+            return False
+        return normalized.lower() in {
+            "tu desafío",
+            "tu desafio",
+            "tu misión",
+            "tu mision",
+            "manos a la obra",
+            "pasos a seguir",
+            "entregable",
+            "tu entregable",
+            "criterios de éxito",
+            "criterios de exito",
+            "tips rápidos",
+            "tips rapidos",
+            "tips pro",
+            "cierre rápido",
+            "cierre rapido",
+        }
+
+    def _pdf_page_content(self, page_lines: List[tuple[str, bool]], page_height: int, margin_x: int, margin_top: int) -> bytes:
+        commands: List[bytes] = []
+        y = page_height - margin_top
+        for line, is_heading in page_lines:
             if not line:
-                y += paragraph_gap
+                y -= 10
                 continue
-            draw.text((margin, y), line, fill=(31, 22, 51), font=title_font if is_title else font)
-            y += line_height
+            font_size = 16 if is_heading else 11
+            leading = 20 if is_heading else 15
+            escaped = self._pdf_escape_text(line)
+            commands.append(
+                f'BT /F1 {font_size} Tf 1 0 0 1 {margin_x} {y} Tm '.encode('ascii')
+                + b'('
+                + escaped
+                + b') Tj ET'
+            )
+            y -= leading
+        return b'\n'.join(commands)
 
-        output = io.BytesIO()
-        image.save(output, format="PDF", resolution=144.0)
-        return output.getvalue()
+    def _pdf_escape_text(self, text: str) -> bytes:
+        encoded = text.encode("cp1252", errors="replace")
+        return encoded.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")

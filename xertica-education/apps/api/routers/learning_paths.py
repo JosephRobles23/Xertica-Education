@@ -1101,6 +1101,53 @@ async def regenerate_lab(
     return updated
 
 
+@router.patch("/{route_id}/modules/{module_id}/lab", response_model=Dict[str, Any])
+async def update_lab(
+    route_id: str,
+    module_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+    lab_service: LabService = Depends(get_lab_service),
+):
+    """
+    Guarda cambios manuales de laboratorio y regenera los TXT/PDF sin llamar al LLM.
+    """
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    modules = route.get("modules", [])
+    target_module = next((module for module in modules if module.get("id") == module_id), None)
+    if not target_module:
+        raise HTTPException(status_code=404, detail="Module not found")
+
+    lab_payload = payload.get("lab") if isinstance(payload.get("lab"), dict) else payload
+    if not isinstance(lab_payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid lab payload")
+
+    current_lab = target_module.get("lab") or {}
+    next_lab = {**current_lab, **lab_payload}
+    if not (next_lab.get("classroomText") or "").strip():
+        raise HTTPException(status_code=400, detail="classroomText is required")
+
+    resolved_route_id = route_service._resolve_id(route_id)
+    await lab_service.save_lab_files(resolved_route_id, module_id, next_lab)
+    target_module["lab"] = next_lab
+
+    for content in target_module.get("contents", []):
+        if content.get("kind") == "lab":
+            content["status"] = "generado"
+
+    pack = route.get("pack", {}) or {}
+    pack["lab"] = next_lab
+
+    updated = await route_service.update_route(route_id, {
+        "modules": modules,
+        "pack": pack,
+    })
+    return updated
+
+
 @router.post("/{route_id}/modules/{module_id}/infographic/regenerate", response_model=Dict[str, Any])
 async def regenerate_module_infographic(
     route_id: str,
