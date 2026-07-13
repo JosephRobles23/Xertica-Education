@@ -19,6 +19,11 @@ class KnowledgeBaseInterface(ABC):
         ...
 
     @abstractmethod
+    async def clear_learning_path(self, learning_path_id: UUID) -> None:
+        """Vacía el índice de una ruta antes de re-ingestar (clear-and-reingest)."""
+        ...
+
+    @abstractmethod
     async def query(
         self,
         learning_path_id: UUID,

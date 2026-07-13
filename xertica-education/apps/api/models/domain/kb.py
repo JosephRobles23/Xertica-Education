@@ -37,3 +37,4 @@ class IngestReport(BaseModel):
     sources_processed: int
     chunks_created: int
     tokens_embedded: int
+    skipped_sources: list[str] = Field(default_factory=list)  # docs sin texto extraíble

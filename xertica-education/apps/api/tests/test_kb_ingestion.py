@@ -91,6 +91,39 @@ def test_background_job_with_empty_corpus_marks_failed_with_report():
     assert jobs.result["corpus_size"] == 0
 
 
+def test_reingest_is_clear_and_replace_not_append():
+    # Re-proponer estructura / re-aprobar Gate 1 no debe duplicar chunks (decisión del grill).
+    lp = uuid4()
+    kb, coord, repo = _setup()
+    verified = asyncio.run(_persist_verified(repo, lp))
+    first = asyncio.run(coord.ingest_sources(lp, verified))
+    second = asyncio.run(coord.ingest_sources(lp, verified))
+    assert second.chunks_created == first.chunks_created  # reemplaza, no acumula
+    # El store tiene exactamente una copia, no dos.
+    assert len(kb._repo._chunks) == second.chunks_created
+
+
+class _EmptyDocProvider:
+    """Simula un documento sin texto extraíble (PDF escaneado)."""
+
+    async def fetch(self, source):
+        return ""
+
+
+def test_skipped_sources_reported_and_job_failed():
+    from services.kb.ingestion import KbIngestionCoordinator
+
+    lp = uuid4()
+    kb, _, repo = _setup()
+    coord = KbIngestionCoordinator(kb, _EmptyDocProvider())
+    verified = asyncio.run(_persist_verified(repo, lp))
+    jobs = _FakeJobs()
+    asyncio.run(_run_kb_ingestion_job(coord, jobs, uuid4(), lp, verified))
+    assert jobs.status == JobStatus.FAILED
+    assert "texto extraíble" in jobs.error
+    assert len(jobs.result["skipped_sources"]) == 2
+
+
 def test_background_job_swallows_failure_and_marks_failed():
     class _Boom:
         async def ingest_sources(self, *args):

@@ -190,33 +190,63 @@ async def _run_structure_job(
 
 
 async def _run_kb_ingestion_job(coordinator, jobs_service, job_id, learning_path_id, sources):
-    """Corre la ingesta RAG en background sobre las fuentes verificadas ya persistidas.
-    Best-effort: si falla (infra no lista), marca el job y NO propaga — Gate 1 no se
-    bloquea (regla de oro · CONTEXT §5). El IngestReport queda en job.result; una
-    corrida que no produce chunks se marca failed para que el no-op sea visible."""
+    """Corre la ingesta RAG en background (clear-and-reingest) sobre el corpus Vía-2.
+    Best-effort: si falla (infra no lista), marca el job y NO propaga — no bloquea
+    la propuesta de estructura ni Gate 1 (regla de oro · CONTEXT §5). El IngestReport
+    queda en job.result; una corrida que no produce chunks se marca failed para que
+    el no-op sea visible."""
     await jobs_service.update_job_status(job_id, JobStatus.RUNNING)
     try:
         report = await coordinator.ingest_sources(learning_path_id, sources)
         result = {**report.model_dump(mode="json"), "corpus_size": len(sources)}
         if report.chunks_created == 0:
-            error = (
-                "Corpus Vía-2 vacío: ninguna fuente con origin='upload' para esta ruta (ADR-0011); "
-                "no había nada que ingestar."
-                if not sources
-                else "La ingesta no produjo chunks: los documentos del corpus llegaron sin contenido "
-                "(sin parsed_md ni binario parseable)."
-            )
+            if not sources:
+                error = (
+                    "Corpus Vía-2 vacío: ninguna fuente con origin='upload' para esta ruta "
+                    "(ADR-0011); no había nada que ingestar."
+                )
+            elif report.skipped_sources:
+                error = (
+                    "La ingesta no produjo chunks: documentos sin texto extraíble "
+                    f"(posible PDF escaneado/imagen): {', '.join(report.skipped_sources)}."
+                )
+            else:
+                error = (
+                    "La ingesta no produjo chunks: los documentos del corpus llegaron sin "
+                    "contenido (sin parsed_md ni binario parseable)."
+                )
             logger.warning("KB ingestion job %s for path %s: %s", job_id, learning_path_id, error)
             await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=error, result=result)
             return
         logger.info(
-            "KB ingestion job %s for path %s: %d chunks from %d sources",
+            "KB ingestion job %s for path %s: %d chunks from %d sources (skipped: %d)",
             job_id, learning_path_id, report.chunks_created, report.sources_processed,
+            len(report.skipped_sources),
         )
         await jobs_service.update_job_status(job_id, JobStatus.COMPLETED, result=result)
     except Exception as exc:
         logger.exception("KB ingestion job %s failed for path %s", job_id, learning_path_id)
         await jobs_service.update_job_status(job_id, JobStatus.FAILED, error=str(exc))
+
+
+async def _spawn_kb_ingestion(
+    route_id, background_tasks, jobs_service, knowledge_base,
+    sourcing_repo, storage, documents_repo,
+) -> str:
+    """Encola la ingesta RAG (clear-and-reingest) sobre el corpus Vía-2 de la ruta.
+    Se dispara al Proponer estructura (apenas hay parsed_md · decisión del grill) y
+    también en Gate 1 como red de seguridad idempotente. Devuelve el job_id."""
+    all_sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
+    corpus = [s for s in all_sources if s.origin == "upload"]
+    job_id = await jobs_service.create_job("kb_ingestion")
+    provider = RealDocumentProvider(
+        storage, documents_repo, SimpleParserAdapter(), settings.storage_bucket
+    )
+    coordinator = KbIngestionCoordinator(knowledge_base, provider)
+    background_tasks.add_task(
+        _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
+    )
+    return str(job_id)
 
 # Define the router namespace under `/learning-paths`.
 router = APIRouter(prefix="/learning-paths", tags=["learning-paths"])
@@ -289,6 +319,9 @@ async def generate_structure(
     jobs_service: JobsService = Depends(get_jobs_service),
     documents_repo=Depends(get_documents_repository),
     structurer=Depends(get_route_structurer),
+    knowledge_base: KnowledgeBaseInterface = Depends(get_knowledge_base),
+    sourcing_repo: SourcingRepositoryInterface = Depends(get_sourcing_repository),
+    storage=Depends(get_storage_adapter),
 ):
     """
     Genera la Estructura Propuesta (módulos + componentes) con el LLM `route_structurer`
@@ -314,7 +347,19 @@ async def generate_structure(
         _run_structure_job, structurer, route_service, jobs_service, job_id, route_id,
         brief, customer_context, parsed_docs,
     )
-    return {"job_id": job_id, "context_docs": len(parsed_docs)}
+
+    # Ingesta RAG en paralelo (decisión del grill): apenas hay parsed_md, el corpus
+    # Vía-2 se indexa en background — no bloquea la propuesta (la estructura usa
+    # parsed_md directo, no el KB). Idempotente (clear-and-reingest).
+    ingestion_job_id = await _spawn_kb_ingestion(
+        route_id, background_tasks, jobs_service, knowledge_base,
+        sourcing_repo, storage, documents_repo,
+    )
+    return {
+        "job_id": job_id,
+        "context_docs": len(parsed_docs),
+        "ingestionJobId": ingestion_job_id,
+    }
 
 async def _run_deep_research_job(
     research_service, route_service, approved_sources_repo, jobs_service,
@@ -672,26 +717,22 @@ async def approve_sourcing(
     # 1) UPSERT de las fuentes de deep-research (Vía 1); las de Vía 2 ya se persistieron al subir.
     await sourcing_repo.upsert_sources(route_sources_to_domain(route.get("sources", []), route_id))
 
-    # 2) Corpus a ingestar = solo uploads de Vía 2 (ADR-0011, revisa ADR-0008 §6).
-    #    Las de Vía 1 (URLs de YouTube) no se ingestan; se vinculan por módulo (ADR-0012).
-    all_sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
-    corpus = [s for s in all_sources if s.origin == "upload"]
-
-    # 3) Ingesta RAG en background (reutiliza documents.parsed_md; parser como fallback).
-    job_id = await jobs_service.create_job("kb_ingestion")
-    provider = RealDocumentProvider(storage, documents_repo, SimpleParserAdapter(), settings.storage_bucket)
-    coordinator = KbIngestionCoordinator(knowledge_base, provider)
-    background_tasks.add_task(
-        _run_kb_ingestion_job, coordinator, jobs_service, job_id, route_id, corpus,
+    # 2) Re-index RAG en background como red de seguridad idempotente (decisión del grill):
+    #    la ingesta principal corre al Proponer estructura; aquí se re-dispara por si se
+    #    subieron documentos después. Corpus = solo uploads Vía 2 (ADR-0011); clear-and-reingest.
+    job_id = await _spawn_kb_ingestion(
+        route_id, background_tasks, jobs_service, knowledge_base,
+        sourcing_repo, storage, documents_repo,
     )
+    all_sources = await sourcing_repo.list_by_learning_path(as_uuid(route_id))
 
-    # 4) Update route status to 'generado'
+    # 3) Update route status to 'generado'
     updated = await route_service.update_route(route_id, {
         "status": "generado",
     })
 
     if isinstance(updated, dict):
-        updated["ingestionJobId"] = str(job_id)
+        updated["ingestionJobId"] = job_id
         updated["sourcesPersisted"] = len(all_sources)
 
     return updated

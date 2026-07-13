@@ -73,5 +73,9 @@ class KbIngestionCoordinator:
         self._provider = document_provider
 
     async def ingest_sources(self, learning_path_id, sources: list[Source]) -> IngestReport:
+        lp = as_uuid(learning_path_id)
+        # clear-and-reingest (decisión del grill): el índice refleja el corpus
+        # actual; re-proponer estructura o re-aprobar Gate 1 no acumula duplicados.
+        await self._kb.clear_learning_path(lp)
         documents = {s.id: await self._provider.fetch(s) for s in sources}
-        return await self._kb.ingest(as_uuid(learning_path_id), sources, documents)
+        return await self._kb.ingest(lp, sources, documents)

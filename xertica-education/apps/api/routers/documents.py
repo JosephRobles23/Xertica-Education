@@ -82,11 +82,21 @@ async def upload_document(
         )])
         source_id = str(persisted[0].id) if persisted else None
 
+    # `parsed` refleja texto real, no solo "no reventó": un PDF escaneado parsea a
+    # cadena vacía y antes se marcaba parsed=true, enmascarando un corpus que no
+    # alimentaba la KB. Si no hay texto, se avisa explícitamente.
+    has_text = bool(parsed_md and parsed_md.strip())
+    if parse_error is None and not has_text:
+        parse_error = (
+            "El documento se procesó pero no contiene texto extraíble "
+            "(posible PDF escaneado o de imágenes). No alimentará la Knowledge Base."
+        )
+
     return {
         "document_id": str(doc.id),
         "filename": doc.filename,
         "use_as_source": doc.use_as_source,
-        "parsed": parsed_md is not None,
+        "parsed": has_text,
         "parse_error": parse_error,
         "source_id": source_id,
     }

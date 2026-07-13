@@ -12,6 +12,11 @@ class KbChunkRepositoryInterface(ABC):
         ...
 
     @abstractmethod
+    async def clear_by_learning_path(self, learning_path_id: UUID) -> None:
+        """Borra todos los chunks de una ruta (clear-and-reingest · ADR-0006)."""
+        ...
+
+    @abstractmethod
     async def similarity_search(
         self,
         learning_path_id: UUID,

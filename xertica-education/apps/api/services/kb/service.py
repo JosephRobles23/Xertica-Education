@@ -28,8 +28,13 @@ class KBService(KnowledgeBaseInterface):
     ) -> IngestReport:
         source_by_id = {s.id: s for s in sources}
         chunks: list[Chunk] = []
+        skipped: list[str] = []
         for source_id, markdown in documents.items():
             src = source_by_id.get(source_id)
+            # Documento sin texto extraíble (p.ej. PDF escaneado): no aporta chunks.
+            if not (markdown and markdown.strip()):
+                skipped.append((src.title if src else None) or str(source_id))
+                continue
             for text in chunk_markdown(markdown):
                 chunks.append(Chunk(
                     source_id=source_id,
@@ -54,7 +59,11 @@ class KBService(KnowledgeBaseInterface):
             sources_processed=len(documents),
             chunks_created=len(chunks),
             tokens_embedded=sum(c.token_count for c in chunks),
+            skipped_sources=skipped,
         )
+
+    async def clear_learning_path(self, learning_path_id: UUID) -> None:
+        await self._repo.clear_by_learning_path(learning_path_id)
 
     async def query(
         self,

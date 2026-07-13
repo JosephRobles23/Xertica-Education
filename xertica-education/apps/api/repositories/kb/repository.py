@@ -29,6 +29,11 @@ class SupabaseKbChunkRepository(KbChunkRepositoryInterface):
         } for c in chunks]
         self._client.table("kb_chunks").insert(rows).execute()
 
+    async def clear_by_learning_path(self, learning_path_id: UUID) -> None:
+        self._client.table("kb_chunks").delete().eq(
+            "learning_path_id", str(learning_path_id)
+        ).execute()
+
     async def similarity_search(
         self,
         learning_path_id: UUID,

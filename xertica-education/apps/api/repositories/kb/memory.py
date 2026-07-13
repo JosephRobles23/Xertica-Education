@@ -16,6 +16,9 @@ class InMemoryKbChunkRepository(KbChunkRepositoryInterface):
     async def upsert_chunks(self, chunks: list[Chunk]) -> None:
         self._chunks.extend(chunks)
 
+    async def clear_by_learning_path(self, learning_path_id: UUID) -> None:
+        self._chunks = [c for c in self._chunks if c.learning_path_id != learning_path_id]
+
     async def similarity_search(
         self,
         learning_path_id: UUID,
