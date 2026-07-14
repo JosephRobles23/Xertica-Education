@@ -14,7 +14,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
             return self._get_mock_response(role, prompt)
 
         # Map role to commercial model name
-        model_name = settings.model_names.get(role, "gemini-2.5-pro")
+        model_name = settings.model_names.get(role, "gpt-5-nano")
         # Map simple name to openrouter commercial name
         openrouter_model = self._map_model_name(model_name)
 
@@ -40,7 +40,17 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    return data["choices"][0]["message"]["content"]
+                    content = (
+                        (data.get("choices") or [{}])[0]
+                        .get("message", {})
+                        .get("content")
+                    )
+                    # Some models (e.g. gemini-2.5-pro) can return 200 with a
+                    # null `content` (filtered/empty/reasoning-only response).
+                    # Never return None: callers do `.strip()` on this value.
+                    if content:
+                        return content
+                    print(f"OpenRouter returned empty content: {data}")
                 else:
                     print(f"OpenRouter API error (status {response.status_code}): {response.text}")
         except Exception as e:
@@ -51,6 +61,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
 
     def _map_model_name(self, model: str) -> str:
         mapping = {
+            "gpt-5-nano": "openai/gpt-5-nano",
             "gemini-2.5-pro": "google/gemini-2.5-pro",
             "gemini-2.5-flash": "google/gemini-2.5-flash",
             "claude-sonnet": "anthropic/claude-3.5-sonnet",

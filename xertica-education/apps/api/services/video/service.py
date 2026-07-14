@@ -45,6 +45,7 @@ from models.dto.responses import VideoJobResponse, VideoJobResult
 from models.common import JobStatus
 from models.dto.render_plan import RenderPlan, RenderStage
 from services.video.executor import RenderExecutor
+from repositories.spine.materializer import SpineMaterializer
 # SCRIPTWRITER_SYSTEM_PROMPT is the single most important piece of the
 # pipeline. It tells the LLM how to structure an educational video storyboard
 # so that it's genuinely pedagogical, not just a wall of text with generic
@@ -943,7 +944,8 @@ class VideoService(VideoServiceInterface):
             print(f"[storyboard] learning_path query error: {e}")
 
         try:
-            mod = self._supabase.table("modules").select("*").eq("id", str(module_id)).execute()
+            module_row_id = self._resolve_module_row_id(route_id, module_id)
+            mod = self._supabase.table("modules").select("*").eq("id", module_row_id).execute()
             if mod.data:
                 row = mod.data[0]
                 ctx["module_title"] = row.get("titulo")
@@ -997,6 +999,18 @@ class VideoService(VideoServiceInterface):
                         ctx[k] = v
 
         return ctx
+
+    def _resolve_module_row_id(self, route_id: str, module_id: str) -> str:
+        """Resolve the module slug to the UUID that keys the `modules` row.
+
+        The frontend sends the module slug (e.g. "r1m1"), but `modules.id` is a
+        UUID column materialized deterministically by SpineMaterializer. Passing
+        the raw slug fails with `invalid input syntax for type uuid` (22P02). If
+        module_id is already a UUID, use it as-is."""
+        try:
+            return str(UUID(str(module_id)))
+        except ValueError:
+            return str(SpineMaterializer.module_uuid(route_id, module_id))
 
     def _resolve_learning_path_id(self, route_id: str) -> UUID:
         try:

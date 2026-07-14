@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {
         "route_structurer": "gpt-4o-mini",  # Estructura Propuesta (ADR-0014)
-        "scriptwriter": "gemini-2.5-pro",
+        "scriptwriter": "gpt-5-nano",
         "infographic_design": "claude-sonnet",
-        "researcher": "gemini-2.5-pro",
+        "researcher": "gpt-5-nano",
     }
 
 
