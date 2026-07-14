@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from typing import Any, Dict
 
 import httpx
@@ -134,6 +136,119 @@ async def _persist_route_document(
         "parsed": parsed_md is not None,
         "source_id": source_id,
     }
+
+
+def _safe_zip_name(value: str, fallback: str = "asset") -> str:
+    cleaned = _sanitize_filename(str(value or fallback), fallback=fallback)
+    return cleaned.replace(" ", "_")
+
+
+def _extension_from_url(url: str, fallback: str) -> str:
+    path = url.split("?", 1)[0].rstrip("/")
+    name = path.rsplit("/", 1)[-1]
+    if "." in name:
+        ext = name.rsplit(".", 1)[-1].lower()
+        if 1 <= len(ext) <= 6:
+            return f".{ext}"
+    return fallback
+
+
+def _iter_route_artifacts(route: Dict[str, Any]) -> list[dict[str, str]]:
+    artifacts: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(*, folder: str, label: str, url: str | None, fallback_ext: str):
+        if not url:
+            return
+        key = (folder, url)
+        if key in seen:
+            return
+        seen.add(key)
+        artifacts.append({
+            "folder": _safe_zip_name(folder, "module"),
+            "label": _safe_zip_name(label, "asset"),
+            "url": url,
+            "extension": _extension_from_url(url, fallback_ext),
+        })
+
+    for module in route.get("modules", []) or []:
+        module_label = module.get("num") or module.get("id") or module.get("name") or "module"
+        module_name = module.get("name") or module.get("title") or module_label
+        folder = f"{module_label}_{module_name}"
+
+        lesson = module.get("lesson") or {}
+        add(folder=folder, label="lesson", url=lesson.get("pdfUrl"), fallback_ext=".pdf")
+        add(folder=folder, label="lesson", url=lesson.get("txtUrl"), fallback_ext=".txt")
+
+        quiz = module.get("quiz") or {}
+        add(folder=folder, label="quiz", url=quiz.get("pdfUrl"), fallback_ext=".pdf")
+        add(folder=folder, label="quiz", url=quiz.get("txtUrl"), fallback_ext=".txt")
+
+        lab = module.get("lab") or {}
+        add(folder=folder, label="lab", url=lab.get("pdfUrl"), fallback_ext=".pdf")
+        add(folder=folder, label="lab", url=lab.get("txtUrl"), fallback_ext=".txt")
+        add(folder=folder, label="lab", url=lab.get("jsonUrl"), fallback_ext=".json")
+
+        infographic = module.get("infografia") or module.get("infographic") or {}
+        add(folder=folder, label="infografia", url=infographic.get("imageUrl"), fallback_ext=".png")
+        add(folder=folder, label="infografia", url=infographic.get("pdfUrl"), fallback_ext=".pdf")
+
+        video = module.get("video") or {}
+        add(folder=folder, label="video", url=video.get("videoUrl") or video.get("video_url") or video.get("storage_path"), fallback_ext=".mp4")
+
+    pack = route.get("pack", {}) or {}
+    add(folder="pack", label="infografia", url=(pack.get("infografia") or {}).get("imageUrl"), fallback_ext=".png")
+    add(folder="pack", label="infografia", url=(pack.get("infografia") or {}).get("pdfUrl"), fallback_ext=".pdf")
+    add(folder="pack", label="lesson", url=(pack.get("lesson") or {}).get("pdfUrl"), fallback_ext=".pdf")
+    add(folder="pack", label="lesson", url=(pack.get("lesson") or {}).get("txtUrl"), fallback_ext=".txt")
+    add(folder="pack", label="quiz", url=(pack.get("quiz") or {}).get("pdfUrl"), fallback_ext=".pdf")
+    add(folder="pack", label="quiz", url=(pack.get("quiz") or {}).get("txtUrl"), fallback_ext=".txt")
+    add(folder="pack", label="lab", url=(pack.get("lab") or {}).get("pdfUrl"), fallback_ext=".pdf")
+    add(folder="pack", label="lab", url=(pack.get("lab") or {}).get("txtUrl"), fallback_ext=".txt")
+    return artifacts
+
+
+async def _download_url_bytes(url: str) -> bytes:
+    if url.startswith("memory://"):
+        raise ValueError("memory storage URLs are not downloadable outside the storage adapter")
+    async with httpx.AsyncClient(timeout=90, follow_redirects=True) as client:
+        resp = await client.get(url)
+    if resp.status_code >= 400:
+        raise ValueError(f"download failed with {resp.status_code}")
+    return resp.content
+
+
+async def _route_export_zip(route: Dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
+    manifest: dict[str, Any] = {
+        "route_id": route.get("id"),
+        "route_name": route.get("name"),
+        "included": [],
+        "skipped": [],
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("README.md", _route_export_markdown(route))
+        archive.writestr("route.json", json.dumps(route, ensure_ascii=False, indent=2).encode("utf-8"))
+
+        for index, artifact in enumerate(_iter_route_artifacts(route), start=1):
+            folder = artifact["folder"]
+            label = artifact["label"]
+            ext = artifact["extension"]
+            zip_path = f"assets/{folder}/{index:02d}_{label}{ext}"
+            try:
+                data = await _download_url_bytes(artifact["url"])
+                archive.writestr(zip_path, data)
+                manifest["included"].append({"path": zip_path, "source_url": artifact["url"]})
+            except Exception as exc:
+                manifest["skipped"].append({
+                    "label": label,
+                    "source_url": artifact["url"],
+                    "reason": str(exc),
+                })
+
+        archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
+
+    return buffer.getvalue(), manifest
 
 
 def _route_export_markdown(route: Dict[str, Any]) -> bytes:
@@ -270,3 +385,34 @@ async def export_route_to_google_drive(
         "mime_type": uploaded.get("mimeType"),
         "web_view_link": uploaded.get("webViewLink"),
     }
+
+@router.post("/{route_id}/export/google-drive/all", response_model=Dict[str, Any])
+async def export_route_bundle_to_google_drive(
+    route_id: str,
+    payload: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+):
+    route = await route_service.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    filename = _sanitize_filename(payload.get("filename") or f"{route.get('name') or route_id} - assets.zip")
+    if not filename.lower().endswith(".zip"):
+        filename = f"{filename}.zip"
+
+    data, manifest = await _route_export_zip(route)
+    uploaded = await _upload_to_drive(
+        access_token=payload.get("access_token", ""),
+        filename=filename,
+        mime_type="application/zip",
+        data=data,
+    )
+    return {
+        "file_id": uploaded.get("id"),
+        "name": uploaded.get("name"),
+        "mime_type": uploaded.get("mimeType"),
+        "web_view_link": uploaded.get("webViewLink"),
+        "included_count": len(manifest.get("included", [])),
+        "skipped_count": len(manifest.get("skipped", [])),
+    }
+

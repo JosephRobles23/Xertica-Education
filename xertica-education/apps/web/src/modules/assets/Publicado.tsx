@@ -1,18 +1,50 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Check, CircleCheck } from 'lucide-react'
+import { Check, CircleCheck, ExternalLink, FolderUp } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/shared/ui/button'
 import { Card } from '@/shared/ui/card'
 import { PageTitle } from '@/shared/components/PageHeader'
 import { getRoute } from '@/shared/data/routes'
 import { useStore } from '@/shared/store'
+import { api } from '@/shared/lib/api'
+import { authorizeGoogleDrive } from '@/shared/lib/googleDrive'
 
 export default function Publicado() {
   const { id } = useParams<{ id: string }>()
   const { routes } = useStore()
   const route = routes.find((item) => item.id === id) ?? getRoute(id)
+  const [savingDrive, setSavingDrive] = useState(false)
+  const [driveLink, setDriveLink] = useState<string | null>(null)
+
+  const saveAllToDrive = async () => {
+    if (!route) return
+    setSavingDrive(true)
+    const toastId = toast.loading('Guardando paquete completo en Google Drive...')
+    try {
+      const accessToken = await authorizeGoogleDrive()
+      const uploaded = await api.saveRouteBundleToGoogleDrive(
+        route.id,
+        accessToken,
+        `${route.name || route.id} - assets.zip`,
+      )
+      setDriveLink(uploaded.web_view_link ?? null)
+      toast.success('Paquete guardado en Google Drive', {
+        id: toastId,
+        description: `${uploaded.name}${uploaded.included_count !== undefined ? ` · ${uploaded.included_count} archivos` : ''}`,
+      })
+    } catch (error) {
+      toast.error('No se pudo guardar en Drive', {
+        id: toastId,
+        description: error instanceof Error ? error.message : 'Error desconocido',
+      })
+    } finally {
+      setSavingDrive(false)
+    }
+  }
 
   if (!route) {
     return (
@@ -72,7 +104,17 @@ export default function Publicado() {
         </div>
       </Card>
 
-      <div className="flex justify-center gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
+        {driveLink ? (
+          <Button variant="outline-primary" asChild>
+            <a href={driveLink} target="_blank" rel="noreferrer">
+              <ExternalLink /> Abrir en Drive
+            </a>
+          </Button>
+        ) : null}
+        <Button variant="outline-primary" onClick={saveAllToDrive} disabled={savingDrive}>
+          <FolderUp /> {savingDrive ? 'Guardando...' : 'Save all to Google Drive'}
+        </Button>
         <Button asChild>
           <Link href={`/ruta/${route.id}`}>Volver a la ruta</Link>
         </Button>

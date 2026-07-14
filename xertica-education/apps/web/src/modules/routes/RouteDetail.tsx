@@ -921,19 +921,28 @@ function ContentReviewPanel({
 
     const toastId = toast.loading(`Guardando cambios manuales del ${label.toLowerCase()}…`)
     try {
-      await api.request(`/learning-paths/${route.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          modules: nextModules,
-          pack: nextPack,
-        }),
-      })
+      if (content.kind === 'lab') {
+        await api.request(`/learning-paths/${route.id}/modules/${module.id}/lab`, {
+          method: 'PATCH',
+          body: JSON.stringify({ lab: nextContent }),
+        })
+      } else {
+        await api.request(`/learning-paths/${route.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            modules: nextModules,
+            pack: nextPack,
+          }),
+        })
+      }
       refineContent(route.id, module.id, content.kind)
       await fetchRoutes()
       setIsManualEditing(false)
       toast.success(`${label} actualizado`, {
         id: toastId,
-        description: 'Los cambios manuales ya quedaron guardados en la ruta.',
+        description: content.kind === 'lab'
+          ? 'El texto y el PDF del laboratorio quedaron actualizados sin regenerar con IA.'
+          : 'Los cambios manuales ya quedaron guardados en la ruta.',
       })
     } catch (error) {
       console.error(error)
