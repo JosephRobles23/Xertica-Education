@@ -101,7 +101,7 @@ export const buildGenerateStoryboardPayload = (routeId: string, moduleId: string
   k: 4,
 })
 export const renderActionLabel = (
-  renderingState: 'idle' | 'rendering' | 'success' | 'failed',
+  renderingState: 'idle' | 'rendering' | 'success' | 'failed' | 'cancelled',
   hasExistingRender: boolean,
 ) => {
   if (renderingState === 'rendering') return 'Renderizando video…'
@@ -123,6 +123,21 @@ export const renderPhaseFromProgress = (progress: number): RenderPhase => {
 export const renderPhaseLabel = (progress: number): string => {
   const phase = renderPhaseFromProgress(progress)
   return RENDER_PHASES.find((item) => item.phase === phase)?.label ?? 'Encolando render en la nube...'
+}
+
+const renderStageLabel = (stage?: string): string | undefined => {
+  const phaseByStage: Record<string, RenderPhase> = {
+    queue: 'queueing',
+    tts: 'tts',
+    visual: 'visuals',
+    music: 'music',
+    transform: 'timeline',
+    remotion_render: 'render',
+    validate: 'validate',
+    upload: 'upload',
+  }
+  const phase = stage ? phaseByStage[stage] : undefined
+  return phase ? RENDER_PHASES.find((item) => item.phase === phase)?.label : undefined
 }
 
 // Visual-type → friendly tag + pacing budget (mirrors ADR-0012 pacing rules).
@@ -377,7 +392,7 @@ export default function Storyboard() {
   const hasValidRenderTarget = hasRenderTargetModuleId(moduleId)
 
   // Video generation/render states
-  const [renderingState, setRenderingState] = useState<'idle' | 'rendering' | 'success' | 'failed'>('idle')
+  const [renderingState, setRenderingState] = useState<'idle' | 'rendering' | 'success' | 'failed' | 'cancelled'>('idle')
   const [videoUrl, setVideoUrl] = useState('')
   const [reviewScenes, setReviewScenes] = useState<ReviewScene[]>(defaultReviewScenes)
   const [isEditing, setIsEditing] = useState(false)
@@ -541,6 +556,13 @@ export default function Storyboard() {
       return
     }
 
+    if (activeStoryboardJob.status === 'cancelled') {
+      setRenderingState('cancelled')
+      clearStoryboardJobId(route.id, moduleId)
+      toast.message('La generación del video fue detenida', { id: 'render-job' })
+      return
+    }
+
     if (activeStoryboardJob.status === 'failed') {
       setRenderingState('failed')
       clearStoryboardJobId(route.id, moduleId)
@@ -574,6 +596,20 @@ export default function Storyboard() {
   const totalWords = reviewScenes.reduce((sum, scene) => sum + wordCount(scene.narration), 0)
   const canRenderCurrentStoryboard = canRenderAiStoryboard(storyboardSource)
   const hasExistingRender = Boolean(resolvedVideoUrl || savedJobId || renderingState === 'success' || renderingState === 'failed')
+  const renderTelemetry = activeStoryboardJob?.result?.observability as {
+    current_stage?: string
+    events?: Array<{
+      timestamp: string
+      stage: string
+      status: string
+      message: string
+      elapsed_ms?: number
+      completed_scenes?: number
+      total_scenes?: number
+    }>
+  } | undefined
+  const currentStageLabel = renderStageLabel(renderTelemetry?.current_stage) || renderPhaseLabel(activeStoryboardJob?.progress || 0)
+  const recentRenderEvents = renderTelemetry?.events?.slice(-8).reverse() || []
 
   const startRender = async () => {
     if (!canRenderCurrentStoryboard) {
@@ -609,6 +645,16 @@ export default function Storyboard() {
     }
   }
 
+  const cancelRender = async () => {
+    if (!savedJobId) return
+    try {
+      await api.request(`/videos/jobs/${savedJobId}/cancel`, { method: 'POST' })
+      toast.message('Deteniendo la generación del video...', { id: 'render-job' })
+    } catch {
+      toast.error('No se pudo detener el render. Revisa el estado del job.', { id: 'render-job' })
+    }
+  }
+
   const approve = () => {
     approveStoryboard(route.id)
     toast.success('Guion y storyboard aprobados', {
@@ -634,15 +680,30 @@ export default function Storyboard() {
                       Generando video en segundo plano
                     </p>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary/10">
-                    <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
-                  </div>
+                  <Progress className="mt-3" value={activeStoryboardJob?.progress || 0} />
                   <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Puede tardar entre 5 y 10 minutos. Puedes salir de esta pagina y volver luego; el render sigue corriendo en segundo plano.
+                    {currentStageLabel} Puede tardar entre 5 y 10 minutos; puedes salir de esta página y volver luego.
                   </p>
                   {savedJobId && (
-                    <div className="mt-3 text-[11px] text-muted-foreground">
-                      Job ID: <span className="font-mono">{savedJobId}</span>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                      <span>Job ID: <span className="font-mono">{savedJobId}</span></span>
+                      <Button variant="outline" size="sm" onClick={cancelRender}>
+                        Detener render
+                      </Button>
+                    </div>
+                  )}
+                  {recentRenderEvents.length > 0 && (
+                    <div className="mt-4 rounded-lg border border-border/70 bg-background/60 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Actividad del render</p>
+                      <div className="mt-2 space-y-1.5 font-mono text-[11px] text-muted-foreground">
+                        {recentRenderEvents.map((event, index) => (
+                          <p key={`${event.timestamp}-${index}`}>
+                            {event.stage}: {event.message}
+                            {event.completed_scenes && event.total_scenes ? ` (${event.completed_scenes}/${event.total_scenes})` : ''}
+                            {event.elapsed_ms ? ` ${Math.round(event.elapsed_ms / 1000)}s` : ''}
+                          </p>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -669,6 +730,11 @@ export default function Storyboard() {
                   <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
                     El render no terminó bien. Puedes volver a intentar sin perder el storyboard actual.
                   </p>
+                </div>
+              )}
+              {renderingState === 'cancelled' && (
+                <div className="rounded-xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">
+                  La generación fue detenida. El storyboard se conserva y puedes iniciar un nuevo render cuando quieras.
                 </div>
               )}
             </Card>

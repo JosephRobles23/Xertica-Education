@@ -229,7 +229,7 @@ function VideoRecommendationPanel({
   onEditAiVideo: () => void
   generatingAiVideo: boolean
   aiVideoJobProgress?: number
-  aiVideoJobStatus?: 'queued' | 'running' | 'rendering' | 'completed' | 'failed'
+  aiVideoJobStatus?: 'queued' | 'running' | 'rendering' | 'completed' | 'failed' | 'cancelled'
   onRelink: () => void
   relinking: boolean
   linkOrigin?: 'llm' | 'heuristic' | null
@@ -649,7 +649,10 @@ function ContentReviewPanel({
   const activeStoryboardJob = storyboardJobId ? activeJobs[storyboardJobId] : undefined
   const generatingAiVideo = isVideo && (
     startingAiVideo || Boolean(
-      activeStoryboardJob && activeStoryboardJob.status !== 'completed' && activeStoryboardJob.status !== 'failed',
+      activeStoryboardJob
+      && activeStoryboardJob.status !== 'completed'
+      && activeStoryboardJob.status !== 'failed'
+      && activeStoryboardJob.status !== 'cancelled',
     )
   )
 
@@ -721,6 +724,14 @@ function ContentReviewPanel({
       toast.success('Video AI generado', {
         id: `video-job-${route.id}-${module.id}`,
         description: `${module.name} quedó renderizado en segundo plano.`,
+      })
+      return
+    }
+
+    if (activeStoryboardJob.status === 'cancelled') {
+      clearStoryboardJobId(route.id, module.id)
+      toast.message('La generación del video AI fue detenida', {
+        id: `video-job-${route.id}-${module.id}`,
       })
       return
     }

@@ -7,6 +7,7 @@ class JobStatus(str, Enum):
     RENDERING = "rendering"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 def as_uuid(value) -> UUID:

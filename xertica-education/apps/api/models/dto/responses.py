@@ -1,7 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
 from models.common import JobStatus
 
 class JobResponse(BaseModel):
@@ -20,12 +20,28 @@ class VideoJobResult(BaseModel):
     cost_usd: float
     provenance: Optional[Dict[str, Any]] = None
 
+
+class VideoJobEvent(BaseModel):
+    timestamp: datetime
+    stage: str
+    status: str
+    message: str
+    elapsed_ms: Optional[int] = None
+    completed_scenes: Optional[int] = None
+    total_scenes: Optional[int] = None
+
+
+class VideoJobObservability(BaseModel):
+    current_stage: Optional[str] = None
+    events: List[VideoJobEvent] = Field(default_factory=list)
+
 class VideoJobResponse(BaseModel):
     job_id: UUID
     status: JobStatus
     progress: int
     result: Optional[VideoJobResult] = None
     error: Optional[str] = None
+    observability: Optional[VideoJobObservability] = None
 
 
 class GroundingInfo(BaseModel):

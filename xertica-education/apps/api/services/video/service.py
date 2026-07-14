@@ -74,7 +74,8 @@ class VideoService(VideoServiceInterface):
         self._supabase = None
         self._fallback_assets: Dict[UUID, dict] = {}
         self._fallback_jobs: Dict[UUID, dict] = {}
-        self._render_tasks: set[asyncio.Task] = set()
+        self._render_tasks: Dict[UUID, asyncio.Task] = {}
+        self._job_observability: Dict[UUID, dict] = {}
 
         url = settings.supabase_url
         key = settings.supabase_key
@@ -138,6 +139,7 @@ class VideoService(VideoServiceInterface):
             "result": None,
             "error": None
         }
+        self._job_observability[job_id] = {"current_stage": "queue", "events": []}
 
         # Save job to database (or in-memory fallback).
         if self._supabase:
@@ -160,8 +162,9 @@ class VideoService(VideoServiceInterface):
             )
         )
         if task is not None:
-            self._render_tasks.add(task)
-            task.add_done_callback(self._render_tasks.discard)
+            self._render_tasks[job_id] = task
+            task.add_done_callback(lambda _task: self._render_tasks.pop(job_id, None))
+        await self._record_job_event(job_id, "queue", "queued", "Video generation job created")
         return job_id
 
     async def _prepare_and_run_render_job(
@@ -207,9 +210,28 @@ class VideoService(VideoServiceInterface):
                 storyboard_source,
                 render_target,
             )
+        except asyncio.CancelledError:
+            await self._record_job_event(job_id, "cancel", "cancelled", "Video generation cancelled")
+            await self._update_job(job_id, JobStatus.CANCELLED, 100, error="Cancelled by user")
+            raise
         except Exception as error:
             print(f"[Job {job_id}] Failed while preparing video render: {error}")
+            await self._record_job_event(job_id, "prepare", "failed", str(error))
             await self._update_job(job_id, JobStatus.FAILED, 100, error=str(error))
+
+    async def cancel_video_job(self, job_id: UUID) -> bool:
+        job = await self.get_video_job_record(job_id)
+        if not job:
+            return False
+        if job.get("status") in {JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value}:
+            return False
+
+        task = self._render_tasks.get(job_id)
+        if task:
+            task.cancel()
+        await self._record_job_event(job_id, "cancel", "requested", "Cancellation requested by user")
+        await self._update_job(job_id, JobStatus.CANCELLED, 100, error="Cancelled by user")
+        return True
 
     async def generate_storyboard(
         self,
@@ -1057,7 +1079,7 @@ class VideoService(VideoServiceInterface):
             return None
 
         result_data = None
-        if job.get("result"):
+        if job.get("result") and job["result"].get("video_url"):
             result_data = VideoJobResult(
                 video_url=job["result"].get("video_url", ""),
                 duration_seconds=job["result"].get("duration_seconds", 0.0),
@@ -1070,7 +1092,8 @@ class VideoService(VideoServiceInterface):
             status=JobStatus(job["status"]),
             progress=job["progress"],
             result=result_data,
-            error=job.get("error")
+            error=job.get("error"),
+            observability=(job.get("result") or {}).get("observability"),
         )
 
     async def get_video_job_record(self, job_id: UUID) -> Optional[dict]:
@@ -1473,6 +1496,7 @@ class VideoService(VideoServiceInterface):
                 "provenance": render_provenance,
             }
             await self._update_job(job_id, JobStatus.COMPLETED, 100, result=result)
+            await self._record_job_event(job_id, "job", "completed", "Video generation completed")
 
             if component_id:
                 await self._update_asset_completed(
@@ -1487,6 +1511,7 @@ class VideoService(VideoServiceInterface):
             print(f"[Job {job_id}] Critical error during video rendering: {e}")
             import traceback
             traceback.print_exc()
+            await self._record_job_event(job_id, "job", "failed", str(e))
             await self._update_job(job_id, JobStatus.FAILED, 100, error=str(e))
 
         finally:
@@ -1507,7 +1532,10 @@ class VideoService(VideoServiceInterface):
             "updated_at": now_str
         }
         if result is not None:
-            payload["result"] = result
+            payload["result"] = {
+                **result,
+                "observability": self._job_observability.get(job_id, {"current_stage": None, "events": []}),
+            }
         if error is not None:
             payload["error"] = error
 
@@ -1521,6 +1549,44 @@ class VideoService(VideoServiceInterface):
         else:
             if job_id in self._fallback_jobs:
                 self._fallback_jobs[job_id].update(payload)
+
+    async def _record_job_event(
+        self,
+        job_id: UUID,
+        stage: str,
+        status: str,
+        message: str,
+        *,
+        elapsed_ms: Optional[int] = None,
+        completed_scenes: Optional[int] = None,
+        total_scenes: Optional[int] = None,
+    ) -> None:
+        telemetry = self._job_observability.setdefault(job_id, {"current_stage": None, "events": []})
+        telemetry["current_stage"] = None if status in {"completed", "failed", "cancelled"} else stage
+        event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "stage": stage,
+            "status": status,
+            "message": message,
+        }
+        if elapsed_ms is not None:
+            event["elapsed_ms"] = elapsed_ms
+        if completed_scenes is not None:
+            event["completed_scenes"] = completed_scenes
+        if total_scenes is not None:
+            event["total_scenes"] = total_scenes
+        telemetry["events"].append(event)
+
+        job = await self.get_video_job_record(job_id)
+        if not job:
+            return
+        current_result = job.get("result") or {}
+        await self._update_job(
+            job_id,
+            JobStatus(job["status"]),
+            job.get("progress", 0),
+            result={**current_result, "observability": telemetry},
+        )
 
     def _build_render_provenance(self, storyboard: dict, storyboard_source: str) -> dict:
         return {

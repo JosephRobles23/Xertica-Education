@@ -35,6 +35,14 @@ class MockVideoService(VideoServiceInterface):
             return None
 
         job = self._jobs[job_id]
+        if job["status"] == JobStatus.CANCELLED:
+            return VideoJobResponse(
+                job_id=job_id,
+                status=JobStatus.CANCELLED,
+                progress=100,
+                result=None,
+                error="Cancelled by user",
+            )
         now = datetime.now(timezone.utc)
         elapsed = (now - job["created_at"]).total_seconds()
 
@@ -65,6 +73,13 @@ class MockVideoService(VideoServiceInterface):
             result=job["result"],
             error=None
         )
+
+    async def cancel_video_job(self, job_id: UUID) -> bool:
+        job = self._jobs.get(job_id)
+        if not job:
+            return False
+        job["status"] = JobStatus.CANCELLED
+        return True
 
     async def generate_storyboard(
         self,

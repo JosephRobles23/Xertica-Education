@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import asyncio
 import copy
+import time
 from pathlib import Path
 from uuid import UUID
 from typing import Optional, Dict, Any, List
@@ -52,13 +53,29 @@ class RenderExecutor:
     async def _run_stage(self, plan: RenderPlan, stage_type: str, progress: int, fn, *args):
         stage = next(s for s in plan.stages if s.stage_type == stage_type)
         stage.status = JobStatus.RUNNING
+        started_at = time.monotonic()
+        await self._record_event(plan.job_id, stage_type, "running", f"Started {stage_type}")
         await self.video_service._update_job(plan.job_id, JobStatus.RUNNING, progress)
         try:
             await fn(*args)
             stage.status = JobStatus.COMPLETED
+            await self._record_event(
+                plan.job_id, stage_type, "completed", f"Completed {stage_type}",
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
+        except asyncio.CancelledError:
+            await self._record_event(
+                plan.job_id, stage_type, "cancelled", f"Cancelled during {stage_type}",
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
+            raise
         except Exception as e:
             stage.status = JobStatus.FAILED
             stage.error = str(e)
+            await self._record_event(
+                plan.job_id, stage_type, "failed", str(e),
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
             raise
 
     async def _stage_tts(self, job_id: UUID, scenes: list, temp_dir: str):
@@ -83,6 +100,10 @@ class RenderExecutor:
                     stage_end=24,
                     completed=completed_count,
                     total=total_scenes,
+                )
+                await self._record_event(
+                    job_id, "tts", "progress", "Narration synthesized",
+                    completed_scenes=completed_count, total_scenes=total_scenes,
                 )
         except Exception:
             for task in tasks:
@@ -132,6 +153,10 @@ class RenderExecutor:
                     stage_end=34,
                     completed=completed_count,
                     total=total_scenes,
+                )
+                await self._record_event(
+                    job_id, "visual", "progress", "Visual prepared",
+                    completed_scenes=completed_count, total_scenes=total_scenes,
                 )
         except Exception:
             for task in tasks:
@@ -207,21 +232,24 @@ class RenderExecutor:
                 "--props", str(props_path),
                 "--codec", "h264",
             ]
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=composer_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
         try:
-            await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                check=True,
-                cwd=composer_dir,
-                capture_output=True,
-                text=True,
-                timeout=1200,
-            )
-        except subprocess.CalledProcessError as e:
-            print(f"Remotion render failed with code {e.returncode}")
-            print(f"Remotion render stderr: {e.stderr}")
-            print(f"Remotion render stdout: {e.stdout}")
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=1200)
+        except asyncio.CancelledError:
+            process.terminate()
+            await process.wait()
             raise
+
+        if process.returncode:
+            print(f"Remotion render failed with code {process.returncode}")
+            print(f"Remotion render stderr: {stderr.decode(errors='replace')}")
+            print(f"Remotion render stdout: {stdout.decode(errors='replace')}")
+            raise subprocess.CalledProcessError(process.returncode, cmd, stdout, stderr)
 
         final_output = f"{temp_dir}/final_{job_id}.mp4"
         shutil.copy(str(output_path), final_output)
@@ -435,6 +463,11 @@ class RenderExecutor:
         span = max(stage_end - stage_start, 0)
         progress = stage_start + round((completed / total) * span)
         await self.video_service._update_job(job_id, JobStatus.RUNNING, progress)
+
+    async def _record_event(self, job_id: UUID, stage: str, status: str, message: str, **details) -> None:
+        record_event = getattr(self.video_service, "_record_job_event", None)
+        if record_event:
+            await record_event(job_id, stage, status, message, **details)
 
     async def _run_async_callable_in_thread(self, async_callable, *args):
         return await asyncio.to_thread(self._run_async_callable_sync, async_callable, *args)

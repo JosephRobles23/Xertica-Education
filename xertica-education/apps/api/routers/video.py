@@ -65,6 +65,18 @@ async def get_video_job(
         raise HTTPException(status_code=404, detail="Video rendering job not found")
     return status
 
+
+@router.post("/jobs/{job_id}/cancel", response_model=Dict[str, bool])
+async def cancel_video_job(
+    job_id: UUID,
+    video_service: VideoService = Depends(get_video_service),
+):
+    """Cancels a queued or running video generation job."""
+    cancelled = await video_service.cancel_video_job(job_id)
+    if not cancelled:
+        raise HTTPException(status_code=409, detail="Video job cannot be cancelled")
+    return {"cancelled": True}
+
 @router.get("/assets")
 async def get_video_asset(
     route_id: str = Query(...),

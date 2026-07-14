@@ -43,6 +43,11 @@ class VideoServiceInterface(ABC):
         pass
 
     @abstractmethod
+    async def cancel_video_job(self, job_id: UUID) -> bool:
+        """Stops an active video generation job."""
+        pass
+
+    @abstractmethod
     async def segment_video(self, video_url: str) -> List[dict]:
         """Ingests an existing video and segments it into timestamped sub-topics."""
         pass

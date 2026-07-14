@@ -351,9 +351,18 @@ class TestVideoAPI(unittest.TestCase):
             os.makedirs(os.path.dirname(local_bin), exist_ok=True)
             open(local_bin, "wb").close()
 
-            def slow_render(command, **_kwargs):
-                time.sleep(0.25)
-                open(command[4], "wb").close()
+            class SlowProcess:
+                returncode = 0
+
+                async def communicate(self):
+                    await asyncio.sleep(0.25)
+                    open(self.output_path, "wb").close()
+                    return b"", b""
+
+            async def slow_render(*command, **_kwargs):
+                process = SlowProcess()
+                process.output_path = command[4]
+                return process
 
             async def render_and_measure_tick():
                 started = time.perf_counter()
@@ -364,7 +373,7 @@ class TestVideoAPI(unittest.TestCase):
                 return tick_delay
 
             with patch("services.video.executor.settings.remotion_composer_path", composer_dir), patch(
-                "services.video.executor.subprocess.run",
+                "services.video.executor.asyncio.create_subprocess_exec",
                 side_effect=slow_render,
             ):
                 tick_delay = asyncio.run(render_and_measure_tick())
@@ -616,6 +625,55 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(status_data["job_id"], job_id)
         self.assertIn("status", status_data)
         self.assertIn("progress", status_data)
+
+    def test_video_job_status_exposes_render_observability(self):
+        """Video job polling exposes the executor's current stage and event log."""
+        service = VideoService()
+        service._supabase = None
+        job_id = uuid4()
+        service._fallback_jobs[job_id] = {
+            "id": str(job_id),
+            "type": "video_generation",
+            "status": "running",
+            "progress": 25,
+            "result": {
+                "observability": {
+                    "current_stage": "visual",
+                    "events": [{"timestamp": "2026-07-11T00:00:00+00:00", "stage": "tts", "status": "completed", "message": "Narration ready"}],
+                }
+            },
+            "error": None,
+        }
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        response = self.client.get(f"/videos/jobs/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["observability"]["current_stage"], "visual")
+        self.assertEqual(data["observability"]["events"][0]["stage"], "tts")
+
+    def test_active_video_job_can_be_cancelled(self):
+        """Cancellation marks an active video job without changing its video output."""
+        service = VideoService()
+        service._supabase = None
+        job_id = uuid4()
+        service._fallback_jobs[job_id] = {
+            "id": str(job_id),
+            "type": "video_generation",
+            "status": "running",
+            "progress": 25,
+            "result": None,
+            "error": None,
+        }
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        response = self.client.post(f"/videos/jobs/{job_id}/cancel")
+        status = self.client.get(f"/videos/jobs/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"cancelled": True})
+        self.assertEqual(status.json()["status"], "cancelled")
 
     def test_generate_video_from_render_target_persists_retrievable_video_asset(self):
         """POST /videos/generate with route/module identity links the completed MP4 to the video Asset."""

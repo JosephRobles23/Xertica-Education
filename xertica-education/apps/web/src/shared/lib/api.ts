@@ -5,7 +5,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export interface JobState {
   id: string;
   type: string;
-  status: 'queued' | 'running' | 'rendering' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'rendering' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   created_at: string;
   updated_at: string;
@@ -149,6 +149,8 @@ export const api = {
             resolve(job);
           } else if (job.status === 'failed') {
             reject(new Error(job.error || 'Job failed'));
+          } else if (job.status === 'cancelled') {
+            resolve(job);
           } else {
             setTimeout(runPoll, intervalMs);
           }
