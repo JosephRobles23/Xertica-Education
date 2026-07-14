@@ -192,7 +192,10 @@ class RenderExecutor:
             json.dump(self.edit_decisions, f)
 
         output_path = public_dir / "output.mp4"
-        local_bin = composer_dir / "node_modules" / ".bin" / "remotion"
+        is_windows = sys.platform == "win32"
+        local_bin = composer_dir / "node_modules" / ".bin" / (
+            "remotion.cmd" if is_windows else "remotion"
+        )
         if local_bin.exists():
             cmd = [
                 str(local_bin), "render", "src/index.tsx", "Explainer",
@@ -201,8 +204,9 @@ class RenderExecutor:
                 "--codec", "h264",
             ]
         else:
+            npx = "npx.cmd" if is_windows else "npx"
             cmd = [
-                "npx", "--package=@remotion/cli", "remotion", "render", "src/index.tsx", "Explainer",
+                npx, "--package=@remotion/cli", "remotion", "render", "src/index.tsx", "Explainer",
                 str(output_path),
                 "--props", str(props_path),
                 "--codec", "h264",
