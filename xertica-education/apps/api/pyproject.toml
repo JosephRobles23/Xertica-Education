@@ -16,6 +16,7 @@ dependencies = [
     "playwright>=1.61.0",
     "google-genai>=1.0.0",
     "pillow>=10.2.0",
+    "modal>=0.64",  # SDK para disparar el render en Modal (.spawn) — Opción B
 ]
 
 # Extras para el camino RAG real (ADR-0006). Import perezoso: el MVP corre con

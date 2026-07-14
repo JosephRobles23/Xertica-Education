@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     pixabay_api_key: str = ""  # Free API key from pixabay.com — used for background music
     remotion_composer_path: str = ""  # Path to remotion-composer directory (defaults to apps/api/remotion/)
 
+    # Deploy — render en Modal (Opción B / staging). Con ``modal_render_app``
+    # vacío el render corre in-process (dev local, como siempre). Con el nombre
+    # de la app Modal (p.ej. "xertica-render-staging") el API delega el trabajo
+    # pesado a Modal vía ``Function.spawn()``. Los tokens MODAL_TOKEN_ID/SECRET
+    # los lee el SDK de Modal directamente del entorno.
+    modal_render_app: str = ""
+
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {

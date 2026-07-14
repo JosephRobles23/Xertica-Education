@@ -150,20 +150,55 @@ class VideoService(VideoServiceInterface):
         else:
             self._fallback_jobs[job_id] = job_data
 
-        # Storyboard generation can call the LLM. Keep it inside the job so every
-        # entry point acknowledges the render immediately.
-        task = asyncio.create_task(
-            self._prepare_and_run_render_job(
+        # Dispatch the render. En cloud (Opción B) delegamos el trabajo pesado a
+        # Modal con ``.spawn()`` (fire-and-forget): un contenedor serverless corre
+        # todo el pipeline y actualiza el job en Supabase. En dev local, sin
+        # ``modal_render_app`` configurado, corremos el pipeline in-process como
+        # siempre. Ambos caminos devuelven el job_id al instante.
+        if settings.modal_render_app:
+            self._spawn_modal_render(
                 job_id=job_id,
                 component_id=component_id,
                 render_target=render_target,
                 custom_storyboard=custom_storyboard,
             )
-        )
-        if task is not None:
+        else:
+            task = asyncio.create_task(
+                self._prepare_and_run_render_job(
+                    job_id=job_id,
+                    component_id=component_id,
+                    render_target=render_target,
+                    custom_storyboard=custom_storyboard,
+                )
+            )
             self._render_tasks.add(task)
             task.add_done_callback(self._render_tasks.discard)
         return job_id
+
+    def _spawn_modal_render(
+        self,
+        job_id: UUID,
+        component_id: Optional[UUID],
+        render_target: Optional[dict],
+        custom_storyboard: Optional[StoryboardRequest],
+    ) -> None:
+        """Delega el render pesado a una función Modal (Opción B).
+
+        Fire-and-forget equivalente al ``asyncio.create_task`` local: Modal
+        levanta un contenedor con N cores, corre ``_prepare_and_run_render_job``
+        y escribe el progreso/resultado en Supabase. El API no espera a que
+        termine — el cliente hace polling a ``GET /jobs/{id}`` como siempre.
+        """
+        import modal  # lazy: solo se necesita cuando hay deploy con Modal
+        render_fn = modal.Function.from_name(settings.modal_render_app, "render_video")
+        render_fn.spawn(
+            job_id=str(job_id),
+            component_id=str(component_id) if component_id else None,
+            render_target=render_target,
+            custom_storyboard=(
+                custom_storyboard.model_dump() if custom_storyboard else None
+            ),
+        )
 
     async def _prepare_and_run_render_job(
         self,
