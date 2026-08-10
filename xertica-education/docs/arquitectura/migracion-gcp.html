@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migración a GCP · Xertica Education</title>
+<style>
+  /* ============================ TOKENS ============================ */
+  :root{
+    /* Brand: warm cream paper + blue headings + salmon accents (xertica-lear-studio) */
+    --bg:#f5f1e8; --bg-elev:#fffdf8; --panel:#fffdf8;
+    --text:#1f242b; --muted:#5b6470; --faint:#9b948a;
+    --border:#e8e1d3; --border-strong:#d8cfbd;
+    --accent:#2f74c0; --accent-2:#2f74c0; --accent-soft:#e7f0fa;
+    --peach:#df906f; --peach-soft:#fbeadf; --peach-tx:#9c5432;
+    --callout-bg:#fbeadf; --callout-bd:#e6a988; --callout-tx:#9c5432;
+    --ok:#2f8f66; --ok-bg:#e6f3ec; --warn:#a97418; --warn-bg:#f7eed9;
+    --hi:#bf5f2e; --hi-bg:#fae7da; --crit:#bf443a; --crit-bg:#f9e5e1;
+    /* code = light with salmon border (matches reference) */
+    --code-bg:#fbf7ef; --code-tx:#2b3038; --code-cm:#a3937c; --code-fl:#2f74c0; --code-kw:#b5651d; --code-str:#3a7d44;
+    /* diagram card stays dark navy in both themes (matches reference flowchart) */
+    --dg-bg:#0d1117; --dg-panel:#121a2b; --dg-node:#151d30; --dg-node-bd:#2a3550; --dg-tx:#e6edf3; --dg-mut:#93a1bd;
+    --shadow:0 1px 2px rgba(70,55,30,.05),0 10px 32px rgba(70,55,30,.07);
+    --k-request:#4aa3ff; --k-data:#2dd4bf; --k-ai:#a78bfa; --k-enqueue:#f5a524; --k-secret:#94a3b8; --k-externo:#64748b; --k-deploy:#5b6472;
+    --lay-cliente:#38bdf8; --lay-run:#818cf8; --lay-data:#2dd4bf; --lay-vertex:#a78bfa; --lay-infra:#94a3b8; --lay-externo:#64748b;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1319; --bg-elev:#161b23; --panel:#161b23;
+    --text:#e7ecf2; --muted:#9aa4b3; --faint:#6f7987;
+    --border:#242b35; --border-strong:#313a46;
+    --accent:#6ea8e6; --accent-2:#6ea8e6; --accent-soft:#16202e;
+    --peach:#df906f; --peach-soft:#2a1c14; --peach-tx:#e6a988;
+    --callout-bg:#241a12; --callout-bd:#7a4f1f; --callout-tx:#f0c79a;
+    --ok:#39d39f; --ok-bg:#0f231c; --warn:#e0a33a; --warn-bg:#241d10;
+    --hi:#f08a5d; --hi-bg:#261610; --crit:#f0766b; --crit-bg:#26120f;
+    --code-bg:#0b0f16; --code-tx:#e6edf3; --code-cm:#7d8aa5; --code-fl:#78c2ff; --code-kw:#c792ea; --code-str:#a5e075;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 40px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15.5px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code,kbd,pre,.mono{font-family:"SF Mono",ui-monospace,"JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace}
+
+  /* ============================ LAYOUT ============================ */
+  .wrap{display:grid; grid-template-columns:270px minmax(0,1fr); gap:0; max-width:1280px; margin:0 auto}
+  .sidebar{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    padding:26px 18px 40px; border-right:1px solid var(--border);
+  }
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:6px}
+  .brand .dot{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--peach));flex:0 0 auto;box-shadow:0 2px 10px rgba(47,116,192,.28)}
+  .brand b{font-size:14.5px;letter-spacing:.2px}
+  .brand small{display:block;color:var(--faint);font-size:11px;font-weight:500;letter-spacing:.4px;text-transform:uppercase}
+  .toc{margin-top:22px;display:flex;flex-direction:column;gap:1px}
+  .toc a{
+    display:flex;gap:10px;align-items:baseline;text-decoration:none;color:var(--muted);
+    font-family:"SF Mono",ui-monospace,"JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    font-size:12.4px;padding:7px 10px;border-radius:8px;border-left:2px solid transparent;transition:.15s;
+  }
+  .toc a .n{color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums;min-width:16px}
+  .toc a:hover{background:var(--accent-soft);color:var(--accent)}
+  .toc a.active{background:var(--peach-soft);color:var(--text);border-left-color:var(--peach);font-weight:700}
+  .toc a.active .n{color:var(--peach)}
+
+  main{padding:44px clamp(20px,4vw,60px) 120px; min-width:0}
+  .hero{max-width:820px;margin:0 auto 8px}
+  .content{max-width:820px;margin:0 auto}
+
+  /* ============================ HERO ============================ */
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:5px 11px;border-radius:100px}
+  h1{font-size:clamp(28px,4.2vw,40px);line-height:1.12;letter-spacing:-.02em;margin:16px 0 10px;font-weight:750}
+  .lede{font-size:17px;color:var(--muted);margin:0 0 20px;max-width:70ch}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .chip{font-size:12px;color:var(--muted);background:var(--bg-elev);border:1px solid var(--border);padding:5px 10px;border-radius:100px}
+  .chip b{color:var(--text);font-weight:600}
+
+  /* ============================ SECTIONS / PROSE ============================ */
+  section{max-width:820px;margin:0 auto;padding-top:52px;scroll-margin-top:20px}
+  h2{font-size:25px;letter-spacing:-.01em;margin:0 0 6px;font-weight:720;display:flex;align-items:baseline;gap:12px;color:var(--accent)}
+  h2 .sn{font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums;font-weight:700;background:var(--accent-soft);padding:3px 9px;border-radius:7px;transform:translateY(-2px)}
+  h3{font-size:18px;margin:30px 0 8px;font-weight:660;color:var(--accent)}
+  h3::before{content:"▾";font-size:.6em;margin-right:9px;opacity:.75;vertical-align:middle}
+  h4{font-size:15px;margin:22px 0 6px;font-weight:650;color:var(--text)}
+  p{margin:12px 0}
+  a{color:var(--accent)}
+  ul,ol{margin:12px 0;padding-left:22px}
+  li{margin:6px 0}
+  hr{border:none;border-top:1px solid var(--border);margin:44px 0}
+  .sec-intro{color:var(--muted)}
+  strong{font-weight:660}
+  .mono-inline{background:var(--bg-elev);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:.86em}
+
+  /* ============================ KPI TILES ============================ */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:24px 0}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px 15px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+  .kpi.veo::before{background:var(--peach)} .kpi.eff::before{background:var(--peach)} .kpi.cost::before{background:var(--accent)}
+  .kpi .lab{font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);font-weight:600}
+  .kpi .val{font-size:25px;font-weight:740;letter-spacing:-.02em;margin-top:5px}
+  .kpi .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+
+  /* ============================ CALLOUT ============================ */
+  .callout{background:var(--callout-bg);border:1px solid var(--callout-bd);border-radius:12px;padding:14px 16px;margin:20px 0;font-size:14.5px}
+  .callout .t{font-weight:680;color:var(--callout-tx);display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .callout.info{--callout-bg:var(--accent-soft);--callout-bd:var(--border-strong);--callout-tx:var(--accent)}
+
+  /* ============================ TABLES ============================ */
+  .tbl-wrap{overflow-x:auto;margin:16px 0;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
+  table{border-collapse:collapse;width:100%;font-size:13.7px;background:var(--panel)}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--border);vertical-align:top}
+  thead th{background:var(--bg-elev);font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);font-weight:650;position:sticky;top:0}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--accent-soft)}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.total td{font-weight:700;background:var(--accent-soft)}
+  tr.subtotal td{font-weight:640;border-top:2px solid var(--border-strong)}
+
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.3px;white-space:nowrap}
+  .b-s{background:var(--ok-bg);color:var(--ok)} .b-m{background:var(--warn-bg);color:var(--warn)}
+  .b-l{background:var(--crit-bg);color:var(--crit)} .b-ml{background:var(--hi-bg);color:var(--hi)}
+  .lv{display:inline-flex;align-items:center;gap:6px;font-weight:640;font-size:12.5px}
+  .lv::before{content:"";width:9px;height:9px;border-radius:50%}
+  .lv-bajo::before{background:var(--ok)} .lv-medio::before{background:var(--warn)}
+  .lv-medio-alto::before{background:var(--hi)} .lv-alto::before{background:var(--crit)}
+
+  /* ============================ CODE ============================ */
+  .code{position:relative;margin:18px 0}
+  .code pre{background:var(--code-bg);color:var(--code-tx);border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13px;line-height:1.6;border:1px solid var(--peach)}
+  .code .cap{font-size:12px;color:var(--faint);margin-bottom:6px;font-weight:600}
+  .code .copy{position:absolute;top:32px;right:12px;background:var(--bg-elev);color:var(--muted);border:1px solid var(--border-strong);border-radius:7px;padding:4px 9px;font-size:11.5px;cursor:pointer;transition:.15s;font-family:inherit}
+  .code .copy:hover{background:var(--peach-soft);color:var(--peach-tx);border-color:var(--peach)}
+  .cm{color:var(--code-cm);font-style:italic} .fl{color:var(--code-fl)} .kw{color:var(--code-kw)} .str{color:var(--code-str)}
+
+  /* ============================ DIAGRAM CARD ============================ */
+  .diagram{background:var(--dg-bg);border:1px solid var(--dg-node-bd);border-radius:16px;margin:22px 0;overflow:hidden;box-shadow:var(--shadow)}
+  .dg-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.06);flex-wrap:wrap}
+  .dg-title{color:var(--dg-tx);font-size:13px;font-weight:650;display:flex;align-items:center;gap:9px;font-family:"SF Mono",ui-monospace,"JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;letter-spacing:.2px}
+  .dg-title .ic{width:8px;height:8px;border-radius:2px;background:var(--peach)}
+  .dg-title small{color:var(--dg-mut);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:1.4px}
+  .dg-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .dg-btn{background:rgba(255,255,255,.06);color:#cdd6e4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer;transition:.15s;font-weight:560;font-family:inherit}
+  .dg-btn:hover{background:rgba(255,255,255,.13)}
+  .dg-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .dg-icon{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:15px}
+  .dg-body{padding:8px 8px 4px}
+  .dg-svg{width:100%;height:auto;display:block}
+  .dg-legend{display:flex;flex-wrap:wrap;gap:14px;padding:6px 16px 14px;border-top:1px solid rgba(255,255,255,.06)}
+  .lg{display:inline-flex;align-items:center;gap:7px;color:var(--dg-mut);font-size:11.8px;font-weight:520}
+  .lg .sw{width:18px;height:0;border-top:3px solid #fff;border-radius:2px}
+  .lg .sw.dash{border-top-style:dashed}
+  .lg .box{width:11px;height:11px;border-radius:3px}
+  .dg-note{color:var(--dg-mut);font-size:12px;padding:0 16px 14px}
+
+  /* fullscreen */
+  .diagram.fs{position:fixed;inset:14px;z-index:90;margin:0;display:flex;flex-direction:column;background:var(--dg-bg)}
+  .diagram.fs .dg-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center}
+  .diagram.fs .dg-svg{max-height:100%;width:auto;max-width:100%}
+  .scrim{display:none;position:fixed;inset:0;background:rgba(3,6,12,.72);z-index:80;backdrop-filter:blur(3px)}
+  .scrim.on{display:block}
+
+  /* svg element styles */
+  .node rect.body{fill:var(--dg-node);stroke:var(--dg-node-bd);stroke-width:1.5}
+  .node text{fill:var(--dg-tx);font-size:12.5px;font-weight:560}
+  .node text.sub{fill:var(--dg-mut);font-size:10.5px;font-weight:440}
+  .node{cursor:default;transition:opacity .3s}
+  .edge{fill:none;stroke-width:2;opacity:.9;transition:opacity .3s,stroke-width .2s}
+  .edge.dash{stroke-dasharray:6 6}
+  .flow-line{fill:none;stroke-width:2.4;stroke-dasharray:5 9;opacity:.85;animation:dash 1.1s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-14}}
+  .flow-dot{opacity:.95}
+  .dimmed{opacity:.12 !important}
+  .hot{opacity:1 !important;stroke-width:3.4 !important}
+  .elabel{font-size:10px;font-weight:600;fill:var(--dg-mut)}
+  .elabel-bg{fill:var(--dg-bg);opacity:.85}
+
+  /* sequence diagram */
+  .seq-actor rect{fill:var(--dg-node);stroke:var(--dg-node-bd);stroke-width:1.5}
+  .seq-actor text{fill:var(--dg-tx);font-size:11.5px;font-weight:600}
+  .seq-life{stroke:#df906f;stroke-width:1.4;stroke-dasharray:3 6;opacity:.7}
+  .seq-msg{stroke-width:2;fill:none;opacity:0;transition:opacity .45s}
+  .seq-msg.show{opacity:1}
+  .seq-lbl{font-size:11px;fill:var(--dg-tx);opacity:0;transition:opacity .45s;font-weight:520}
+  .seq-lbl.show{opacity:1}
+  .seq-num{font-size:10px;font-weight:700;fill:var(--dg-bg)}
+  .seq-selfbox{fill:none;stroke-width:2}
+
+  footer{max-width:820px;margin:70px auto 0;padding-top:24px;border-top:1px solid var(--border);color:var(--faint);font-size:13px}
+  .topbar{display:none}
+
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr}
+    .sidebar{display:none}
+    .topbar{display:flex;position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;align-items:center;justify-content:space-between;gap:10px}
+    .topbar select{flex:1;background:var(--bg-elev);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px}
+    main{padding:20px 16px 90px}
+  }
+  .theme-toggle{background:var(--bg-elev);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;font-family:inherit;display:inline-flex;gap:7px;align-items:center}
+  .theme-toggle:hover{color:var(--text)}
+  .side-foot{margin-top:26px;padding-top:16px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <select onchange="location.hash=this.value">
+    <option value="#resumen">1 · Resumen ejecutivo</option>
+    <option value="#alcance">2 · Alcance y supuestos</option>
+    <option value="#desacople">3 · Inventario y desacople</option>
+    <option value="#refactor">4 · Esfuerzo de refactorización</option>
+    <option value="#arquitectura">5 · Arquitectura objetivo</option>
+    <option value="#secuencia">6 · Secuencia del render</option>
+    <option value="#apis">7 · APIs a habilitar</option>
+    <option value="#despliegue">8 · Configuración de despliegue</option>
+    <option value="#presupuesto">9 · Presupuesto</option>
+    <option value="#riesgos">10 · Riesgos y fases</option>
+  </select>
+  <button class="theme-toggle" onclick="toggleTheme()"><span id="tt2">◐</span></button>
+</div>
+
+<div class="wrap">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="dot"></span>
+      <div><b>Xertica Education</b><small>Migración a GCP</small></div>
+    </div>
+    <nav class="toc" id="toc">
+      <a href="#resumen"><span class="n">1</span> Resumen ejecutivo</a>
+      <a href="#alcance"><span class="n">2</span> Alcance y supuestos</a>
+      <a href="#desacople"><span class="n">3</span> Inventario y desacople</a>
+      <a href="#refactor"><span class="n">4</span> Esfuerzo de refactorización</a>
+      <a href="#arquitectura"><span class="n">5</span> Arquitectura objetivo</a>
+      <a href="#secuencia"><span class="n">6</span> Secuencia del render</a>
+      <a href="#apis"><span class="n">7</span> APIs a habilitar</a>
+      <a href="#despliegue"><span class="n">8</span> Config. de despliegue</a>
+      <a href="#presupuesto"><span class="n">9</span> Presupuesto (1 mes)</a>
+      <a href="#optimizacion"><span class="n">10</span> Optimización de costos</a>
+      <a href="#riesgos"><span class="n">11</span> Riesgos y fases</a>
+    </nav>
+    <div class="side-foot">
+      <button class="theme-toggle" onclick="toggleTheme()"><span id="tt">◐</span> Tema</button>
+      <p style="font-size:11.5px;color:var(--faint);margin-top:14px;line-height:1.5">
+        Fuente: <span class="mono" style="font-size:11px">docs/arquitectura/migracion-gcp.md</span><br>
+        Precios de lista <span class="mono" style="font-size:11px">us-central1</span>, ago 2026.
+      </p>
+    </div>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <span class="eyebrow">◆ Análisis técnico</span>
+      <h1>Migración a Google Cloud Platform</h1>
+      <p class="lede">Desacople, esfuerzo de refactorización, arquitectura objetivo GCP-nativa y presupuesto a 1 mes para el piloto de 30 usuarios.</p>
+      <div class="meta-row">
+        <span class="chip"><b>Estado:</b> análisis (no ADR, no código)</span>
+        <span class="chip"><b>Fecha:</b> 2026-08-10</span>
+        <span class="chip"><b>Región:</b> us-central1</span>
+        <span class="chip"><b>Cloud Run:</b> scale-to-zero (min=0)</span>
+      </div>
+    </header>
+
+    <div class="content">
+
+    <!-- ===================== 1 · RESUMEN ===================== -->
+    <section id="resumen">
+      <h2><span class="sn">01</span> Resumen ejecutivo</h2>
+      <p><strong>Veredicto: la migración es factible sin reescritura.</strong> La arquitectura ya está pensada para
+      Cloud Run + una base Postgres gestionada, y casi todos los servicios externos viven detrás de un
+      <strong>puerto</strong> (<span class="mono-inline">interface.py</span>/<span class="mono-inline">base.py</span>) con <span class="mono-inline">mock.py</span>, lo que hace intercambiable la
+      implementación. Es mayormente <strong>contenerización + re-plataformado GCP-nativo</strong>, no un rediseño.</p>
+
+      <div class="kpis">
+        <div class="kpi"><div class="lab">Factibilidad</div><div class="val">Alta</div><div class="sub">sin reescritura</div></div>
+        <div class="kpi eff"><div class="lab">Esfuerzo total</div><div class="val">M–L</div><div class="sub">3 focos concentrados</div></div>
+        <div class="kpi cost"><div class="lab">Costo estimado</div><div class="val">~$265<span style="font-size:14px;color:var(--muted)">/mes</span></div><div class="sub">precios de lista</div></div>
+        <div class="kpi veo"><div class="lab">Con Veo Fast</div><div class="val">~$170<span style="font-size:14px;color:var(--muted)">/mes</span></div><div class="sub">palanca dominante</div></div>
+      </div>
+
+      <p>El objetivo elegido es <strong>GCP-native completo</strong>, definido por tres decisiones:</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th style="width:34px">#</th><th>Decisión</th><th>Objetivo</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><b>Capa de datos</b></td><td>Cloud SQL for PostgreSQL (+<span class="mono-inline">pgvector</span>) + Cloud Storage (GCS), todo dentro del project</td></tr>
+            <tr><td>2</td><td><b>LLMs de texto</b></td><td>Vertex AI nativo (Gemini directo + embeddings Vertex + Claude vía Model Garden)</td></tr>
+            <tr><td>3</td><td><b>Render de video</b></td><td>Worker separado: Cloud Tasks + Cloud Run Jobs, con estado de jobs externalizado</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>El esfuerzo se concentra en tres focos:</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Foco</th><th style="width:110px">Esfuerzo</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr><td>Externalizar jobs + worker de render</td><td><span class="badge b-l">L · Alto</span></td><td>Hoy el render corre in-process con estado en memoria y disco local efímero</td></tr>
+            <tr><td>Repos Supabase (PostgREST) → Cloud SQL (SQL)</td><td><span class="badge b-ml">M–L</span></td><td>Los repos usan el query-builder de <span class="mono-inline">supabase-py</span>, no SQL estándar</td></tr>
+            <tr><td>Infografía + Google Drive sin puerto</td><td><span class="badge b-m">M</span></td><td><span class="mono-inline">httpx</span>/SDK crudos incrustados en service/router; falta crear el puerto</td></tr>
+            <tr><td>Contenerización + Vertex nativo + Secret Manager + IaC</td><td><span class="badge b-s">S–M</span></td><td>Trabajo mecánico; los puertos ya existen para LLM/embeddings/storage</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <div class="t">◆ Palancas de costo</div>
+        Con precios de lista y <strong>Cloud Run en scale-to-zero</strong> (<span class="mono-inline">min-instances=0</span>), <strong>Veo (video IA) y Cloud SQL son las dos partidas dominantes</strong>. Con Veo 3.1 <em>Fast</em> o menos clips baja a ≈ US$170/mes. Detalle en §9.
+      </div>
+    </section>
+
+    <!-- ===================== 2 · ALCANCE ===================== -->
+    <section id="alcance">
+      <h2><span class="sn">02</span> Alcance y supuestos</h2>
+      <ul>
+        <li><strong>Usuarios:</strong> 30 en total; <strong>~5 activos por día</strong> (baja concurrencia, patrón de estudio de contenido).</li>
+        <li><strong>Región:</strong> <span class="mono-inline">us-central1</span> (coincide con <span class="mono-inline">google_cloud_location</span> en <span class="mono-inline">settings.py</span>).</li>
+        <li><strong>Precios:</strong> de lista, ago 2026; <strong>no</strong> descuentan los ~US$300 de créditos ni los <em>free tiers</em> mensuales. Verificar contra fuentes de §9 antes de comprometer presupuesto.</li>
+        <li><strong>No incluye:</strong> dominios/CDN externo, soporte pagado, ni licencias de terceros fuera de GCP (Tavily, Pixabay, OpenRouter como respaldo).</li>
+      </ul>
+      <p><strong>Volumen mensual asumido</strong> (declarado y <strong>ajustable</strong> — es la principal palanca de costo):</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Actividad</th><th class="num">Volumen/mes</th><th>Notas</th></tr></thead>
+          <tbody>
+            <tr><td>Rutas estructuradas (LLM)</td><td class="num">~20</td><td>Gate 0</td></tr>
+            <tr><td>Videos ~2 min renderizados (incl. re-renders)</td><td class="num">~50</td><td>Gate 2/3</td></tr>
+            <tr><td>Infografías</td><td class="num">~40</td><td></td></tr>
+            <tr><td>Lessons / Quizzes / Labs (texto)</td><td class="num">~160</td><td>síncronos hoy</td></tr>
+            <tr><td>Deep Research</td><td class="num">~20</td><td>Gate 1</td></tr>
+            <tr><td>Ingesta KB (embeddings)</td><td class="num">decenas</td><td>Vía 2</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== 3 · DESACOPLE ===================== -->
+    <section id="desacople">
+      <h2><span class="sn">03</span> Inventario de servicios y grado de desacople</h2>
+      <p class="sec-intro">El backend sigue el patrón <strong>puertos/adaptadores</strong>: <span class="mono-inline">interface.py</span>/<span class="mono-inline">base.py</span> (puerto) + <span class="mono-inline">service.py</span> + <span class="mono-inline">mock.py</span>, con factories en <span class="mono-inline">config/dependencies.py</span> que auto-seleccionan mock ↔ real detectando la cadena <span class="mono-inline">placeholder</span>. Ese patrón es lo que hace la migración barata <strong>donde se respeta</strong>. Conviven dos patrones:</p>
+      <ul>
+        <li><strong>A) Factory limpio</strong> (fácil de intercambiar): <span class="mono-inline">get_embedder()</span>, <span class="mono-inline">get_linker()</span>, <span class="mono-inline">get_storage_adapter()</span>, <span class="mono-inline">get_documentation_client()</span>, <span class="mono-inline">get_route_structurer()</span>, <span class="mono-inline">get_kb_chunk_repository()</span>.</li>
+        <li><strong>B) Instanciación directa / cableada</strong> (difícil de intercambiar): <span class="mono-inline">SupabaseJobRepository()</span>, <span class="mono-inline">SupabaseLearningPathRepository()</span>, <span class="mono-inline">VideoService()</span>, <span class="mono-inline">InfographicService()</span> y tres <span class="mono-inline">OpenRouterLLMAdapter()</span> (<span class="mono-inline">dependencies.py:27,30,35,53,57-59</span>).</li>
+      </ul>
+
+      <h3>Matriz de acoplamiento <small style="font-weight:400;color:var(--faint);font-size:13px">— filtrable</small></h3>
+      <div class="diagram" id="dg-coupling">
+        <div class="dg-head">
+          <div class="dg-title"><span class="ic"></span> Acoplamiento por servicio externo <small>12 integraciones</small></div>
+          <div class="dg-controls" id="coupling-filters">
+            <button class="dg-btn on" data-f="all">Todos</button>
+            <button class="dg-btn" data-f="bajo">Bajo</button>
+            <button class="dg-btn" data-f="medio">Medio</button>
+            <button class="dg-btn" data-f="alto">Alto</button>
+            <button class="dg-btn" data-f="noport">Sin puerto</button>
+          </div>
+        </div>
+        <div class="dg-body" style="padding:0">
+          <div class="tbl-wrap" style="margin:0;border:none;border-radius:0;box-shadow:none">
+            <table id="coupling-table">
+              <thead><tr>
+                <th>Servicio externo</th><th style="width:90px">¿Puerto?</th><th style="width:70px">¿Mock?</th>
+                <th style="width:130px">Acoplamiento</th><th>Evidencia</th>
+              </tr></thead>
+              <tbody><!-- rendered by JS --></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="dg-legend">
+          <span class="lg"><span class="lv lv-bajo"></span>Bajo</span>
+          <span class="lg"><span class="lv lv-medio"></span>Medio</span>
+          <span class="lg"><span class="lv lv-medio-alto"></span>Medio-Alto</span>
+          <span class="lg"><span class="lv lv-alto"></span>Alto</span>
+        </div>
+      </div>
+
+      <h3>Observaciones de ejecución (relevantes para el refactor)</h3>
+      <ul>
+        <li><strong>No hay cola ni worker.</strong> Los jobs corren en el mismo proceso: <span class="mono-inline">asyncio.create_task</span> (video), <span class="mono-inline">BackgroundTasks</span> (structure/KB/research). Quiz/lesson/lab/infografía y parseo son <strong>100% síncronos dentro del request HTTP</strong>.</li>
+        <li><strong>Estado de jobs en memoria</strong> (<span class="mono-inline">video/service.py:74-76</span>: <span class="mono-inline">_fallback_jobs</span>, <span class="mono-inline">_render_tasks</span>) → <strong>no sobrevive reinicios ni escala horizontal</strong>.</li>
+        <li><strong>Render pesado:</strong> subprocess de <strong>Remotion (Node + Chrome headless)</strong> con <strong>timeout de 20 min</strong>, más Playwright/Chromium y ffmpeg/ffprobe. Escribe en <span class="mono-inline">/tmp/render_{job_id}</span> y <span class="mono-inline">composer/public/{job_id}</span> (<strong>disco local efímero</strong>).</li>
+        <li><strong>Cliente Supabase síncrono</strong> dentro de <span class="mono-inline">async def</span> sin <span class="mono-inline">to_thread</span> → <strong>bloquea el event loop</strong>.</li>
+        <li><strong>URLs hardcodeadas</strong> <span class="mono-inline">http://localhost:8000/static/...</span> (<span class="mono-inline">infographic/service.py:513-514</span>, <span class="mono-inline">adapters/storage/supabase.py:54</span>).</li>
+        <li><strong>Sin autenticación</strong>; CORS <span class="mono-inline">allow_origins=["*"]</span>. <strong>No existen Dockerfiles</strong> → contenerizar es trabajo nuevo.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 4 · REFACTOR ===================== -->
+    <section id="refactor">
+      <h2><span class="sn">04</span> Esfuerzo de refactorización</h2>
+      <p class="sec-intro">Clasificación <span class="badge b-s">S</span> bajo/mecánico · <span class="badge b-m">M</span> medio · <span class="badge b-l">L</span> alto/estructural.</p>
+
+      <h3>4.1 Capa de datos: Supabase → Cloud SQL (PostgreSQL + pgvector) <span class="badge b-ml">M–L</span></h3>
+      <p><strong>Por qué no es trivial:</strong> los repos están escritos contra el query-builder de <span class="mono-inline">supabase-py</span> (PostgREST) — <span class="mono-inline">.table().select().eq().in_().execute()</span> y <span class="mono-inline">.rpc(...)</span> — no contra SQL estándar. No basta cambiar el connection string.</p>
+      <ul>
+        <li><strong>(Recomendada) Reescribir los repos con SQLAlchemy/<span class="mono-inline">asyncpg</span>.</strong> Todo el acceso está aislado tras interfaces, así que se sustituye la implementación sin tocar services. La lógica pgvector está <strong>contenida</strong> en un punto (RPC <span class="mono-inline">match_kb_chunks</span>), que pasa a una consulta SQL con el operador <span class="mono-inline">&lt;=&gt;</span> de pgvector.</li>
+        <li>(Alternativa) Correr <strong>PostgREST</strong> como contenedor apuntando a Cloud SQL — evita reescribir pero añade un componente y no elimina el acoplamiento. <strong>No recomendada.</strong></li>
+      </ul>
+      <p>Atender: recrear el schema en Cloud SQL, instalar la extensión <span class="mono-inline">vector</span>, portar <span class="mono-inline">match_kb_chunks</span>, y <strong>decidir qué hacer con RLS</strong> (hoy activo sin políticas, key <span class="mono-inline">service_role</span>): al mover auth fuera de Supabase, la autorización debe resolverse en la app o en IAM. Retirar los fallbacks in-memory para producción.</p>
+
+      <h3>4.2 Jobs + worker de render separado <span class="badge b-l">L · el foco más caro</span></h3>
+      <p>Es el cambio estructural principal. Hoy el render es un <span class="mono-inline">asyncio.create_task</span> con estado en memoria; para escalar y sobrevivir reinicios hay que:</p>
+      <ol>
+        <li><strong>Externalizar el estado de jobs</strong> a Cloud SQL (tabla <span class="mono-inline">jobs</span>), eliminando <span class="mono-inline">_fallback_jobs</span>/<span class="mono-inline">_render_tasks</span> como fuente de verdad.</li>
+        <li><strong>Encolar</strong> el render en <strong>Cloud Tasks</strong> (o Pub/Sub) en vez de <span class="mono-inline">create_task</span>.</li>
+        <li><strong>Extraer el pipeline de <span class="mono-inline">video/executor.py</span> a un contenedor worker</strong> como <strong>Cloud Run Job</strong>, con imagen que incluye Node+Remotion, Chromium y ffmpeg. Toma el job, renderiza, sube el MP4 a <strong>GCS</strong> y marca el job en Cloud SQL.</li>
+        <li><strong>Sustituir disco local</strong> por rutas efímeras + subida a GCS; <strong>eliminar las URLs <span class="mono-inline">localhost:8000</span></strong> y servir assets vía URL firmada de GCS.</li>
+        <li>Envolver las llamadas síncronas en <span class="mono-inline">to_thread</span> o migrar a driver async para no bloquear el event loop.</li>
+      </ol>
+
+      <h3>4.3 Infografía y Google Drive: crear puerto <span class="badge b-m">M</span></h3>
+      <ul>
+        <li><strong>Infografía</strong> (<span class="mono-inline">services/infographic/service.py</span>) llama <span class="mono-inline">gpt-image-2</span> con <span class="mono-inline">httpx</span> crudo y usa <span class="mono-inline">create_client</span> de Supabase dentro del service. Migrar a <strong>Vertex Imagen / Gemini image</strong> implica <strong>crear un puerto</strong> y sacar la persistencia hacia el storage adapter.</li>
+        <li><strong>Google Drive</strong> (<span class="mono-inline">routers/google_drive.py</span>) tiene la integración con <span class="mono-inline">httpx</span> <strong>dentro del router</strong>. Aislar en un adapter y mover OAuth a <strong>Secret Manager</strong>. Sigue siendo API de Google, no cambia de proveedor.</li>
+      </ul>
+
+      <h3>4.4 LLMs de texto: OpenRouter → Vertex AI nativo <span class="badge b-m">M</span></h3>
+      <p>El puerto ya existe (<span class="mono-inline">adapters/llm/base.py</span>). Se crea un <strong><span class="mono-inline">VertexLLMAdapter</span></strong> (Gemini directo; Claude vía <strong>Model Garden</strong>) y se <strong>centraliza</strong> en un <span class="mono-inline">get_llm_adapter(role)</span>, reemplazando los <span class="mono-inline">OpenRouterLLMAdapter()</span> dispersos. El mapa rol→modelo ya está en <span class="mono-inline">settings.model_names</span>.</p>
+
+      <h3>4.5 Embeddings, Veo/Imagen/TTS, Storage <span class="badge b-s">S–M</span></h3>
+      <ul>
+        <li><strong>Embeddings</strong> (ya factory): nuevo <span class="mono-inline">VertexEmbedder</span> tras <span class="mono-inline">BaseEmbedder</span>. <span class="badge b-s">S</span></li>
+        <li><strong>Veo/Imagen/TTS</strong> ya son Vertex/GCP; falta <strong>formalizar el puerto</strong> y moverlos a DI en vez de instanciarlos dentro de <span class="mono-inline">VideoService</span> (<span class="mono-inline">video/service.py:68-71</span>). <span class="badge b-m">M</span></li>
+        <li><strong>Storage</strong>: consolidar los dos adaptadores duplicados y crear <span class="mono-inline">GcsStorageAdapter</span> tras el puerto. <span class="badge b-m">M</span></li>
+      </ul>
+
+      <h3>4.6 Contenerización + secretos + IaC <span class="badge b-s">S–M</span></h3>
+      <p>Crear <strong>Dockerfiles</strong> (no existen): imagen de API (Python <span class="mono-inline">uv</span> + ffmpeg + Chromium + Node/Remotion para el worker), imagen Web (Next.js standalone). Mover <span class="mono-inline">.env</span> a <strong>Secret Manager</strong>. Añadir CI/CD con <strong>Cloud Build</strong> + <strong>Artifact Registry</strong>. Restringir CORS y añadir autenticación.</p>
+    </section>
+
+    <!-- ===================== 5 · ARQUITECTURA ===================== -->
+    <section id="arquitectura">
+      <h2><span class="sn">05</span> Arquitectura objetivo en GCP</h2>
+      <p class="sec-intro">Flujo de datos end-to-end dentro del GCP project. Pasa el cursor sobre un nodo para resaltar sus conexiones; usa las fases para ver qué existe en cada etapa de la migración.</p>
+
+      <div class="diagram" id="dg-arch">
+        <div class="dg-head">
+          <div class="dg-title"><span class="ic"></span> Arquitectura GCP-nativa <small>flujo animado</small></div>
+          <div class="dg-controls">
+            <button class="dg-btn" data-phase="f1" onclick="setPhase('f1',this)">Fase 1</button>
+            <button class="dg-btn on" data-phase="all" onclick="setPhase('all',this)">Todo</button>
+            <button class="dg-btn" data-phase="f2" onclick="setPhase('f2',this)">Fase 2</button>
+            <button class="dg-btn dg-icon" title="Pantalla completa" onclick="toggleFs('dg-arch')">⛶</button>
+          </div>
+        </div>
+        <div class="dg-body">
+          <svg class="dg-svg" id="arch-svg" viewBox="0 0 1040 620" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagrama de arquitectura GCP"></svg>
+        </div>
+        <div class="dg-legend" id="arch-legend"></div>
+        <div class="dg-note" id="arch-note">En <b>Fase 1</b> el render y el TTS/Veo corren <em>in-process</em> dentro de la API (Cloud Tasks y el worker aún no existen). En <b>Fase 2</b> se activa el worker separado.</div>
+      </div>
+
+      <h3>Mapeo actual → GCP</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Hoy</th><th>GCP objetivo</th><th style="width:90px">Esfuerzo</th></tr></thead>
+          <tbody>
+            <tr><td>FastAPI local</td><td><b>Cloud Run</b> (API, min=0 scale-to-zero)</td><td><span class="badge b-s">S</span></td></tr>
+            <tr><td>Next.js local</td><td><b>Cloud Run</b> (o Firebase App Hosting)</td><td><span class="badge b-s">S</span></td></tr>
+            <tr><td>Render in-process</td><td><b>Cloud Run Jobs</b> + <b>Cloud Tasks</b> + estado en Cloud SQL</td><td><span class="badge b-l">L</span></td></tr>
+            <tr><td>Supabase Postgres + pgvector</td><td><b>Cloud SQL for PostgreSQL</b> + pgvector</td><td><span class="badge b-ml">M–L</span></td></tr>
+            <tr><td>Supabase Storage</td><td><b>Cloud Storage (GCS)</b></td><td><span class="badge b-m">M</span></td></tr>
+            <tr><td>OpenRouter (texto)</td><td><b>Vertex AI</b> (Gemini + Claude Model Garden)</td><td><span class="badge b-m">M</span></td></tr>
+            <tr><td>OpenAI embeddings</td><td><b>Vertex AI text-embeddings</b></td><td><span class="badge b-s">S</span></td></tr>
+            <tr><td>OpenAI <span class="mono-inline">gpt-image-2</span> (infografía)</td><td><b>Vertex Imagen / Gemini Image</b></td><td><span class="badge b-m">M</span></td></tr>
+            <tr><td>Veo / Imagen / TTS</td><td><b>Vertex AI / Cloud TTS</b> (ya lo son) — formalizar DI</td><td><span class="badge b-m">M</span></td></tr>
+            <tr><td>Tavily / Google Search</td><td><b>Gemini + Grounding con Google Search</b></td><td><span class="badge b-s">S–M</span></td></tr>
+            <tr><td>Google Drive / YouTube</td><td>Igual (APIs de Google) + Secret Manager</td><td><span class="badge b-s">S</span></td></tr>
+            <tr><td>Secretos en <span class="mono-inline">.env</span></td><td><b>Secret Manager</b></td><td><span class="badge b-s">S</span></td></tr>
+            <tr><td>— (no existe)</td><td><b>Artifact Registry</b> + <b>Cloud Build</b></td><td><span class="badge b-s">S</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== 6 · SECUENCIA ===================== -->
+    <section id="secuencia">
+      <h2><span class="sn">06</span> Secuencia del render (worker separado)</h2>
+      <p class="sec-intro">Cómo fluye un render en la arquitectura objetivo (Fase 2): la API encola y responde de inmediato; el worker hace el trabajo pesado y actualiza el estado en Cloud SQL. Pulsa <strong>Reproducir</strong> para ver la secuencia paso a paso.</p>
+
+      <div class="diagram" id="dg-seq">
+        <div class="dg-head">
+          <div class="dg-title"><span class="ic"></span> Ciclo de vida de un Job de render <small>asíncrono</small></div>
+          <div class="dg-controls">
+            <button class="dg-btn on" id="seq-play" onclick="playSeq()">▶ Reproducir</button>
+            <button class="dg-btn" onclick="showAllSeq()">Ver todo</button>
+            <button class="dg-btn dg-icon" title="Pantalla completa" onclick="toggleFs('dg-seq')">⛶</button>
+          </div>
+        </div>
+        <div class="dg-body">
+          <svg class="dg-svg" id="seq-svg" viewBox="0 0 1040 560" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Diagrama de secuencia del render"></svg>
+        </div>
+        <div class="dg-legend">
+          <span class="lg"><span class="sw" style="border-color:var(--k-request)"></span>síncrono</span>
+          <span class="lg"><span class="sw dash" style="border-color:var(--k-enqueue)"></span>asíncrono / encolado</span>
+          <span class="lg"><span class="sw dash" style="border-color:var(--k-data)"></span>retorno / estado</span>
+          <span class="lg"><span class="sw" style="border-color:var(--k-ai)"></span>IA (Vertex)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 7 · APIs ===================== -->
+    <section id="apis">
+      <h2><span class="sn">07</span> Servicios / APIs a habilitar</h2>
+      <p class="sec-intro">En el project existente (ajustar <span class="mono-inline">PROJECT_ID</span>):</p>
+      <div class="code">
+        <div class="cap">gcloud · habilitar APIs</div>
+        <pre><code class="lang-bash">gcloud config set project PROJECT_ID
+
+gcloud services enable \
+  run.googleapis.com \                # Cloud Run (Web, API) + Cloud Run Jobs (worker)
+  cloudbuild.googleapis.com \         # CI/CD de imágenes
+  artifactregistry.googleapis.com \   # registro de imágenes de contenedor
+  sqladmin.googleapis.com \           # Cloud SQL for PostgreSQL (+pgvector)
+  storage.googleapis.com \            # Cloud Storage (assets)
+  secretmanager.googleapis.com \      # secretos (.env → Secret Manager)
+  cloudtasks.googleapis.com \         # cola de render (o pubsub.googleapis.com)
+  aiplatform.googleapis.com \         # Vertex AI: Gemini, Claude, embeddings, Veo, Imagen, Grounding
+  texttospeech.googleapis.com \       # narración TTS (es-US-Neural2-B)
+  iam.googleapis.com \                # service accounts y roles
+  logging.googleapis.com \            # logs
+  monitoring.googleapis.com           # métricas/alertas
+
+# Integraciones externas de Google (si se conservan):
+gcloud services enable drive.googleapis.com youtube.googleapis.com
+
+# Opcional (si se usa IP privada a Cloud SQL vía VPC):
+# gcloud services enable vpcaccess.googleapis.com servicenetworking.googleapis.com</code></pre>
+      </div>
+      <div class="callout info">
+        <div class="t">◆ Nota sobre el conector</div>
+        Con el <strong>conector integrado de Cloud SQL</strong> para Cloud Run (socket Unix) <strong>no</strong> hace falta VPC connector ni su costo. Solo se necesita <span class="mono-inline">vpcaccess</span>/<span class="mono-inline">servicenetworking</span> si se opta por IP privada por VPC.
+      </div>
+    </section>
+
+    <!-- ===================== 8 · DESPLIEGUE ===================== -->
+    <section id="despliegue">
+      <h2><span class="sn">08</span> Configuración de despliegue</h2>
+      <p class="sec-intro">Snippets de referencia (ajustar nombres, SA y región). No ejecutar sin revisar.</p>
+
+      <h3>8.1 Artifact Registry + Service Accounts</h3>
+      <div class="code">
+        <div class="cap">gcloud · registry + IAM</div>
+        <pre><code class="lang-bash">gcloud artifacts repositories create xertica --repository-format=docker --location=us-central1
+
+# SA de runtime (API/worker) con permisos mínimos
+gcloud iam service-accounts create xertica-run --display-name="Xertica runtime"
+SA="xertica-run@PROJECT_ID.iam.gserviceaccount.com"
+for ROLE in \
+  roles/cloudsql.client \
+  roles/storage.objectAdmin \
+  roles/secretmanager.secretAccessor \
+  roles/aiplatform.user \
+  roles/cloudtasks.enqueuer \
+  roles/run.invoker ; do
+  gcloud projects add-iam-policy-binding PROJECT_ID --member="serviceAccount:$SA" --role="$ROLE"
+done</code></pre>
+      </div>
+
+      <h3>8.2 Cloud SQL (PostgreSQL + pgvector)</h3>
+      <div class="code">
+        <div class="cap">gcloud · Cloud SQL</div>
+        <pre><code class="lang-bash">gcloud sql instances create xertica-pg \
+  --database-version=POSTGRES_16 --edition=ENTERPRISE \
+  --tier=db-custom-1-3840 --region=us-central1 \
+  --storage-type=SSD --storage-size=10GB --no-assign-ip   # solo conector/privado
+gcloud sql databases create xertica --instance=xertica-pg
+# En la BD:  CREATE EXTENSION IF NOT EXISTS vector;
+# Portar schema (supabase/migrations/) + función match_kb_chunks (operador <=> de pgvector).</code></pre>
+      </div>
+      <div class="callout">
+        <div class="t">◆ Alta disponibilidad</div>
+        <strong>HA (<span class="mono-inline">--availability-type=REGIONAL</span>)</strong> aproximadamente <strong>duplica</strong> el costo del rubro Cloud SQL; para un piloto se puede dejar <strong>ZONAL</strong> (sin HA) con backups automáticos.
+      </div>
+
+      <h3>8.3 Cloud Storage + Secret Manager + Cloud Tasks</h3>
+      <div class="code">
+        <div class="cap">gcloud · GCS, secretos y cola</div>
+        <pre><code class="lang-bash"># Bucket de assets
+gcloud storage buckets create gs://xertica-education-assets \
+  --location=us-central1 --uniform-bucket-level-access
+# Servir con URLs firmadas; retirar localhost:8000.
+
+# Secretos (.env → Secret Manager): db-url, openai/embeddings, veo-key,
+# youtube-api-key, tavily-api-key, pixabay-api-key, google-drive-client-id...
+printf '%s' "$VALUE" | gcloud secrets create db-url --data-file=-
+# En el deploy:  --set-secrets=DATABASE_URL=db-url:latest,...
+# Vertex/GCS/TTS/Veo se resuelven por ADC de la SA → se elimina GOOGLE_APPLICATION_CREDENTIALS.
+
+# Cola de render
+gcloud tasks queues create render-queue --location=us-central1</code></pre>
+      </div>
+
+      <h3>8.4 Cloud Run — API, Web y Worker</h3>
+      <div class="code">
+        <div class="cap">gcloud · build + deploy</div>
+        <pre><code class="lang-bash"># Imágenes (Cloud Build)
+gcloud builds submit apps/api --tag us-central1-docker.pkg.dev/PROJECT_ID/xertica/api
+gcloud builds submit apps/web --tag us-central1-docker.pkg.dev/PROJECT_ID/xertica/web
+# Imagen del worker: base con Node+Remotion, Chromium y ffmpeg + el pipeline de video/executor.py
+
+# API (scale-to-zero para ahorrar; conector de Cloud SQL; secretos)
+gcloud run deploy xertica-api \
+  --image us-central1-docker.pkg.dev/PROJECT_ID/xertica/api \
+  --region us-central1 --service-account $SA \
+  --min-instances=0 --cpu=2 --memory=2Gi --concurrency=40 \
+  --add-cloudsql-instances=PROJECT_ID:us-central1:xertica-pg \
+  --set-secrets=DATABASE_URL=db-url:latest \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,STORAGE_BUCKET=xertica-education-assets
+
+# Web (scale-to-zero)
+gcloud run deploy xertica-web \
+  --image us-central1-docker.pkg.dev/PROJECT_ID/xertica/web \
+  --region us-central1 --min-instances=0 --cpu=1 --memory=512Mi \
+  --set-env-vars=NEXT_PUBLIC_API_URL=https://xertica-api-....run.app
+
+# Worker de render (Cloud Run Job: CPU alta, timeout largo, sin concurrencia)
+gcloud run jobs create xertica-render \
+  --image us-central1-docker.pkg.dev/PROJECT_ID/xertica/render \
+  --region us-central1 --service-account $SA \
+  --cpu=4 --memory=8Gi --task-timeout=1800s --max-retries=1 \
+  --add-cloudsql-instances=PROJECT_ID:us-central1:xertica-pg \
+  --set-secrets=DATABASE_URL=db-url:latest</code></pre>
+      </div>
+      <div class="callout">
+        <div class="t">⚠ Sobre <span class="mono-inline" style="font-size:.85em">min-instances=0</span> (scale-to-zero)</div>
+        Ahorra costo — la API solo factura durante requests, mayormente dentro del <em>free tier</em> — a cambio de <strong>cold starts</strong> (unos segundos en la primera petición tras inactividad) y de <strong>no</strong> poder sostener trabajo en memoria: cualquier job in-process muere si la instancia se apaga. Por eso <span class="mono-inline">min=0</span> es plenamente seguro <strong>una vez externalizado el estado de jobs a Cloud SQL</strong> (§4.2). Los endpoints síncronos no se ven afectados salvo por el cold start.
+      </div>
+    </section>
+
+    <!-- ===================== 9 · PRESUPUESTO ===================== -->
+    <section id="presupuesto">
+      <h2><span class="sn">09</span> Presupuesto — 1 mes (30 usuarios / ~5 activos/día)</h2>
+      <p class="sec-intro">Precios de lista <span class="mono-inline">us-central1</span>, ago 2026. Supuestos de volumen: §2.</p>
+
+      <h3>Infraestructura</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Rubro</th><th>Base de cálculo</th><th class="num">Est. mensual</th></tr></thead>
+          <tbody>
+            <tr><td>Cloud Run — API</td><td><b>min=0 (scale-to-zero)</b>, request-based, mayormente free tier</td><td class="num">~$5</td></tr>
+            <tr><td>Cloud Run — Web</td><td>scale-to-zero + free tier</td><td class="num">~$5</td></tr>
+            <tr><td>Cloud Run Jobs — Render worker</td><td>~50 renders × ~10 min × 4 vCPU / 8 GiB</td><td class="num">~$10</td></tr>
+            <tr><td>Cloud SQL PostgreSQL (pgvector)</td><td>1 vCPU / 3.75 GiB, 10 GB SSD, <b>sin HA</b></td><td class="num">~$75</td></tr>
+            <tr><td>Cloud Storage (GCS)</td><td>~10–20 GB + egress bajo</td><td class="num">~$3</td></tr>
+            <tr><td>Artifact Registry + Secret Manager</td><td>imágenes + ~10 secretos</td><td class="num">~$2</td></tr>
+            <tr><td>Cloud Tasks / Build / Logging</td><td>dentro de free tier</td><td class="num">~$0</td></tr>
+            <tr class="subtotal"><td colspan="2">Subtotal infraestructura</td><td class="num">~$100</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>IA / Modelos (Vertex AI + TTS)</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Rubro</th><th>Base de cálculo</th><th class="num">Est. mensual</th></tr></thead>
+          <tbody>
+            <tr><td><b>Veo 3.1</b> (video IA)</td><td>~40 clips × 8 s × $0.40/s (Standard 720p)</td><td class="num">~$128</td></tr>
+            <tr><td><b>Imagen / Gemini Image</b></td><td>~60 imágenes × ~$0.04–0.07</td><td class="num">~$6</td></tr>
+            <tr><td><b>Gemini</b> (scriptwriter, structure, lesson/quiz/lab, research)</td><td>mayormente Flash; Pro en guion</td><td class="num">~$15</td></tr>
+            <tr><td><b>Vertex embeddings</b></td><td>ingesta KB del piloto</td><td class="num">~$5</td></tr>
+            <tr><td><b>Grounding con Google Search</b></td><td>~20 deep-research</td><td class="num">~$10</td></tr>
+            <tr><td><b>Cloud TTS (Neural2)</b></td><td>~95k chars/mes (bajo el 1M gratis)</td><td class="num">~$0</td></tr>
+            <tr class="subtotal"><td colspan="2">Subtotal IA</td><td class="num">~$164</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Total</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tbody>
+            <tr><td>Subtotal infraestructura</td><td class="num">~$100</td></tr>
+            <tr><td>Subtotal IA</td><td class="num">~$164</td></tr>
+            <tr class="total"><td>TOTAL</td><td class="num">~$265 / mes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Sensibilidad (se mueve sobre todo por Veo y Cloud SQL)</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Palanca</th><th>Efecto</th><th class="num">Total resultante</th></tr></thead>
+          <tbody>
+            <tr><td>Veo 3.1 <b>Fast</b> ($0.10/s) en vez de Standard</td><td>IA ~$164 → ~$68</td><td class="num"><b>~$170</b></td></tr>
+            <tr><td>Mitad de videos con Veo (20 clips)</td><td>IA −~$64</td><td class="num"><b>~$200</b></td></tr>
+            <tr><td>Cloud SQL <b>right-size</b> (g1-small, sin HA) → §10</td><td>infra ~$100 → ~$55</td><td class="num"><b>~$220</b></td></tr>
+            <tr><td>Cloud SQL con <b>HA (REGIONAL)</b></td><td>+~$75</td><td class="num"><b>~$340</b></td></tr>
+            <tr><td>Doble de todo el volumen (uso alto)</td><td>IA ~×2</td><td class="num"><b>~$440</b></td></tr>
+            <tr><td>Créditos GCP (~$300) / free tiers activos</td><td>descuento primer mes</td><td class="num"><b>~$0 el 1er mes</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="t">◆ Fórmula de costo por video (ya en el código — <span class="mono-inline" style="font-size:.85em">video/service.py:1463</span>)</div>
+        <span class="mono-inline">costo ≈ (nº_ai_video × $0.20) + (nº_ai_illustration × $0.04) + (0.004 × duración_seg)</span> — confirma que <strong>Veo</strong> (<span class="mono-inline">ai_video</span>) domina el costo unitario del render.
+      </div>
+      <p style="font-size:13px;color:var(--muted)"><strong>Fuentes a verificar</strong> (precios cambian): Vertex AI pricing (Gemini/Veo/Imagen/embeddings/Grounding), Cloud Run, Cloud SQL for PostgreSQL, Cloud Text-to-Speech, Cloud Storage — todos en <span class="mono-inline">cloud.google.com/&lt;producto&gt;/pricing</span>, región <span class="mono-inline">us-central1</span>.</p>
+    </section>
+
+    <!-- ===================== 10 · OPTIMIZACIÓN DE COSTOS DE DATOS ===================== -->
+    <section id="optimizacion">
+      <h2><span class="sn">10</span> Optimización de costos de datos</h2>
+      <p class="sec-intro">Cloud SQL es la línea de infraestructura más cara (~$75 de ~$100). A diferencia de Cloud Run, <strong>no escala a cero</strong>: pagas la instancia encendida las ~730 h del mes aunque esté ociosa &gt;95% del tiempo. A esta escala (30 usuarios / ~5 activos-día) la base de datos nunca es el cuello de botella —lo es Veo—, así que right-sizing baja el costo <strong>sin impacto real en performance</strong>.</p>
+
+      <div class="callout info">
+        <div class="t">◆ ¿Para qué sirve Cloud SQL aquí?</div>
+        Hace doble trabajo: (1) el <strong>store relacional</strong> de los repos del factory (<span class="mono-inline">kb, sourcing, documents, source_links, approved</span>), <span class="mono-inline">jobs</span> y <span class="mono-inline">learning_path</span>; y (2) la <strong>búsqueda vectorial</strong> del RAG vía la extensión <span class="mono-inline">pgvector</span> (<span class="mono-inline">match_kb_chunks</span>). Sustituye a Supabase Postgres+pgvector 1:1.
+      </div>
+
+      <h3>Por qué es caro (y por qué se puede bajar sin perder performance)</h3>
+      <p>El modelo de cobro es la clave: <strong>Cloud Run</strong> cobra por request y a 0 instancias cuesta $0; <strong>Cloud SQL</strong> es una <strong>VM encendida 24/7</strong> — pagas vCPU + RAM por estar prendida, no por consultas. El ~$75 asume una instancia <em>dedicada</em> (1 vCPU / 3.75–8 GB) que para 30 usuarios está <strong>sobredimensionada</strong>: estás pagando capacidad que no se usa.</p>
+
+      <h3>Palancas de ahorro <span class="badge b-s">pros y contras</span></h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Palanca</th><th>Ahorro / beneficio (pro)</th><th>Contra (riesgo)</th></tr></thead>
+          <tbody>
+            <tr><td>Right-size a shared-core <span class="mono-inline">g1-small</span> (1 vCPU comp. / 1.7 GB)</td><td><span style="color:var(--ok);font-weight:600">~$75 → ~$30 (−$45)</span></td><td>Sin SLA; ráfagas variables — irrelevante a ~5 activos/día</td></tr>
+            <tr><td>Sin <b>HA</b> (zonal, single-zone) — ya asumido</td><td><span style="color:var(--ok);font-weight:600">evita ~2× la línea</span></td><td>Sin redundancia (aceptable en piloto)</td></tr>
+            <tr><td>SSD mínimo (10 GB)</td><td>storage ~$1.7/mes</td><td>El SSD auto-crece y no baja → cápalo</td></tr>
+            <tr><td>Cloud SQL Language Connector (sin VPC connector)</td><td>evita el conector serverless de pago</td><td>Ninguno</td></tr>
+            <tr><td><span class="mono-inline">db-f1-micro</span> (0.6 GB) en vez de g1-small</td><td><span style="color:var(--ok);font-weight:600">hasta ~$8–10/mes</span></td><td>0.6 GB apretado para indexar pgvector → posible OOM; solo con muy pocos datos</td></tr>
+            <tr><td>Créditos $300 / CUD 1 año (~25% off)</td><td>cubre el piloto / descuento en prod</td><td>El CUD ata 1 año (no en piloto)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Alternativas de base de datos</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Opción</th><th class="num">¿Más barato?</th><th>Tradeoff (contra)</th></tr></thead>
+          <tbody>
+            <tr><td><b>Cloud SQL right-size</b> (g1-small, sin HA) <span class="badge b-s">recomendado</span></td><td class="num"><span style="color:var(--ok);font-weight:600">Sí</span></td><td>Ninguno relevante a esta escala; mantiene SQL + pgvector sin refactor extra</td></tr>
+            <tr><td><b>Firestore</b> (serverless, escala a cero, vector search <span class="mono-inline">find_nearest</span>)</td><td class="num"><span style="color:var(--ok);font-weight:600">Sí, mucho</span></td><td><strong>Refactor grande</strong>: es NoSQL, sin joins SQL; reescribir los repos a modelo documento</td></tr>
+            <tr><td><b>Vertex AI Vector Search</b> (solo vectores)</td><td class="num"><span style="color:var(--crit);font-weight:600">No</span></td><td>El index endpoint es un nodo <em>always-on</em> → más caro que pgvector aquí</td></tr>
+            <tr><td><b>AlloyDB</b></td><td class="num"><span style="color:var(--crit);font-weight:600">No</span></td><td>Más caro; mínimo mayor. Es para escala grande</td></tr>
+            <tr><td>Separar relacional ↔ vectorial</td><td class="num">No compensa</td><td>Son miles de chunks; caben en un pgvector pequeño. Añade complejidad sin ahorro</td></tr>
+            <tr><td><em>(fuera de GCP-native)</em> <b>Supabase / Neon</b> serverless + pgvector</td><td class="num"><span style="color:var(--ok);font-weight:600">Sí</span></td><td>Rompe la decisión GCP-native (Neon escala a cero y ya trae pgvector)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <div class="t">◆ Ahorro recomendado — right-size sin sacrificar performance</div>
+        Con <span class="mono-inline">g1-small</span>, 10 GB SSD, sin HA y Language Connector: <strong>Cloud SQL ~$75 → ~$30</strong>. Eso baja el <strong>subtotal de infra ~$100 → ~$55</strong> y el <strong>TOTAL ~$265 → ~$220/mes (−17%)</strong>, con cero impacto en la experiencia para 30 usuarios.
+      </div>
+
+      <p style="font-size:13px;color:var(--muted)">Opción de secuencia — <strong>Fase 0</strong>: mantener Supabase durante el piloto (free tier / Pro ~$25, ya con pgvector) y migrar a Cloud SQL solo al ir a producción; respeta Cloud SQL como destino pero difiere el gasto. Precios de lista aproximados <span class="mono-inline">us-central1</span>, ago 2026 — confirmar en el Pricing Calculator.</p>
+    </section>
+
+    <!-- ===================== 11 · RIESGOS ===================== -->
+    <section id="riesgos">
+      <h2><span class="sn">11</span> Riesgos, recomendaciones y fases</h2>
+
+      <h3>Enfoque por fases (reduce riesgo y adelanta valor)</h3>
+      <div class="kpis" style="grid-template-columns:1fr 1fr">
+        <div class="kpi" style="padding:18px"><div class="lab" style="color:var(--accent)">Fase 1 — Levantar en GCP</div><div class="val" style="font-size:17px;margin-top:8px">S–M</div>
+          <div class="sub" style="margin-top:8px;line-height:1.5">Contenerizar API+Web → Cloud Run con <b>min=0</b>; migrar datos a Cloud SQL (+pgvector) y archivos a GCS; LLMs a Vertex; Secret Manager; CORS + auth mínima.</div>
+        </div>
+        <div class="kpi veo" style="padding:18px"><div class="lab" style="color:var(--peach)">Fase 2 — Robustez y escala</div><div class="val" style="font-size:17px;margin-top:8px">L</div>
+          <div class="sub" style="margin-top:8px;line-height:1.5">Extraer el <b>worker de render</b> (Cloud Tasks + Cloud Run Jobs), externalizar estado de jobs, quitar disco local/URLs localhost, desacoplar quiz/lesson/lab del request síncrono.</div>
+        </div>
+      </div>
+      <div class="callout">
+        <div class="t">⚠ Ojo con scale-to-zero en Fase 1</div>
+        Los endpoints síncronos (quiz/lesson/lab/infografía) funcionan bien, pero los jobs con estado en memoria (structure/KB/research/video in-process) se pierden si la instancia se apaga → conviene <strong>adelantar la externalización del estado de jobs a Cloud SQL</strong> (§4.2). Si se posterga, mantener <span class="mono-inline">min-instances=1</span> <strong>solo</strong> mientras el render siga in-process.
+      </div>
+
+      <h3>Riesgos principales</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Riesgo</th><th style="width:90px">Impacto</th><th>Mitigación</th></tr></thead>
+          <tbody>
+            <tr><td>Reescritura de repos PostgREST → SQL introduce regresiones</td><td><span class="badge b-l">Alto</span></td><td>Cobertura de tests por repo antes de migrar; migrar uno a uno tras la interfaz</td></tr>
+            <tr><td>RLS deja de aplicar al salir de Supabase</td><td><span class="badge b-l">Alto</span></td><td>Resolver autorización en app/IAM antes de exponer usuarios</td></tr>
+            <tr><td>Render excede recursos/timeout en Cloud Run Jobs</td><td><span class="badge b-m">Medio</span></td><td><span class="mono-inline">--task-timeout=1800s</span>, CPU=4/Mem=8Gi; medir con videos reales</td></tr>
+            <tr><td>Costo de Veo se dispara con el uso</td><td><span class="badge b-m">Medio</span></td><td>Usar Veo <b>Fast</b>, limitar clips, cuotas/alertas de presupuesto</td></tr>
+            <tr><td>Sin autenticación hoy (CORS <span class="mono-inline">*</span>)</td><td><span class="badge b-l">Alto</span></td><td>Añadir auth + restringir CORS antes de producción</td></tr>
+            <tr><td>Cold starts (scale-to-zero elegido)</td><td><span class="badge b-m">Medio</span></td><td>Imagen ligera; <span class="mono-inline">min=1</span> puntual solo si la latencia molesta</td></tr>
+            <tr><td>Scale-to-zero pierde jobs en memoria / in-process</td><td><span class="badge b-l">Alto en F1</span></td><td>Externalizar estado de jobs a Cloud SQL (§4.2) antes de confiar en <span class="mono-inline">min=0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Deuda técnica a limpiar durante la migración</h3>
+      <ul>
+        <li><strong>Adaptadores de storage duplicados</strong> (uno lo salta <span class="mono-inline">VideoService</span>) → consolidar tras el puerto.</li>
+        <li><strong>Archivos con sufijo <span class="mono-inline">" 2"</span></strong> (p. ej. <span class="mono-inline">informe-arquitectura-mvp 2.md</span>) → residuos de copia; eliminar.</li>
+        <li><strong>Regla <span class="mono-inline">placeholder</span> repetida</strong> para decidir mock↔real → centralizar en un helper de config.</li>
+        <li><strong>Fallbacks in-memory y datos demo horneados</strong> en repos/servicios → retirar para producción.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>Documento generado como companion visual de <span class="mono">docs/arquitectura/migracion-gcp.md</span> · Vocabulario de <span class="mono">CONTEXT.md</span> (Ruta, Módulo, Componente, Asset, Source, KB, Job, Gate) · Precios de lista referenciales, verificar antes de comprometer presupuesto.</p>
+    </footer>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeFs()"></div>
+
+<script>
+/* ============================ THEME ============================ */
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('xe-theme',t)}catch(e){}}
+function toggleTheme(){const c=document.documentElement.getAttribute('data-theme');applyTheme(c==='dark'?'light':'dark')}
+(function(){let t;try{t=localStorage.getItem('xe-theme')}catch(e){}if(t)applyTheme(t)})();
+
+/* ============================ SCROLLSPY ============================ */
+(function(){
+  const links=[...document.querySelectorAll('#toc a')];
+  const map={};links.forEach(a=>map[a.getAttribute('href').slice(1)]=a);
+  const obs=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        links.forEach(l=>l.classList.remove('active'));
+        const a=map[e.target.id];if(a)a.classList.add('active');
+      }
+    });
+  },{rootMargin:'-15% 0px -70% 0px',threshold:0});
+  document.querySelectorAll('section').forEach(s=>obs.observe(s));
+})();
+
+/* ============================ CODE: copy + highlight ============================ */
+(function(){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  document.querySelectorAll('.code pre code').forEach(code=>{
+    const raw=code.textContent;
+    const html=raw.split('\n').map(line=>{
+      let out=esc(line);
+      // trailing/inline comments
+      out=out.replace(/(#.*)$/,'<span class="cm">$1</span>');
+      // flags --xxx
+      out=out.replace(/(^|\s)(--[a-z][a-z0-9-]*)/g,'$1<span class="fl">$2</span>');
+      // leading keyword
+      out=out.replace(/^(\s*)(gcloud|printf|for|do|done|CREATE|EXTENSION)\b/,'$1<span class="kw">$2</span>');
+      return out;
+    }).join('\n');
+    code.innerHTML=html;
+    // copy button
+    const pre=code.parentElement, wrap=pre.parentElement;
+    const btn=document.createElement('button');btn.className='copy';btn.textContent='Copiar';
+    btn.onclick=()=>{navigator.clipboard.writeText(raw).then(()=>{btn.textContent='✓ Copiado';setTimeout(()=>btn.textContent='Copiar',1400)})};
+    wrap.appendChild(btn);
+  });
+})();
+
+/* ============================ FULLSCREEN ============================ */
+let fsEl=null;
+function toggleFs(id){const el=document.getElementById(id);const sc=document.getElementById('scrim');
+  if(el.classList.contains('fs')){closeFs();return}
+  if(fsEl)fsEl.classList.remove('fs');el.classList.add('fs');sc.classList.add('on');fsEl=el;}
+function closeFs(){if(fsEl)fsEl.classList.remove('fs');document.getElementById('scrim').classList.remove('on');fsEl=null;}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFs()});
+
+/* ============================ COUPLING MATRIX ============================ */
+const COUPLING=[
+  {s:'Supabase Postgres — repos factory (kb, sourcing, documents, source_links, approved)',port:'si',mock:'si',level:'medio',ev:'usan query-builder PostgREST, no SQL'},
+  {s:'Supabase Postgres — jobs, learning_path',port:'parcial',mock:'si',level:'medio-alto',ev:'dependencies.py:27,30 instancian la clase Supabase directo'},
+  {s:'Supabase Storage',port:'si',mock:'si',level:'bajo',ev:'⚠ clase duplicada; Video usa su propio adapter (video/service.py:71)'},
+  {s:'OpenRouter (LLM texto)',port:'si',mock:'si',level:'bajo',ev:'instanciado en ≥4 sitios (dependencies.py:57-59, video/service.py:67)'},
+  {s:'OpenAI embeddings',port:'si',mock:'si',level:'bajo',ev:'adapters/embeddings/ vía get_embedder() — ejemplo canónico'},
+  {s:'Vertex Veo / Imagen',port:'parcial',mock:'si',level:'alto',ev:'video/service.py:70-71 los instancia sin DI'},
+  {s:'Google Cloud TTS',port:'parcial',mock:'si',level:'medio-alto',ev:'video/service.py:68 lo instancia sin DI'},
+  {s:'Tavily / Google Search (research)',port:'parcial',mock:'si',level:'bajo',ev:'duck-typing (sin ABC); get_documentation_client() ya intercambia'},
+  {s:'Google Drive (export)',port:'no',mock:'no',level:'alto',ev:'routers/google_drive.py: httpx crudo + URLs googleapis.com (:8,26-27)'},
+  {s:'YouTube Data API',port:'no',mock:'si',level:'medio-alto',ev:'lógica dispersa en ResearchService'},
+  {s:'pgvector / KB',port:'si',mock:'si',level:'bajo',ev:'contenido en similarity_search (RPC match_kb_chunks)'},
+  {s:'OpenAI Images gpt-image-2 (infografía)',port:'no',mock:'no',level:'alto',ev:'infographic/service.py: httpx (:19), create_client (:23), gpt-image-2 (:320), POST api.openai.com (:327)'},
+];
+const LVL_CLASS={'bajo':'lv-bajo','medio':'lv-medio','medio-alto':'lv-medio-alto','alto':'lv-alto'};
+const LVL_LABEL={'bajo':'Bajo','medio':'Medio','medio-alto':'Medio-Alto','alto':'Alto'};
+const YN={si:'<b style="color:var(--ok)">Sí</b>',no:'<b style="color:var(--crit)">No</b>',parcial:'<span style="color:var(--warn)">Parcial</span>'};
+(function(){
+  const tb=document.querySelector('#coupling-table tbody');
+  tb.innerHTML=COUPLING.map(r=>`<tr data-level="${r.level}" data-port="${r.port}">
+    <td>${r.s}</td>
+    <td>${YN[r.port]||r.port}</td>
+    <td>${YN[r.mock]||r.mock}</td>
+    <td><span class="lv ${LVL_CLASS[r.level]}">${LVL_LABEL[r.level]}</span></td>
+    <td style="color:var(--muted);font-size:12.5px" class="mono">${r.ev}</td>
+  </tr>`).join('');
+  document.querySelectorAll('#coupling-filters .dg-btn').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('#coupling-filters .dg-btn').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');const f=b.dataset.f;
+      tb.querySelectorAll('tr').forEach(tr=>{
+        const lv=tr.dataset.level, port=tr.dataset.port;let show=true;
+        if(f==='bajo')show=lv==='bajo';
+        else if(f==='medio')show=(lv==='medio'||lv==='medio-alto');
+        else if(f==='alto')show=lv==='alto';
+        else if(f==='noport')show=(port==='no'||port==='parcial');
+        tr.style.display=show?'':'none';
+      });
+    };
+  });
+})();
+
+/* ============================ ARCHITECTURE GRAPH ============================ */
+const SVGNS='http://www.w3.org/2000/svg';
+/* colors are hardcoded (not var()) because SVG presentation attributes do not resolve CSS custom properties; these tokens are theme-independent. */
+const KIND={
+  request:{c:'#4aa3ff',t:'petición'},
+  data:{c:'#2dd4bf',t:'datos (SQL/GCS)'},
+  ai:{c:'#a78bfa',t:'IA (Vertex/TTS)'},
+  enqueue:{c:'#f5a524',t:'encolado'},
+  secret:{c:'#94a3b8',t:'secretos'},
+  externo:{c:'#64748b',t:'API Google externa'},
+  deploy:{c:'#5b6472',t:'deploy (CI/CD)'},
+};
+const LAYER={cliente:'#38bdf8',run:'#818cf8',data:'#2dd4bf',vertex:'#a78bfa',infra:'#94a3b8',externo:'#64748b'};
+const NODES=[
+  {id:'users', t:['Usuarios','~30'], x:34, y:288, w:118, h:54, layer:'cliente', phase:'all'},
+  {id:'web',   t:['Web · Next.js','Cloud Run · min=0'], x:232, y:150, w:186, h:56, layer:'run', phase:'all'},
+  {id:'api',   t:['API · FastAPI','Cloud Run · min=0'], x:232, y:288, w:186, h:56, layer:'run', phase:'all'},
+  {id:'secret',t:['Secret Manager'], x:232, y:474, w:170, h:46, layer:'infra', phase:'all'},
+  {id:'build', t:['Cloud Build → Artifact Reg.'], x:24, y:474, w:184, h:46, layer:'infra', phase:'all'},
+  {id:'tasks', t:['Cloud Tasks','cola de render'], x:488, y:360, w:170, h:52, layer:'run', phase:'f2'},
+  {id:'worker',t:['Render worker','Cloud Run Job · Remotion'], x:470, y:470, w:212, h:56, layer:'run', phase:'f2'},
+  {id:'vertex',t:['Vertex AI','Gemini · Claude · Veo · Imagen'], x:786, y:118, w:222, h:60, layer:'vertex', phase:'all'},
+  {id:'tts',   t:['Cloud TTS'], x:786, y:196, w:140, h:44, layer:'vertex', phase:'all'},
+  {id:'sql',   t:['Cloud SQL','PostgreSQL + pgvector'], x:786, y:288, w:210, h:56, layer:'data', phase:'all'},
+  {id:'gcs',   t:['Cloud Storage (GCS)'], x:786, y:364, w:210, h:48, layer:'data', phase:'all'},
+  {id:'gapis', t:['Google Drive · YouTube'], x:786, y:474, w:210, h:48, layer:'externo', phase:'all'},
+];
+const EDGES=[
+  {f:'users',t:'web',k:'request'},
+  {f:'web',t:'api',k:'request'},
+  {f:'api',t:'sql',k:'data'},
+  {f:'api',t:'gcs',k:'data'},
+  {f:'api',t:'vertex',k:'ai'},
+  {f:'api',t:'gapis',k:'externo'},
+  {f:'api',t:'tasks',k:'enqueue',phase:'f2'},
+  {f:'api',t:'secret',k:'secret',dash:true,noflow:true},
+  {f:'web',t:'secret',k:'secret',dash:true,noflow:true},
+  {f:'tasks',t:'worker',k:'enqueue',phase:'f2'},
+  {f:'worker',t:'sql',k:'data',phase:'f2'},
+  {f:'worker',t:'gcs',k:'data',phase:'f2'},
+  {f:'worker',t:'vertex',k:'ai',phase:'f2'},
+  {f:'worker',t:'tts',k:'ai',phase:'f2'},
+  {f:'worker',t:'secret',k:'secret',dash:true,noflow:true,phase:'f2'},
+  {f:'build',t:'api',k:'deploy',dash:true,noflow:true},
+  {f:'build',t:'worker',k:'deploy',dash:true,noflow:true,phase:'f2'},
+];
+const nodeById={};NODES.forEach(n=>nodeById[n.id]=n);
+
+function el(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function anchors(s,t){
+  const sc={x:s.x+s.w/2,y:s.y+s.h/2},tc={x:t.x+t.w/2,y:t.y+t.h/2};
+  const dx=tc.x-sc.x,dy=tc.y-sc.y;let sp,tp;
+  if(Math.abs(dx)>=Math.abs(dy)){
+    sp={x:dx>=0?s.x+s.w:s.x,y:sc.y};tp={x:dx>=0?t.x:t.x+t.w,y:tc.y};
+  }else{
+    sp={x:sc.x,y:dy>=0?s.y+s.h:s.y};tp={x:tc.x,y:dy>=0?t.y:t.y+t.h};
+  }
+  return{sp,tp};
+}
+function pathD(sp,tp){
+  const dx=tp.x-sp.x,dy=tp.y-sp.y,k=0.45;let c1,c2;
+  if(Math.abs(dx)>=Math.abs(dy)){c1={x:sp.x+dx*k,y:sp.y};c2={x:tp.x-dx*k,y:tp.y};}
+  else{c1={x:sp.x,y:sp.y+dy*k};c2={x:tp.x,y:tp.y-dy*k};}
+  return`M ${sp.x} ${sp.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${tp.x} ${tp.y}`;
+}
+function buildArch(){
+  const svg=document.getElementById('arch-svg');svg.innerHTML='';
+  // defs: arrow markers per kind
+  const defs=el('defs',{});
+  Object.keys(KIND).forEach(k=>{
+    const m=el('marker',{id:'arw-'+k,viewBox:'0 0 10 10',refX:'8',refY:'5',markerWidth:'7',markerHeight:'7',orient:'auto-start-reverse'});
+    m.appendChild(el('path',{d:'M0 0 L10 5 L0 10 z',fill:KIND[k].c}));
+    defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+  const gEdges=el('g',{});svg.appendChild(gEdges);
+  const gFlow=el('g',{});svg.appendChild(gFlow);
+  const gNodes=el('g',{});svg.appendChild(gNodes);
+
+  EDGES.forEach((e,i)=>{
+    const s=nodeById[e.f],t=nodeById[e.t];const{sp,tp}=anchors(s,t);const d=pathD(sp,tp);
+    const pid='ep'+i;
+    const p=el('path',{d:d,id:pid,class:'edge'+(e.dash?' dash':''),stroke:KIND[e.k].c,'marker-end':'url(#arw-'+e.k+')'});
+    p.dataset.f=e.f;p.dataset.t=e.t;p.dataset.phase=e.phase||'all';
+    gEdges.appendChild(p);
+    if(!e.noflow){
+      const fl=el('path',{d:d,class:'flow-line',stroke:KIND[e.k].c});
+      fl.dataset.f=e.f;fl.dataset.t=e.t;fl.dataset.phase=e.phase||'all';fl.style.animationDelay=(i*0.13)+'s';
+      gFlow.appendChild(fl);
+    }
+  });
+
+  NODES.forEach(n=>{
+    const g=el('g',{class:'node'});g.dataset.id=n.id;g.dataset.phase=n.phase;
+    g.appendChild(el('rect',{class:'body',x:n.x,y:n.y,width:n.w,height:n.h,rx:11}));
+    g.appendChild(el('rect',{x:n.x,y:n.y,width:4,height:n.h,rx:2,fill:LAYER[n.layer]}));
+    const cx=n.x+n.w/2;
+    if(n.t.length===1){
+      const tx=el('text',{x:cx,y:n.y+n.h/2+4,'text-anchor':'middle'});tx.textContent=n.t[0];g.appendChild(tx);
+    }else{
+      const tx=el('text',{x:cx,y:n.y+n.h/2-3,'text-anchor':'middle'});tx.textContent=n.t[0];g.appendChild(tx);
+      const su=el('text',{x:cx,y:n.y+n.h/2+13,'text-anchor':'middle',class:'sub'});su.textContent=n.t[1];g.appendChild(su);
+    }
+    g.addEventListener('mouseenter',()=>hoverNode(n.id,true));
+    g.addEventListener('mouseleave',()=>hoverNode(n.id,false));
+    gNodes.appendChild(g);
+  });
+  // legend
+  const lg=document.getElementById('arch-legend');lg.innerHTML='';
+  Object.keys(KIND).forEach(k=>{
+    lg.innerHTML+=`<span class="lg"><span class="sw${['secret','deploy'].includes(k)?' dash':''}" style="border-color:${KIND[k].c}"></span>${KIND[k].t}</span>`;
+  });
+  Object.keys(LAYER).forEach(l=>{
+    lg.innerHTML+=`<span class="lg"><span class="box" style="background:${LAYER[l]}"></span>${l}</span>`;
+  });
+}
+function hoverNode(id,on){
+  const svg=document.getElementById('arch-svg');
+  const edges=[...svg.querySelectorAll('.edge, .flow-line')];
+  const nodes=[...svg.querySelectorAll('.node')];
+  if(!on){edges.forEach(e=>e.classList.remove('hot','dimmed'));nodes.forEach(n=>n.classList.remove('dimmed'));applyPhase();return}
+  const connected=new Set([id]);
+  edges.forEach(e=>{if(e.dataset.f===id||e.dataset.t===id){connected.add(e.dataset.f);connected.add(e.dataset.t);}});
+  edges.forEach(e=>{
+    if(e.dataset.f===id||e.dataset.t===id)e.classList.add('hot'),e.classList.remove('dimmed');
+    else e.classList.add('dimmed'),e.classList.remove('hot');
+  });
+  nodes.forEach(n=>{n.classList.toggle('dimmed',!connected.has(n.dataset.id))});
+}
+let currentPhase='all';
+function setPhase(p,btn){
+  currentPhase=p;
+  document.querySelectorAll('#dg-arch .dg-btn[data-phase]').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  applyPhase();
+  const note=document.getElementById('arch-note');
+  if(p==='f1')note.innerHTML='<b>Fase 1:</b> el render y TTS/Veo corren <em>in-process</em> en la API — Cloud Tasks y el worker todavía no existen (atenuados).';
+  else if(p==='f2')note.innerHTML='<b>Fase 2:</b> worker de render separado activo (Cloud Tasks + Cloud Run Job); el estado de jobs vive en Cloud SQL.';
+  else note.innerHTML='Vista completa. En <b>Fase 1</b> el render corre in-process; en <b>Fase 2</b> se activa el worker separado.';
+}
+function applyPhase(){
+  const svg=document.getElementById('arch-svg');
+  const dimF2=currentPhase==='f1';
+  svg.querySelectorAll('.node').forEach(n=>{
+    n.classList.toggle('dimmed', dimF2 && n.dataset.phase==='f2');
+  });
+  svg.querySelectorAll('.edge, .flow-line').forEach(e=>{
+    e.classList.toggle('dimmed', dimF2 && e.dataset.phase==='f2');
+  });
+}
+
+/* ============================ SEQUENCE DIAGRAM ============================ */
+const SEQ_ACTORS=[
+  {id:'api',t:'API'},{id:'tasks',t:'Cloud Tasks'},{id:'job',t:'Render Job'},
+  {id:'vertex',t:'Vertex / Veo'},{id:'gcs',t:'GCS'},{id:'sql',t:'Cloud SQL'},
+];
+const SEQ_STEPS=[
+  {f:'api',t:'sql',msg:'crea Job (estado=queued)',k:'data'},
+  {f:'api',t:'tasks',msg:'encola render task',k:'enqueue'},
+  {f:'api',t:'api',msg:'responde 202 al cliente',k:'return',self:true},
+  {f:'tasks',t:'job',msg:'dispara ejecución',k:'enqueue'},
+  {f:'job',t:'sql',msg:'marca running',k:'data'},
+  {f:'job',t:'vertex',msg:'genera clips / imágenes / TTS',k:'ai'},
+  {f:'vertex',t:'job',msg:'assets generados',k:'return'},
+  {f:'job',t:'job',msg:'Remotion render (Chromium + ffmpeg)',k:'ai',self:true},
+  {f:'job',t:'gcs',msg:'sube MP4 + visuales',k:'data'},
+  {f:'job',t:'sql',msg:'marca done + URL firmada',k:'data'},
+  {f:'api',t:'sql',msg:'polling de estado (cliente)',k:'data'},
+];
+const SEQ_COLOR={data:'#2dd4bf',enqueue:'#f5a524',ai:'#a78bfa',return:'#2dd4bf',request:'#4aa3ff'};
+let seqTimers=[];
+function buildSeq(){
+  const svg=document.getElementById('seq-svg');svg.innerHTML='';
+  const W=1040, top=54, colGap=W/(SEQ_ACTORS.length), x0=colGap/2;
+  const X={};SEQ_ACTORS.forEach((a,i)=>X[a.id]=x0+i*colGap);
+  const startY=96, stepY=38, bottom=startY+SEQ_STEPS.length*stepY+20;
+  // defs arrows
+  const defs=el('defs',{});
+  ['data','enqueue','ai','return','request'].forEach(k=>{
+    const m=el('marker',{id:'sq-'+k,viewBox:'0 0 10 10',refX:'8',refY:'5',markerWidth:'7',markerHeight:'7',orient:'auto'});
+    m.appendChild(el('path',{d:'M0 0 L10 5 L0 10 z',fill:SEQ_COLOR[k]}));defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+  // lifelines + actor boxes
+  SEQ_ACTORS.forEach(a=>{
+    const x=X[a.id];
+    svg.appendChild(el('line',{class:'seq-life',x1:x,y1:top+26,x2:x,y2:bottom}));
+    const g=el('g',{class:'seq-actor'});
+    const bw=Math.min(colGap-16,140);
+    g.appendChild(el('rect',{x:x-bw/2,y:top,width:bw,height:30,rx:8}));
+    const tx=el('text',{x:x,y:top+19,'text-anchor':'middle'});tx.textContent=a.t;g.appendChild(tx);
+    svg.appendChild(g);
+  });
+  // messages
+  SEQ_STEPS.forEach((s,i)=>{
+    const y=startY+i*stepY;const col=SEQ_COLOR[s.k];const dash=(s.k==='enqueue'||s.k==='return');
+    const g=el('g',{});g.dataset.i=i;
+    if(s.self){
+      const x=X[s.f];const w=46;
+      const p=el('path',{class:'seq-msg',d:`M ${x} ${y-8} h ${w} v 16 h -${w}`,stroke:col,fill:'none','marker-end':'url(#sq-'+s.k+')'});
+      if(dash)p.setAttribute('stroke-dasharray','5 4');
+      g.appendChild(p);
+      const tx=el('text',{class:'seq-lbl',x:x+w+8,y:y+3});tx.textContent=s.msg;g.appendChild(tx);
+    }else{
+      const xf=X[s.f],xt=X[s.t];const dir=xt>xf?1:-1;
+      const p=el('path',{class:'seq-msg',d:`M ${xf+dir*4} ${y} L ${xt-dir*8} ${y}`,stroke:col,'marker-end':'url(#sq-'+s.k+')'});
+      if(dash)p.setAttribute('stroke-dasharray','5 4');
+      g.appendChild(p);
+      const midx=(xf+xt)/2;
+      const tx=el('text',{class:'seq-lbl',x:midx,y:y-7,'text-anchor':'middle'});tx.textContent=s.msg;g.appendChild(tx);
+    }
+    // step number chip
+    const nx=(s.self?X[s.f]:Math.min(X[s.f],X[s.t]))-16;
+    const chip=el('g',{class:'seq-msg'});
+    chip.appendChild(el('circle',{cx:s.self?X[s.f]-16:nx,cy:y,r:8,fill:col}));
+    const nt=el('text',{class:'seq-num',x:s.self?X[s.f]-16:nx,y:y+3.5,'text-anchor':'middle'});nt.textContent=(i+1);chip.appendChild(nt);
+    g.appendChild(chip);
+    svg.appendChild(g);
+  });
+  svg.setAttribute('viewBox',`0 0 ${W} ${bottom+16}`);
+}
+function clearSeqTimers(){seqTimers.forEach(t=>clearTimeout(t));seqTimers=[];}
+function setSeqVisible(vis){
+  document.querySelectorAll('#seq-svg [data-i] .seq-msg, #seq-svg [data-i] .seq-lbl').forEach(e=>e.classList.toggle('show',vis));
+}
+function playSeq(){
+  clearSeqTimers();
+  const groups=[...document.querySelectorAll('#seq-svg g[data-i]')];
+  groups.forEach(g=>g.querySelectorAll('.seq-msg,.seq-lbl').forEach(e=>e.classList.remove('show')));
+  const btn=document.getElementById('seq-play');btn.textContent='● Reproduciendo';btn.classList.add('on');
+  groups.forEach((g,i)=>{
+    seqTimers.push(setTimeout(()=>{
+      g.querySelectorAll('.seq-msg,.seq-lbl').forEach(e=>e.classList.add('show'));
+      if(i===groups.length-1){btn.textContent='▶ Reproducir';}
+    }, 480*i+120));
+  });
+}
+function showAllSeq(){clearSeqTimers();setSeqVisible(true);document.getElementById('seq-play').textContent='▶ Reproducir';}
+
+/* ============================ INIT ============================ */
+buildArch();buildSeq();
+// auto-play sequence when it first scrolls into view
+(function(){
+  const sec=document.getElementById('dg-seq');let played=false;
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting&&!played){played=true;playSeq();}})},{threshold:.35});
+  io.observe(sec);
+})();
+</script>
+</body>
+</html>
