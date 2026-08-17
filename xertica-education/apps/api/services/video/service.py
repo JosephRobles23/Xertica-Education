@@ -1631,10 +1631,11 @@ class VideoService(VideoServiceInterface):
     ) -> UUID:
         if self._supabase:
             try:
+                resolved_module_id = self._resolve_module_row_id(route_id, module_id)
                 res = (
                     self._supabase.table("components")
                     .select("*")
-                    .eq("modulo_id", str(module_id))
+                    .eq("modulo_id", resolved_module_id)
                     .eq("tipo", component_kind)
                     .execute()
                 )

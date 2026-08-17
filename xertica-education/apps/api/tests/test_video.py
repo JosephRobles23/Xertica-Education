@@ -14,6 +14,7 @@ from models.domain.kb import Citation, GroundedChunk
 from services.video.service import VideoService
 from services.video.executor import RenderExecutor
 from services.video.transformer import transform_storyboard_to_edit_decisions
+from repositories.spine.materializer import SpineMaterializer
 
 
 class _FakeTableQuery:
@@ -616,6 +617,43 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(status_data["job_id"], job_id)
         self.assertIn("status", status_data)
         self.assertIn("progress", status_data)
+
+    def test_get_video_asset_resolves_materialized_module_id_from_render_target(self):
+        """GET /videos/assets finds a persisted Asset when the route uses a module slug."""
+        route_id = "01"
+        module_id = "r1m1"
+        component_id = SpineMaterializer.component_uuid(route_id, module_id, "video")
+        materialized_module_id = SpineMaterializer.module_uuid(route_id, module_id)
+        service = VideoService()
+        service._supabase = _FakeSupabase(
+            {
+                "components": [
+                    {
+                        "id": str(component_id),
+                        "modulo_id": str(materialized_module_id),
+                        "tipo": "video",
+                    }
+                ],
+                "assets": [
+                    {
+                        "id": "asset-1",
+                        "componente_id": str(component_id),
+                        "tipo": "video",
+                        "estado": "generado",
+                        "storage_path": "https://example.com/videos/materialized.mp4",
+                    }
+                ],
+            }
+        )
+        app.dependency_overrides[get_video_service] = lambda: service
+
+        response = self.client.get(
+            "/videos/assets",
+            params={"route_id": route_id, "module_id": module_id, "component_kind": "video"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["storage_path"], "https://example.com/videos/materialized.mp4")
 
     def test_generate_video_from_render_target_persists_retrievable_video_asset(self):
         """POST /videos/generate with route/module identity links the completed MP4 to the video Asset."""
