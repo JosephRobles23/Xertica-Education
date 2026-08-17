@@ -1,0 +1,88 @@
+name: deploy-staging
+
+# Cada push a `staging` despliega SOLO lo que cambió:
+#   - apps/api            -> Cloud Run  (job deploy-api)
+#   - render / composer   -> Modal      (job deploy-render)
+# La web (apps/web) la despliega Vercel por su integración Git nativa, NO aquí.
+#
+# El monorepo vive anidado en `xertica-education/`, por eso todas las rutas
+# llevan ese prefijo. Este archivo va en la RAÍZ de git (.github/workflows/).
+
+on:
+  push:
+    branches: [staging]
+
+concurrency:
+  group: deploy-staging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Detecta qué carpeta cambió (path filters) ──────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.f.outputs.api }}
+      render: ${{ steps.f.outputs.render }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: f
+        with:
+          filters: |
+            api:
+              - 'xertica-education/apps/api/**'
+            render:
+              - 'xertica-education/openmontage/remotion-composer/**'
+              - 'xertica-education/modal_render.py'
+              - 'xertica-education/apps/api/services/video/**'
+
+  # ── API -> Google Cloud Run (auth keyless con WIF) ─────────────────────
+  deploy-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # necesario para Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API a Cloud Run
+        run: |
+          gcloud run deploy xertica-api-staging \
+            --source xertica-education/apps/api \
+            --region southamerica-west1 \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --set-env-vars "^;^MODAL_RENDER_APP=xertica-render-staging;SUPABASE_URL=${{ secrets.SUPABASE_URL }};SUPABASE_KEY=${{ secrets.SUPABASE_KEY }};MODAL_TOKEN_ID=${{ secrets.MODAL_TOKEN_ID }};MODAL_TOKEN_SECRET=${{ secrets.MODAL_TOKEN_SECRET }};OPENROUTER_KEY=${{ secrets.OPENROUTER_KEY }}"
+          # ^;^ cambia el separador a ';' para que los valores puedan contener comas.
+          # Añade aquí más runtime env vars del API si las necesitas.
+
+  # ── Render -> Modal (deploy de la función + rebuild de imagen si cambió) ─
+  deploy-render:
+    needs: changes
+    if: needs.changes.outputs.render == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install modal
+      - name: Deploy función de render a Modal
+        working-directory: xertica-education
+        run: modal deploy modal_render.py
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          MODAL_RENDER_APP: xertica-render-staging
+          MODAL_RENDER_CPU: '4' # súbelo a '8' cuando quieras renders más rápidos

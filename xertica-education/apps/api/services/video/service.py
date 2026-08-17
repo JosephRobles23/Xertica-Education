@@ -45,6 +45,7 @@ from models.dto.responses import VideoJobResponse, VideoJobResult
 from models.common import JobStatus
 from models.dto.render_plan import RenderPlan, RenderStage
 from services.video.executor import RenderExecutor
+from repositories.spine.materializer import SpineMaterializer
 # SCRIPTWRITER_SYSTEM_PROMPT is the single most important piece of the
 # pipeline. It tells the LLM how to structure an educational video storyboard
 # so that it's genuinely pedagogical, not just a wall of text with generic
@@ -149,20 +150,55 @@ class VideoService(VideoServiceInterface):
         else:
             self._fallback_jobs[job_id] = job_data
 
-        # Storyboard generation can call the LLM. Keep it inside the job so every
-        # entry point acknowledges the render immediately.
-        task = asyncio.create_task(
-            self._prepare_and_run_render_job(
+        # Dispatch the render. En cloud (Opción B) delegamos el trabajo pesado a
+        # Modal con ``.spawn()`` (fire-and-forget): un contenedor serverless corre
+        # todo el pipeline y actualiza el job en Supabase. En dev local, sin
+        # ``modal_render_app`` configurado, corremos el pipeline in-process como
+        # siempre. Ambos caminos devuelven el job_id al instante.
+        if settings.modal_render_app:
+            self._spawn_modal_render(
                 job_id=job_id,
                 component_id=component_id,
                 render_target=render_target,
                 custom_storyboard=custom_storyboard,
             )
-        )
-        if task is not None:
+        else:
+            task = asyncio.create_task(
+                self._prepare_and_run_render_job(
+                    job_id=job_id,
+                    component_id=component_id,
+                    render_target=render_target,
+                    custom_storyboard=custom_storyboard,
+                )
+            )
             self._render_tasks.add(task)
             task.add_done_callback(self._render_tasks.discard)
         return job_id
+
+    def _spawn_modal_render(
+        self,
+        job_id: UUID,
+        component_id: Optional[UUID],
+        render_target: Optional[dict],
+        custom_storyboard: Optional[StoryboardRequest],
+    ) -> None:
+        """Delega el render pesado a una función Modal (Opción B).
+
+        Fire-and-forget equivalente al ``asyncio.create_task`` local: Modal
+        levanta un contenedor con N cores, corre ``_prepare_and_run_render_job``
+        y escribe el progreso/resultado en Supabase. El API no espera a que
+        termine — el cliente hace polling a ``GET /jobs/{id}`` como siempre.
+        """
+        import modal  # lazy: solo se necesita cuando hay deploy con Modal
+        render_fn = modal.Function.from_name(settings.modal_render_app, "render_video")
+        render_fn.spawn(
+            job_id=str(job_id),
+            component_id=str(component_id) if component_id else None,
+            render_target=render_target,
+            custom_storyboard=(
+                custom_storyboard.model_dump() if custom_storyboard else None
+            ),
+        )
 
     async def _prepare_and_run_render_job(
         self,
@@ -943,7 +979,8 @@ class VideoService(VideoServiceInterface):
             print(f"[storyboard] learning_path query error: {e}")
 
         try:
-            mod = self._supabase.table("modules").select("*").eq("id", str(module_id)).execute()
+            module_row_id = self._resolve_module_row_id(route_id, module_id)
+            mod = self._supabase.table("modules").select("*").eq("id", module_row_id).execute()
             if mod.data:
                 row = mod.data[0]
                 ctx["module_title"] = row.get("titulo")
@@ -997,6 +1034,18 @@ class VideoService(VideoServiceInterface):
                         ctx[k] = v
 
         return ctx
+
+    def _resolve_module_row_id(self, route_id: str, module_id: str) -> str:
+        """Resolve the module slug to the UUID that keys the `modules` row.
+
+        The frontend sends the module slug (e.g. "r1m1"), but `modules.id` is a
+        UUID column materialized deterministically by SpineMaterializer. Passing
+        the raw slug fails with `invalid input syntax for type uuid` (22P02). If
+        module_id is already a UUID, use it as-is."""
+        try:
+            return str(UUID(str(module_id)))
+        except ValueError:
+            return str(SpineMaterializer.module_uuid(route_id, module_id))
 
     def _resolve_learning_path_id(self, route_id: str) -> UUID:
         try:
