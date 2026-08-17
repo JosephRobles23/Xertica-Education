@@ -1,6 +1,6 @@
 name: deploy-staging
 
-# Cada push a `staging` despliega SOLO lo que cambió:
+# Cada push a `main` despliega SOLO lo que cambió:
 #   - apps/api            -> Cloud Run  (job deploy-api)
 #   - render / composer   -> Modal      (job deploy-render)
 # La web (apps/web) la despliega Vercel por su integración Git nativa, NO aquí.
@@ -10,7 +10,7 @@ name: deploy-staging
 
 on:
   push:
-    branches: [staging]
+    branches: [main]
 
 concurrency:
   group: deploy-staging-${{ github.ref }}
