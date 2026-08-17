@@ -60,9 +60,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* TOPBAR */}
-      <header className="sticky top-0 z-20 flex h-[62px] flex-none items-center gap-4 border-b-[1.5px] bg-card px-6">
+      <header className="sticky top-0 z-20 flex h-[76px] flex-none items-center gap-4 border-b border-border bg-card/90 px-6 backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-2.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 rounded-lg">
-          <span className="flex size-[30px] items-center justify-center rounded-lg bg-gradient-to-br from-primary to-fuchsia-500 font-display text-[17px] font-bold text-white shadow-[0_3px_10px_rgba(124,58,237,.35)]">
+          <span className="flex size-[30px] items-center justify-center rounded-[9px] bg-ink font-display text-[17px] font-bold text-lime">
             X
           </span>
           <span className="font-display text-lg font-semibold tracking-tight text-ink">
@@ -88,7 +88,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <Fragment key={`${c.label}-${i}`}>
               {i > 0 && <ChevronRight className="size-3 text-input" />}
               {c.to ? (
-                <Link href={c.to} className="text-muted-foreground transition-colors hover:text-ink">
+              <Link href={c.to} className="text-muted-foreground transition-colors hover:text-ink">
                   {c.label}
                 </Link>
               ) : (
@@ -101,7 +101,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="ml-auto flex items-center gap-4">
-          <span className="font-mono text-[11px] text-muted-foreground">Impulso 2026</span>
+          <span className="font-mono text-[11px] text-muted-foreground">Estudio · 2026</span>
           <div className="flex size-8 items-center justify-center rounded-full bg-accent font-mono text-xs font-semibold text-ink">
             MR
           </div>
@@ -119,7 +119,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
         >
           <div className="px-2.5 pt-1.5 pb-3 font-mono text-[10px] uppercase tracking-[0.12em] text-sidebar-muted">
-            Estudio
+            Espacio de trabajo
           </div>
           {NAV.map((n) => {
             const isRutas = n.label === 'Rutas'
@@ -148,7 +148,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
 
         {/* CONTENT */}
-        <main className="min-w-0 flex-1 overflow-x-hidden px-11 pt-8 pb-20">
+        <main className="min-w-0 flex-1 overflow-x-hidden px-8 pt-10 pb-24 lg:px-11">
           <div key={pathname} className="animate-in fade-in slide-in-from-bottom-1 duration-300">
             {children}
           </div>

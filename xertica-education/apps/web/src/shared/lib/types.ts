@@ -38,6 +38,8 @@ export type GroundingStatus = 'kb-grounded' | 'module-grounded'
 export interface LessonContent {
   sections: readonly LessonSection[]
   terms: readonly { term: string; def: string }[]
+  /** Markdown enriquecido opcional; se deriva desde sections cuando falta. */
+  markdown?: string
   pdfUrl?: string
   txtUrl?: string
   groundingStatus?: GroundingStatus

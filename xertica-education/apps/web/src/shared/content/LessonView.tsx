@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { BookOpen, Check, Download, Loader2, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { BookOpen, Check, Download, ExternalLink, Loader2, MoreHorizontal, Sparkles, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import type { LessonContent } from '@/shared/lib/types'
 import { api } from '@/shared/lib/api'
@@ -11,25 +13,33 @@ import { Button } from '@/shared/ui/button'
 import { GroundingBadge } from './GroundingBadge'
 import { Input } from '@/shared/ui/input'
 import { Textarea } from '@/shared/ui/textarea'
+import { getLessonMarkdown } from './lessonMarkdown'
 
-const renderFormattedText = (text: string) => {
-  if (!text) return null
-  // Unify *** and ** to **
-  const unified = text.replace(/\*\*\*/g, '**')
-  const parts = unified.split('**')
-  return parts.map((part, index) => {
-    if (index % 2 === 1) {
-      return (
-        <strong key={index} className="font-semibold text-ink">
-          {part}
-        </strong>
-      )
+const markdownComponents: Components = {
+  h2: ({ children, ...props }) => <h2 className="lesson-heading" id={slugify(String(children))} {...props}>{children}</h2>,
+  h3: ({ children, ...props }) => <h3 className="lesson-subheading" id={String(children).toLowerCase().includes('glosario') ? 'lesson-glossary' : undefined} {...props}>{children}</h3>,
+  p: ({ children, ...props }) => <p className="lesson-paragraph" {...props}>{children}</p>,
+  ul: ({ children, ...props }) => <ul className="lesson-list" {...props}>{children}</ul>,
+  ol: ({ children, ...props }) => <ol className="lesson-list lesson-list-ordered" {...props}>{children}</ol>,
+  blockquote: ({ children, ...props }) => <blockquote className="lesson-callout lesson-callout-concept" {...props}>{children}</blockquote>,
+  a: ({ children, ...props }) => <a target="_blank" rel="noreferrer" {...props}>{children}</a>,
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children, ...props }) => {
+    const language = /language-([\w-]+)/.exec(className ?? '')?.[1]
+    const source = String(children).replace(/\n$/, '')
+
+    if (language === 'concept-map') return <ConceptMap source={source} />
+    if (language === 'flow') return <FlowDiagram source={source} />
+
+    if (language) {
+      return <pre className="lesson-code"><code className={className} {...props}>{children}</code></pre>
     }
-    return part
-  })
+
+    return <code className={cn('lesson-inline-code', className)} {...props}>{children}</code>
+  },
 }
 
-/** Lesson: secciones de texto + glosario de términos clave + descarga de fichas. */
+/** Lesson: documento editorial Markdown con visuales didácticos y acciones discretas. */
 export function LessonView({
   lesson,
   className,
@@ -52,34 +62,25 @@ export function LessonView({
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<LessonContent>(() => cloneLesson(lesson))
   const { fetchRoutes } = useStore()
-
-  const hasLesson = lesson && lesson.sections && lesson.sections.length > 0
+  const markdown = useMemo(() => getLessonMarkdown(lesson), [lesson])
+  const hasLesson = lesson.sections.length > 0 || Boolean(lesson.markdown?.trim())
 
   useEffect(() => {
-    if (!editing) return
-    setDraft(cloneLesson(lesson))
+    if (editing) setDraft(cloneLesson(lesson))
   }, [editing, lesson])
 
   const handleGenerate = async () => {
     if (!routeId || !moduleId) return
     setGenerating(true)
-    const toastLabel = hasLesson ? 'Regenerando Lección con tu feedback…' : 'Creando Lección por primera vez…'
-    const toastId = toast.loading(toastLabel, {
-      description: 'Generando el contenido detallado y glosario. Esto puede tardar unos segundos.',
+    const toastId = toast.loading(hasLesson ? 'Regenerando Lección…' : 'Creando Lección…', {
+      description: 'Generando contenido estructurado y visual.',
     })
     try {
-      await api.request(`/learning-paths/${routeId}/modules/${moduleId}/lesson/regenerate`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
+      await api.request(`/learning-paths/${routeId}/modules/${moduleId}/lesson/regenerate`, { method: 'POST', body: JSON.stringify({}) })
       await fetchRoutes()
       toast.success('Lección generada con éxito', { id: toastId })
-    } catch (e) {
-      console.error(e)
-      toast.error('Error al generar la Lección', {
-        id: toastId,
-        description: e instanceof Error ? e.message : 'Error desconocido',
-      })
+    } catch (error) {
+      toast.error('Error al generar la Lección', { id: toastId, description: error instanceof Error ? error.message : 'Error desconocido' })
     } finally {
       setGenerating(false)
     }
@@ -87,23 +88,21 @@ export function LessonView({
 
   const triggerDownload = async (url: string, filename: string, type: string) => {
     setDownloading(type)
-    const toastId = toast.loading(`Preparando descarga de ${type.toUpperCase()}...`)
+    const toastId = toast.loading(`Preparando descarga de ${type.toUpperCase()}…`)
     try {
       const response = await fetch(url)
-      if (!response.ok) throw new Error('Network response was not ok')
-      const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
+      if (!response.ok) throw new Error('No se pudo descargar el archivo')
+      const blobUrl = window.URL.createObjectURL(await response.blob())
       const link = document.createElement('a')
       link.href = blobUrl
       link.download = filename
       document.body.appendChild(link)
       link.click()
-      document.body.removeChild(link)
+      link.remove()
       window.URL.revokeObjectURL(blobUrl)
       toast.success(`${type.toUpperCase()} descargado con éxito`, { id: toastId })
-    } catch (e) {
-      console.error(e)
-      toast.error(`Error al descargar ${type.toUpperCase()}. Abriendo en nueva pestaña...`, { id: toastId })
+    } catch (error) {
+      toast.error(`Error al descargar ${type.toUpperCase()}`, { id: toastId })
       window.open(url, '_blank')
     } finally {
       setDownloading(null)
@@ -112,246 +111,77 @@ export function LessonView({
 
   if (!hasLesson) {
     return (
-      <div className={cn('flex flex-col items-center justify-center p-8 border-[1.5px] border-dashed border-input rounded-xl bg-card text-center gap-4', className)}>
-        <div className="max-w-md">
-          <h4 className="font-display text-[15px] font-medium text-ink mb-1">Este módulo no tiene una Lección generada</h4>
-          <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-            Genera una lección didáctica estructurada y un glosario de términos clave basados en el tema del módulo y la base de conocimientos.
-          </p>
-        </div>
-        <Button onClick={handleGenerate} disabled={generating} size="sm">
-          {generating ? (
-            <>
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Generando...
-            </>
-          ) : (
-            <>
-              <Sparkles /> Generar Lección
-            </>
-          )}
-        </Button>
+      <div className={cn('flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-input bg-card p-10 text-center', className)}>
+        <div className="max-w-md"><h4 className="font-display text-base font-semibold text-ink">Este módulo no tiene una Lección generada</h4><p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">Genera una lección didáctica estructurada y visual basada en el tema del módulo y la base de conocimiento.</p></div>
+        <Button onClick={handleGenerate} disabled={generating} size="sm">{generating ? <><Loader2 className="size-3.5 animate-spin" /> Generando…</> : <><Sparkles className="size-3.5" /> Generar Lección</>}</Button>
       </div>
     )
   }
 
-  if (editing) {
-    return (
-      <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
-        <div className="flex flex-col gap-4 md:col-span-2">
-          {draft.sections.map((section, index) => (
-            <div key={`${section.heading}-${index}`} className="rounded-xl border-[1.5px] bg-card p-4.5">
-              <div className="mb-3 flex items-center gap-2">
-                <BookOpen className="size-3.5 text-primary" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Sección {index + 1}
-                </span>
-              </div>
-              <div className="space-y-3">
-                <Input
-                  value={section.heading}
-                  onChange={(event) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      sections: prev.sections.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, heading: event.target.value } : item,
-                      ),
-                    }))
-                  }
-                  placeholder="Título de la sección"
-                />
-                <Textarea
-                  rows={8}
-                  value={section.body}
-                  onChange={(event) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      sections: prev.sections.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, body: event.target.value } : item,
-                      ),
-                    }))
-                  }
-                  placeholder="Texto de la sección"
-                  className="resize-y"
-                />
-              </div>
-            </div>
-          ))}
+  if (editing) return <LessonEditor draft={draft} setDraft={setDraft} saving={saving} setSaving={setSaving} onSave={onSave} onCancelEdit={onCancelEdit} className={className} />
 
-          {draft.terms.length > 0 && (
-            <div>
-              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                Términos clave
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {draft.terms.map((term, index) => (
-                  <div key={`${term.term}-${index}`} className="rounded-xl border-[1.5px] bg-card p-4">
-                    <div className="space-y-3">
-                      <Input
-                        value={term.term}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            terms: prev.terms.map((item, itemIndex) =>
-                              itemIndex === index ? { ...item, term: event.target.value } : item,
-                            ),
-                          }))
-                        }
-                        placeholder="Término"
-                      />
-                      <Textarea
-                        rows={4}
-                        value={term.def}
-                        onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            terms: prev.terms.map((item, itemIndex) =>
-                              itemIndex === index ? { ...item, def: event.target.value } : item,
-                            ),
-                          }))
-                        }
-                        placeholder="Definición"
-                        className="resize-y"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <div className="rounded-xl border-[1.5px] border-accent bg-primary/6 p-4.5 shadow-(--shadow-soft)">
-            <div className="mb-2 text-[13px] font-semibold text-ink">Edición manual</div>
-            <p className="text-[11.5px] leading-snug text-muted-foreground">
-              Ajusta el texto directamente y guarda los cambios cuando quede listo para revisión humana.
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <Button
-                size="sm"
-                onClick={async () => {
-                  if (!onSave) return
-                  setSaving(true)
-                  try {
-                    await onSave(draft)
-                  } finally {
-                    setSaving(false)
-                  }
-                }}
-                disabled={saving}
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-1.5 size-3.5 animate-spin" /> Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Check /> Guardar cambios
-                  </>
-                )}
-              </Button>
-              <Button size="sm" variant="outline" onClick={onCancelEdit} disabled={saving}>
-                <X /> Cancelar
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const headings = lesson.sections.map((section) => section.heading)
 
   return (
-    <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-6', className)}>
-      {/* Columna Izquierda: Secciones y Glosario */}
-      <div className="md:col-span-2 flex flex-col gap-4">
-        <GroundingBadge status={lesson.groundingStatus} />
-        {lesson.sections.map((s) => (
-          <div key={s.heading} className="rounded-xl border-[1.5px] bg-card p-4.5">
-            <div className="mb-1.5 flex items-center gap-2">
-              <BookOpen className="size-3.5 text-primary" />
-              <h4 className="font-display text-[15px] font-medium text-ink">{s.heading}</h4>
-            </div>
-            <p className="text-[13.5px] leading-relaxed text-foreground whitespace-pre-line">{renderFormattedText(s.body)}</p>
-          </div>
-        ))}
+    <div className={cn('lesson-layout', className)}>
+      <aside className="lesson-toc" aria-label="Contenido de la lección">
+        <span className="lesson-kicker">En esta lección</span>
+        <ol>{headings.map((heading, index) => <li className={index === 0 ? 'is-active' : undefined} key={`${heading}-${index}`}><a href={`#${slugify(heading)}`}>{heading}</a></li>)}{lesson.terms.length > 0 && <li><a href="#lesson-glossary">Glosario</a></li>}</ol>
+      </aside>
 
-        {lesson.terms && lesson.terms.length > 0 && (
-          <div>
-            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              Términos clave
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {lesson.terms.map((t) => (
-                <div
-                  key={t.term}
-                  className="rounded-lg border-[1.5px] border-accent bg-accent/40 px-3 py-2"
-                >
-                  <div className="text-xs font-semibold text-ink">{t.term}</div>
-                  <div className="mt-0.5 max-w-56 text-[11px] leading-snug text-muted-foreground">
-                    {t.def}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <article className="lesson-article">
+        <header className="lesson-article-header">
+          <span className="lesson-eyebrow"><BookOpen className="size-3.5" /> Lesson · Módulo</span>
+          <h1>Lección de estudio</h1>
+          <p className="lesson-dek">Una lectura guiada para entender los conceptos clave, conectarlos y llevarlos a la práctica.</p>
+          <div className="lesson-meta"><GroundingBadge status={lesson.groundingStatus} /><span>Lectura guiada</span><span>{headings.length} secciones</span></div>
+        </header>
+        <div className="lesson-rule" />
+        <div className="lesson-prose"><ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{markdown}</ReactMarkdown></div>
+      </article>
 
-      {/* Columna Derecha: Descargas y Acciones */}
-      <div className="flex flex-col gap-4">
-        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-          Acciones y Descarga
-        </span>
+      <aside className="lesson-rail">
+        <div className="lesson-rail-card"><span className="lesson-kicker">Progreso</span><strong>{headings.length} <small>/ {headings.length} secciones</small></strong><div className="lesson-progress"><span /></div><p>Contenido listo para revisión humana.</p></div>
+        <div className="lesson-rail-card"><span className="lesson-kicker">Origen</span><p>{lesson.groundingStatus === 'kb-grounded' ? 'Anclado a documentos aprobados de la Knowledge Base.' : 'Generado desde el objetivo pedagógico del Módulo.'}</p></div>
+      </aside>
 
-        <div className="rounded-xl border-[1.5px] bg-card p-4.5 flex flex-col gap-4 shadow-(--shadow-soft)">
-          <div>
-            <h4 className="text-[13px] font-semibold text-ink mb-1">Descargar Fichas</h4>
-            <p className="text-[11.5px] text-muted-foreground leading-snug">
-              Obtén el contenido de la lección formateado y listo para imprimir o estudiar sin conexión.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {lesson.pdfUrl ? (
-              <button
-                type="button"
-                onClick={() => triggerDownload(lesson.pdfUrl!, `Leccion_${moduleId}.pdf`, 'pdf')}
-                disabled={downloading !== null}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary/10 font-mono text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center cursor-pointer disabled:opacity-50"
-              >
-                <Download className="size-3.5" /> Descargar PDF
-              </button>
-            ) : (
-              <div className="flex h-9 w-full items-center justify-center rounded-md bg-secondary font-mono text-[11px] font-semibold text-muted-foreground opacity-50">
-                PDF no disponible
-              </div>
-            )}
-
-            {lesson.txtUrl ? (
-              <button
-                type="button"
-                onClick={() => triggerDownload(lesson.txtUrl!, `Leccion_${moduleId}.txt`, 'txt')}
-                disabled={downloading !== null}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary/10 font-mono text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 text-center cursor-pointer disabled:opacity-50"
-              >
-                <Download className="size-3.5" /> Descargar TXT
-              </button>
-            ) : (
-              <div className="flex h-9 w-full items-center justify-center rounded-md bg-secondary font-mono text-[11px] font-semibold text-muted-foreground opacity-50">
-                TXT no disponible
-              </div>
-            )}
-          </div>
+      <details className="lesson-actions">
+        <summary><MoreHorizontal className="size-4" /> Acciones</summary>
+        <div className="lesson-action-menu">
+          {lesson.pdfUrl ? <button type="button" onClick={() => triggerDownload(lesson.pdfUrl!, `Leccion_${moduleId}.pdf`, 'pdf')} disabled={downloading !== null}><Download /> Descargar PDF</button> : <button type="button" disabled><Download /> PDF no disponible</button>}
+          {lesson.txtUrl ? <button type="button" onClick={() => triggerDownload(lesson.txtUrl!, `Leccion_${moduleId}.txt`, 'txt')} disabled={downloading !== null}><Download /> Descargar TXT</button> : <button type="button" disabled><Download /> TXT no disponible</button>}
+          <button type="button" onClick={() => window.open(lesson.pdfUrl ?? lesson.txtUrl ?? '#', '_blank')}><ExternalLink /> Abrir artefacto</button>
         </div>
-      </div>
+      </details>
     </div>
   )
 }
 
+function LessonEditor({ draft, setDraft, saving, setSaving, onSave, onCancelEdit, className }: { draft: LessonContent; setDraft: (value: LessonContent) => void; saving: boolean; setSaving: (value: boolean) => void; onSave?: (lesson: LessonContent) => Promise<void>; onCancelEdit?: () => void; className?: string }) {
+  return <div className={cn('rounded-2xl border border-border bg-card p-5', className)}><div className="mb-4"><span className="lesson-kicker">Edición manual</span><p className="mt-1 text-sm text-muted-foreground">Edita el contenido base de la Lección y conserva la estructura Markdown al renderizar.</p></div><div className="space-y-4">{draft.sections.map((section, index) => <div className="rounded-xl border border-border bg-background p-4" key={`${section.heading}-${index}`}><Input value={section.heading} onChange={(event) => setDraft({ ...draft, sections: draft.sections.map((item, itemIndex) => itemIndex === index ? { ...item, heading: event.target.value } : item) })} /><Textarea className="mt-3 resize-y" rows={7} value={section.body} onChange={(event) => setDraft({ ...draft, sections: draft.sections.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item) })} /></div>)}</div><div className="mt-5 flex gap-2"><Button size="sm" onClick={async () => { if (!onSave) return; setSaving(true); try { await onSave(draft) } finally { setSaving(false) } }} disabled={saving}>{saving ? <><Loader2 className="size-3.5 animate-spin" /> Guardando…</> : <><Check className="size-3.5" /> Guardar cambios</>}</Button><Button size="sm" variant="outline" onClick={onCancelEdit} disabled={saving}><X className="size-3.5" /> Cancelar</Button></div></div>
+}
+
+function ConceptMap({ source }: { source: string }) {
+  const values = parseDiagramSource(source)
+  const branches = values.branches.split('|').map((value) => value.trim()).filter(Boolean)
+  return <section className="lesson-diagram lesson-concept-map" aria-label="Mapa conceptual"><div className="lesson-diagram-title"><span>Mapa conceptual</span><span>Relación entre conceptos</span></div><div className="lesson-map"><span className="lesson-node lesson-node-soft">Contexto</span><strong className="lesson-node lesson-node-core">{values.core}</strong><span className="lesson-node lesson-node-warm">Aplicación</span><div className="lesson-map-branches">{branches.slice(0, 4).map((branch) => <span className="lesson-node lesson-node-lime" key={branch}>{branch}</span>)}</div></div></section>
+}
+
+function FlowDiagram({ source }: { source: string }) {
+  const values = parseDiagramSource(source)
+  const steps = values.steps.split(/\s*(?:\||->|→)\s*/).map((step) => step.trim()).filter(Boolean)
+  return <section className="lesson-diagram lesson-flow" aria-label="Diagrama de flujo"><div className="lesson-diagram-title"><span>Flujo de aprendizaje</span><span>De la idea a la acción</span></div><div className="lesson-flow-track">{steps.slice(0, 5).map((step, index) => <span className="lesson-flow-step" key={`${step}-${index}`}><b>{String(index + 1).padStart(2, '0')}</b>{step}{index < steps.length - 1 && <i>→</i>}</span>)}</div></section>
+}
+
+function parseDiagramSource(source: string): { core: string; branches: string; steps: string } {
+  const values = Object.fromEntries(source.split('\n').map((line) => { const [key, ...value] = line.split(':'); return [key?.trim() ?? '', value.join(':').trim()] }))
+  return { core: values.core || 'Lección', branches: values.branches || 'Concepto | Ejemplo | Práctica', steps: values.steps || 'Entender | Aplicar | Revisar' }
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
 function cloneLesson(lesson: LessonContent): LessonContent {
-  return {
-    ...lesson,
-    sections: lesson.sections.map((section) => ({ ...section })),
-    terms: lesson.terms.map((term) => ({ ...term })),
-  }
+  return { ...lesson, sections: lesson.sections.map((section) => ({ ...section })), terms: lesson.terms.map((term) => ({ ...term })) }
 }
