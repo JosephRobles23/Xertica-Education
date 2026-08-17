@@ -50,6 +50,13 @@ class TestInfographicGeneration(unittest.IsolatedAsyncioTestCase):
         self.assertIn("logotipo oficial", prompt)
         self.assertIn("paleta de colores", prompt)
 
+    def test_build_prompt_uses_xertica_visual_system(self):
+        prompt = build_image_prompt(["Concepto"], "Cliente")
+        self.assertIn("#fffef8", prompt)
+        self.assertIn("#5c3a8a", prompt)
+        self.assertIn("bloques de color", prompt)
+        self.assertIn("No uses glassmorphism", prompt)
+
     def test_fallback_prompt_removes_logo(self):
         points = ["Logic unit", "Flow diagram"]
         prompt = build_fallback_prompt(points, self.company)

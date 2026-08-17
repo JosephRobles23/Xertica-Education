@@ -20,6 +20,7 @@ import httpx
 from PIL import Image
 from config.settings import settings
 from .interface import InfographicServiceInterface
+from services.branding import XERTICA_IMAGE_STYLE, XERTICA_PALETTE
 from supabase import create_client
 
 IMAGE_GENERATION_TIMEOUT = httpx.Timeout(connect=20.0, read=300.0, write=30.0, pool=20.0)
@@ -169,6 +170,12 @@ def build_image_prompt(points: List[str], company_name: str, user_prompt: str | 
     if user_prompt:
         prompt += f"\n\nInstrucción adicional del usuario (prioridad alta): {user_prompt}"
 
+    prompt += (
+        f"\n\nBRANDING XERTICA EDUCATION (prioridad visual): {XERTICA_IMAGE_STYLE} "
+        f"Paleta exacta: {XERTICA_PALETTE}. Cada concepto debe diferenciarse con bloques "
+        "de color, rectángulos o triángulos planos. No uses glassmorphism, neón, degradados "
+        "ni iconos 3D."
+    )
     return prompt
 
 
@@ -228,6 +235,12 @@ def build_fallback_prompt(points: List[str], company_name: str, user_prompt: str
     if user_prompt:
         prompt += f"\n\nInstrucción adicional del usuario (prioridad alta): {user_prompt}"
 
+    prompt += (
+        f"\n\nBRANDING XERTICA EDUCATION (prioridad visual): {XERTICA_IMAGE_STYLE} "
+        f"Paleta exacta: {XERTICA_PALETTE}. Cada concepto debe diferenciarse con bloques "
+        "de color, rectángulos o triángulos planos. No uses glassmorphism, neón, degradados "
+        "ni iconos 3D."
+    )
     return prompt
 
 

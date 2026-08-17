@@ -89,5 +89,21 @@ class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
         parsed = self.service._extract_and_parse_json(valid_json_str)
         self.assertIn("```mermaid", parsed.get("markdown", ""))
 
+    def test_lesson_pdf_uses_branded_html_template(self):
+        html = self.service._build_lesson_pdf_html(
+            "Fundamentos de IA", "Xertica", [{"heading": "Conceptos", "body": "Texto"}], [{"term": "IA", "def": "Definición"}]
+        )
+        self.assertIn("<!doctype html>", html.lower())
+        self.assertIn("#fffef8", html)
+        self.assertIn("Xertica.ai", html)
+        self.assertIn("data:image/png;base64", html)
+        self.assertIn("lesson-card", html)
+
+    def test_lesson_pdf_is_a_pdf(self):
+        pdf = self.service._generate_pdf_bytes(
+            "Fundamentos", "Xertica", [{"heading": "Conceptos", "body": "Texto"}], []
+        )
+        self.assertTrue(pdf.startswith(b"%PDF"))
+
 if __name__ == "__main__":
     unittest.main()

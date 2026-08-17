@@ -2,6 +2,9 @@ import os
 import io
 import re
 import json
+import base64
+from html import escape
+from pathlib import Path
 from uuid import UUID
 from datetime import datetime
 from typing import Dict, Any, List
@@ -12,6 +15,7 @@ from services.kb.interface import KnowledgeBaseInterface
 from .interface import LessonServiceInterface
 from config.settings import settings
 from prompts.lesson import SYSTEM_PROMPT
+from services.branding import XERTICA_BRAND
 
 
 class LessonService(LessonServiceInterface):
@@ -248,3 +252,85 @@ class LessonService(LessonServiceInterface):
         pdf_io = io.BytesIO()
         final_image.save(pdf_io, "PDF", resolution=100.0)
         return pdf_io.getvalue()
+
+    def _build_lesson_pdf_html(
+        self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]
+    ) -> str:
+        """Build the branded, printable HTML document used by the PDF renderer."""
+        asset_path = Path(__file__).resolve().parents[2] / "assets" / "xertica-favicon.png"
+        logo_uri = ""
+        if asset_path.exists():
+            logo_uri = "data:image/png;base64," + base64.b64encode(asset_path.read_bytes()).decode("ascii")
+
+        section_cards = []
+        accents = ["#5c3a8a", "#1899af", "#c45baa", "#2e8b5a", "#d9503b", "#e8651e"]
+        for index, section in enumerate(sections, start=1):
+            heading = escape(str(section.get("heading", "")))
+            body = escape(str(section.get("body", ""))).replace("\n", "<br>")
+            accent = accents[(index - 1) % len(accents)]
+            section_cards.append(
+                f'<article class="lesson-card" style="--accent:{accent}">'
+                f'<div class="card-index">{index:02d}</div>'
+                f'<div><h2>{heading}</h2><p>{body}</p></div></article>'
+            )
+
+        glossary = ""
+        if terms:
+            glossary_items = "".join(
+                f'<div class="term"><dt>{escape(str(term.get("term", "")))}</dt>'
+                f'<dd>{escape(str(term.get("def", "")))}</dd></div>'
+                for term in terms
+            )
+            glossary = f'<section class="glossary"><p class="eyebrow">VOCABULARIO</p><h2>Glosario esencial</h2><dl>{glossary_items}</dl></section>'
+
+        logo = f'<img src="{logo_uri}" alt="Xertica.ai" class="logo-mark">' if logo_uri else ""
+        return f"""<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><style>
+@page {{ size:A4; margin:18mm 16mm 17mm; @bottom-left {{ content:"Xertica Education · Documento de aprendizaje"; color:#5c574f; font-size:8pt; }} @bottom-right {{ content:counter(page); color:#1a1814; font-size:9pt; }} }}
+:root {{ --surface:#fffef8; --cream:#f2edd8; --ink:#1a1814; --muted:#5c574f; --purple:#5c3a8a; --cyan:#1899af; --pink:#c45baa; --green:#2e8b5a; --red:#d9503b; --yellow:#faf338; --orange:#e8651e; }}
+* {{ box-sizing:border-box; }} body {{ margin:0; background:var(--surface); color:var(--ink); font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; font-size:10.5pt; line-height:1.55; }}
+.masthead {{ display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:2px solid var(--ink); }}
+.brand {{ display:flex; align-items:center; gap:9px; font-weight:800; font-size:16pt; letter-spacing:-.06em; }} .logo-mark {{ width:34px; height:34px; object-fit:contain; }}
+.brand-dot {{ color:var(--pink); }} .edition {{ color:var(--muted); font-size:8pt; letter-spacing:.16em; text-transform:uppercase; }}
+.geometry {{ display:grid; grid-template-columns:2fr 1fr 1fr 1fr; height:13px; margin:20px 0 32px; }} .geometry i:nth-child(1){{background:var(--purple)}} .geometry i:nth-child(2){{background:var(--cyan)}} .geometry i:nth-child(3){{background:var(--yellow)}} .geometry i:nth-child(4){{background:var(--green)}}
+.eyebrow {{ margin:0 0 9px; color:var(--purple); font-size:8pt; font-weight:800; letter-spacing:.16em; }}
+h1 {{ max-width:610px; margin:0; font-size:32pt; line-height:1.02; letter-spacing:-.065em; }} .subtitle {{ margin:14px 0 25px; max-width:560px; color:var(--muted); font-size:12pt; }}
+.meta {{ display:flex; gap:10px; margin-bottom:29px; }} .pill {{ padding:5px 9px; border:1px solid #d7d0bd; border-radius:999px; color:var(--muted); font-size:8pt; text-transform:uppercase; letter-spacing:.08em; }}
+.lesson-card {{ display:grid; grid-template-columns:47px 1fr; gap:14px; break-inside:avoid; margin:0 0 13px; padding:17px 19px 18px; border:1px solid #ded8c8; border-left:5px solid var(--accent); background:#fff; }}
+.card-index {{ color:var(--accent); font-size:13pt; font-weight:800; letter-spacing:-.04em; }} .lesson-card h2 {{ margin:0 0 6px; font-size:14pt; letter-spacing:-.035em; }} .lesson-card p {{ margin:0; color:#3d3933; }}
+.glossary {{ break-inside:avoid; margin-top:29px; padding:21px; background:var(--cream); border-top:5px solid var(--yellow); }} .glossary h2 {{ margin:0 0 15px; font-size:20pt; letter-spacing:-.05em; }} .glossary dl {{ display:grid; grid-template-columns:1fr 1fr; gap:13px 22px; margin:0; }} .term {{ break-inside:avoid; }} .term dt {{ color:var(--purple); font-weight:800; }} .term dd {{ margin:2px 0 0; color:#4b463e; font-size:9pt; }}
+.closing {{ margin-top:30px; padding-top:12px; border-top:1px solid #d7d0bd; color:var(--muted); font-size:8.5pt; }}
+</style></head><body>
+<header class="masthead"><div class="brand">{logo}<span>Xertica<span class="brand-dot">.</span>ai</span></div><div class="edition">Lesson · {escape(company_name)}</div></header>
+<div class="geometry"><i></i><i></i><i></i><i></i></div>
+<main><p class="eyebrow">LECCIÓN DE ESTUDIO</p><h1>{escape(module_name)}</h1><p class="subtitle">Una lectura visual para comprender los conceptos clave, conectarlos y llevarlos a la práctica.</p><div class="meta"><span class="pill">Xertica Education</span><span class="pill">Contenido guiado</span><span class="pill">{len(sections)} secciones</span></div>
+{''.join(section_cards)}{glossary}<p class="closing">Aprende con contexto, claridad y trazabilidad. Este material fue generado para acompañar tu ruta de aprendizaje.</p></main></body></html>"""
+
+    def _generate_pdf_bytes(self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]) -> bytes:
+        """Render the branded HTML template to PDF, with a Pillow safety fallback."""
+        html = self._build_lesson_pdf_html(module_name, company_name, sections, terms)
+        try:
+            from weasyprint import HTML
+            return HTML(string=html).write_pdf()
+        except Exception as error:
+            print(f"Warning: branded HTML PDF renderer failed; using legacy fallback: {error}")
+            return self._generate_legacy_pdf_bytes(module_name, company_name, sections, terms)
+
+    def _generate_legacy_pdf_bytes(self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]) -> bytes:
+        """Minimal fallback kept for environments without HTML/PDF system libraries."""
+        from PIL import Image, ImageDraw, ImageFont
+        image = Image.new("RGB", (800, 4000), color=XERTICA_BRAND["surface"])
+        draw = ImageDraw.Draw(image)
+        try:
+            font_title = ImageFont.truetype("arial.ttf", 28)
+            font_header = ImageFont.truetype("arial.ttf", 16)
+            font_body = ImageFont.truetype("arial.ttf", 12)
+        except IOError:
+            font_title = font_header = font_body = ImageFont.load_default()
+        y, margin = 55, 50
+        draw.text((margin, y), "Xertica.ai", fill=XERTICA_BRAND["ink"], font=font_title); y += 45
+        draw.text((margin, y), module_name, fill=XERTICA_BRAND["morado"], font=font_header); y += 35
+        for index, section in enumerate(sections, start=1):
+            draw.text((margin, y), f"{index:02d}  {section.get('heading', '')}", fill=XERTICA_BRAND["ink"], font=font_header); y += 25
+            draw.text((margin, y), str(section.get("body", ""))[:170], fill=XERTICA_BRAND["ink_soft"], font=font_body); y += 35
+        output = io.BytesIO(); image.crop((0, 0, 800, min(y + 35, 4000))).save(output, "PDF", resolution=100.0); return output.getvalue()

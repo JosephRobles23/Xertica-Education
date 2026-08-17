@@ -12,6 +12,17 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# WeasyPrint necesita estas librerías nativas para convertir la plantilla HTML a PDF.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libgdk-pixbuf-2.0-0 \
+        libglib2.0-0 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libffi8 \
+        shared-mime-info \
+    && rm -rf /var/lib/apt/lists/*
+
 # 1) Deps primero, para aprovechar la cache de capas de Docker.
 COPY pyproject.toml ./
 RUN uv pip install --system -r pyproject.toml
