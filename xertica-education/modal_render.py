@@ -12,6 +12,7 @@ bien ``remotion_composer_path``, que sube 4 niveles desde el archivo):
     /app/openmontage/remotion-composer/...  <- proyecto Remotion (con npm install)
 
 Deploy:  cd xertica-education && modal deploy modal_render.py
+         (también se despliega solo vía CI: push a main -> job deploy-render)
 """
 
 import os
