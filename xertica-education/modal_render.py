@@ -58,6 +58,9 @@ image = (
     )
     # Instala las deps del composer Remotion dentro de la imagen.
     .run_commands("cd /app/openmontage/remotion-composer && npm install")
+    # Remotion necesita su propio Chrome Headless Shell para renderizar; el
+    # Chromium instalado por Playwright no sustituye este navegador.
+    .run_commands("cd /app/openmontage/remotion-composer && npx remotion browser ensure")
     .env(
         {
             "PYTHONPATH": "/app/apps/api",
