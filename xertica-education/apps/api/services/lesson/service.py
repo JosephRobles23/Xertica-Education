@@ -71,6 +71,9 @@ class LessonService(LessonServiceInterface):
         # 5) Fallback check
         sections = lesson_data.get("sections", [])
         terms = lesson_data.get("terms", [])
+        markdown = lesson_data.get("markdown", "")
+        if not isinstance(markdown, str):
+            markdown = ""
         if not isinstance(sections, list) or len(sections) == 0:
             fallback = self._get_fallback_lesson(module_name, module_description)
             sections = fallback["sections"]
@@ -99,7 +102,8 @@ class LessonService(LessonServiceInterface):
             "storagePath": f"{base_path}/{filename_prefix}.pdf",
             "groundingStatus": "kb-grounded" if grounded_text else "module-grounded",
             "sections": sections,
-            "terms": terms
+            "terms": terms,
+            "markdown": markdown,
         }
 
     def _extract_and_parse_json(self, text: str) -> dict:

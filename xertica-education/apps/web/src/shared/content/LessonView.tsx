@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { BookOpen, Check, Download, ExternalLink, Loader2, MoreHorizontal, Sparkles, X } from 'lucide-react'
@@ -28,8 +28,7 @@ const markdownComponents: Components = {
     const language = /language-([\w-]+)/.exec(className ?? '')?.[1]
     const source = String(children).replace(/\n$/, '')
 
-    if (language === 'concept-map') return <ConceptMap source={source} />
-    if (language === 'flow') return <FlowDiagram source={source} />
+    if (language === 'mermaid') return <MermaidDiagram source={source} />
 
     if (language) {
       return <pre className="lesson-code"><code className={className} {...props}>{children}</code></pre>
@@ -161,21 +160,56 @@ function LessonEditor({ draft, setDraft, saving, setSaving, onSave, onCancelEdit
   return <div className={cn('rounded-2xl border border-border bg-card p-5', className)}><div className="mb-4"><span className="lesson-kicker">Edición manual</span><p className="mt-1 text-sm text-muted-foreground">Edita el contenido base de la Lección y conserva la estructura Markdown al renderizar.</p></div><div className="space-y-4">{draft.sections.map((section, index) => <div className="rounded-xl border border-border bg-background p-4" key={`${section.heading}-${index}`}><Input value={section.heading} onChange={(event) => setDraft({ ...draft, sections: draft.sections.map((item, itemIndex) => itemIndex === index ? { ...item, heading: event.target.value } : item) })} /><Textarea className="mt-3 resize-y" rows={7} value={section.body} onChange={(event) => setDraft({ ...draft, sections: draft.sections.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item) })} /></div>)}</div><div className="mt-5 flex gap-2"><Button size="sm" onClick={async () => { if (!onSave) return; setSaving(true); try { await onSave(draft) } finally { setSaving(false) } }} disabled={saving}>{saving ? <><Loader2 className="size-3.5 animate-spin" /> Guardando…</> : <><Check className="size-3.5" /> Guardar cambios</>}</Button><Button size="sm" variant="outline" onClick={onCancelEdit} disabled={saving}><X className="size-3.5" /> Cancelar</Button></div></div>
 }
 
-function ConceptMap({ source }: { source: string }) {
-  const values = parseDiagramSource(source)
-  const branches = values.branches.split('|').map((value) => value.trim()).filter(Boolean)
-  return <section className="lesson-diagram lesson-concept-map" aria-label="Mapa conceptual"><div className="lesson-diagram-title"><span>Mapa conceptual</span><span>Relación entre conceptos</span></div><div className="lesson-map"><span className="lesson-node lesson-node-soft">Contexto</span><strong className="lesson-node lesson-node-core">{values.core}</strong><span className="lesson-node lesson-node-warm">Aplicación</span><div className="lesson-map-branches">{branches.slice(0, 4).map((branch) => <span className="lesson-node lesson-node-lime" key={branch}>{branch}</span>)}</div></div></section>
-}
+function MermaidDiagram({ source }: { source: string }) {
+  const diagramRef = useRef<HTMLDivElement>(null)
+  const reactId = useId()
+  const renderId = `lesson-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`
+  const [svg, setSvg] = useState('')
+  const [error, setError] = useState(false)
 
-function FlowDiagram({ source }: { source: string }) {
-  const values = parseDiagramSource(source)
-  const steps = values.steps.split(/\s*(?:\||->|→)\s*/).map((step) => step.trim()).filter(Boolean)
-  return <section className="lesson-diagram lesson-flow" aria-label="Diagrama de flujo"><div className="lesson-diagram-title"><span>Flujo de aprendizaje</span><span>De la idea a la acción</span></div><div className="lesson-flow-track">{steps.slice(0, 5).map((step, index) => <span className="lesson-flow-step" key={`${step}-${index}`}><b>{String(index + 1).padStart(2, '0')}</b>{step}{index < steps.length - 1 && <i>→</i>}</span>)}</div></section>
-}
+  useEffect(() => {
+    let cancelled = false
+    setSvg('')
+    setError(false)
 
-function parseDiagramSource(source: string): { core: string; branches: string; steps: string } {
-  const values = Object.fromEntries(source.split('\n').map((line) => { const [key, ...value] = line.split(':'); return [key?.trim() ?? '', value.join(':').trim()] }))
-  return { core: values.core || 'Lección', branches: values.branches || 'Concepto | Ejemplo | Práctica', steps: values.steps || 'Entender | Aplicar | Revisar' }
+    import('mermaid')
+      .then(async ({ default: mermaid }) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'base',
+          themeVariables: {
+            primaryColor: '#eeeafd',
+            primaryTextColor: '#1d1b25',
+            primaryBorderColor: '#6847c7',
+            lineColor: '#756f82',
+            secondaryColor: '#eaf5c8',
+            tertiaryColor: '#fbe8db',
+          },
+        })
+        try {
+          const result = await mermaid.render(renderId, source)
+          if (cancelled) return
+          setSvg(result.svg)
+          requestAnimationFrame(() => result.bindFunctions?.(diagramRef.current!))
+        } catch {
+          if (!cancelled) setError(true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [renderId, source])
+
+  if (error) {
+    return <details className="lesson-diagram lesson-mermaid-error"><summary>No se pudo renderizar el diagrama</summary><pre className="lesson-code"><code>{source}</code></pre></details>
+  }
+
+  return <figure className="lesson-diagram lesson-mermaid" ref={diagramRef} aria-label="Diagrama de la lección">{svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : <figcaption>Preparando diagrama…</figcaption>}</figure>
 }
 
 function slugify(value: string): string {

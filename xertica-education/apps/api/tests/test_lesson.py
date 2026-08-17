@@ -84,5 +84,10 @@ class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed.get("sections")[0]["heading"], "Header")
         self.assertEqual(parsed.get("terms")[0]["term"], "T")
 
+    def test_json_extraction_preserves_optional_mermaid_markdown(self):
+        valid_json_str = '{"sections": [], "terms": [], "markdown": "## Mapa\\n\\n```mermaid\\nmindmap\\n  root((Tema))\\n```"}'
+        parsed = self.service._extract_and_parse_json(valid_json_str)
+        self.assertIn("```mermaid", parsed.get("markdown", ""))
+
 if __name__ == "__main__":
     unittest.main()

@@ -978,6 +978,7 @@ async def regenerate_lesson(
         "txtUrl": res.get("txtUrl"),
         "sections": res.get("sections", []),
         "terms": res.get("terms", []),
+        "markdown": res.get("markdown", ""),
         "groundingStatus": res.get("groundingStatus"),
     }
 

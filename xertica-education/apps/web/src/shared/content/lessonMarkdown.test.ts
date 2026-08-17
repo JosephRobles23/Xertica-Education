@@ -1,4 +1,4 @@
-import { lessonToMarkdown } from './lessonMarkdown'
+import { getLessonMarkdown, lessonToMarkdown } from './lessonMarkdown'
 
 const lesson = {
   sections: [
@@ -18,6 +18,11 @@ if (!markdown.includes('### Glosario') || !markdown.includes('**Grounding**')) {
   throw new Error('La lección debe conservar el glosario en Markdown.')
 }
 
-if (!markdown.includes('```concept-map') || !markdown.includes('```flow')) {
-  throw new Error('La lección debe incluir bloques visuales para el mapa y el flujo.')
+if (markdown.includes('```concept-map') || markdown.includes('```flow')) {
+  throw new Error('La lección no debe imponer diagramas predeterminados.')
+}
+
+const authoredMarkdown = '## Modelo mental\n\n```mermaid\nmindmap\n  root((Tema))\n```'
+if (getLessonMarkdown({ ...lesson, markdown: authoredMarkdown }) !== authoredMarkdown) {
+  throw new Error('El Markdown generado por el LLM debe conservarse sin transformarlo.')
 }
