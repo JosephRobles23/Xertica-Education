@@ -1,9 +1,11 @@
 import asyncio
 import copy
 import os
+import sys
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -617,6 +619,38 @@ class TestVideoAPI(unittest.TestCase):
         self.assertEqual(status_data["job_id"], job_id)
         self.assertIn("status", status_data)
         self.assertIn("progress", status_data)
+
+    def test_modal_render_is_dispatched_through_async_spawn(self):
+        """Modal renders use the async spawn API from the async video service."""
+        calls = []
+
+        class FakeSpawn:
+            async def aio(self, **kwargs):
+                calls.append(kwargs)
+
+        fake_function = SimpleNamespace(spawn=FakeSpawn())
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda _app_name, _function_name: fake_function,
+            )
+        )
+        service = VideoService()
+
+        with patch.dict(sys.modules, {"modal": fake_modal}), patch(
+            "services.video.service.settings.modal_render_app",
+            "xertica-render-staging",
+        ):
+            asyncio.run(
+                service._spawn_modal_render(
+                    job_id=uuid4(),
+                    component_id=None,
+                    render_target={"route_id": "01", "module_id": "r1m1", "component_kind": "video"},
+                    custom_storyboard=None,
+                )
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["render_target"]["module_id"], "r1m1")
 
     def test_get_video_asset_resolves_materialized_module_id_from_render_target(self):
         """GET /videos/assets finds a persisted Asset when the route uses a module slug."""

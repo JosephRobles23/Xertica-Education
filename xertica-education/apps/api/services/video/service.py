@@ -156,7 +156,7 @@ class VideoService(VideoServiceInterface):
         # ``modal_render_app`` configurado, corremos el pipeline in-process como
         # siempre. Ambos caminos devuelven el job_id al instante.
         if settings.modal_render_app:
-            self._spawn_modal_render(
+            await self._spawn_modal_render(
                 job_id=job_id,
                 component_id=component_id,
                 render_target=render_target,
@@ -175,7 +175,7 @@ class VideoService(VideoServiceInterface):
             task.add_done_callback(self._render_tasks.discard)
         return job_id
 
-    def _spawn_modal_render(
+    async def _spawn_modal_render(
         self,
         job_id: UUID,
         component_id: Optional[UUID],
@@ -191,7 +191,7 @@ class VideoService(VideoServiceInterface):
         """
         import modal  # lazy: solo se necesita cuando hay deploy con Modal
         render_fn = modal.Function.from_name(settings.modal_render_app, "render_video")
-        render_fn.spawn(
+        await render_fn.spawn.aio(
             job_id=str(job_id),
             component_id=str(component_id) if component_id else None,
             render_target=render_target,
