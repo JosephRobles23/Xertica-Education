@@ -209,7 +209,7 @@ const firstWalkthroughUrl = (route: LearningRoute): string => {
     )
     return best?.url ?? verified[0]?.url ?? ''
   }
-  return route.sources.find((s) => s.url)?.url ?? route.customerContext?.url ?? ''
+  return route.sources.find((s) => s.url)?.url ?? ''
 }
 
 

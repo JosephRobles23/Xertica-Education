@@ -18,7 +18,6 @@ import type {
 } from '@/shared/lib/types'
 import { INITIAL_PROPOSAL, ROUTES } from '@/shared/data/routes'
 import { api, type JobState } from '@/shared/lib/api'
-import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
 import { toast } from 'sonner'
 
 /** Clave estable para el estado de un contenido concreto. */
@@ -59,13 +58,6 @@ const hydrateRoutes = (apiRoutes: readonly ApiLearningRoute[]): readonly Learnin
   const newRoutes = apiRoutes.filter((route) => !ROUTES.some((mockRoute) => mockRoute.id === route.id))
 
   return [...hydratedMocks, ...newRoutes.map(hydrateRoute)]
-}
-
-export interface UploadedStructure {
-  name: string
-  kind: 'drive' | 'texto' | 'local'
-  driveFile?: GoogleDriveSelection
-  localFile?: File
 }
 
 export const mapRouteModulesToProposal = (modules: readonly RouteModule[]): ProposalModule[] => {
@@ -147,8 +139,6 @@ interface AppStore {
   setDeepResearch: (v: boolean) => void
   customerContext: CustomerContext
   setCustomerContext: (v: CustomerContext) => void
-  uploadedStructure: UploadedStructure | null
-  setUploadedStructure: (v: UploadedStructure | null) => void
 
   /* Gate 0 · Estructura propuesta */
   proposal: readonly ProposalModule[]
@@ -251,7 +241,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [briefText, setBriefText] = useState('')
   const [deepResearch, setDeepResearch] = useState(false)
   const [customerContext, setCustomerContext] = useState<CustomerContext>({})
-  const [uploadedStructure, setUploadedStructure] = useState<UploadedStructure | null>(null)
 
   const [proposal, setProposal] = useState<readonly ProposalModule[]>(INITIAL_PROPOSAL)
   const [proposalLoadedRouteId, setProposalLoadedRouteId] = useState<string | null>(
@@ -622,7 +611,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       briefText, setBriefText,
       deepResearch, setDeepResearch,
       customerContext, setCustomerContext,
-      uploadedStructure, setUploadedStructure,
       proposal, setProposal,
       proposalLoadedRouteId, setProposalLoadedRouteId,
       structureJobId, setStructureJobId,
@@ -638,7 +626,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       activeJobs, trackJob,
     }),
     [
-      briefText, deepResearch, customerContext, uploadedStructure, proposal,
+      briefText, deepResearch, customerContext, proposal,
       proposalLoadedRouteId, structureJobId, pendingDeepResearch,
       reorderProposal, refineProposal, editProposal, removeProposal, toggleProposalComp, addProposal,
       contentStatusOf, approveContent, refineContent, moduleStatusOf, approveModule, routeStatusOf, routeProgressOf,

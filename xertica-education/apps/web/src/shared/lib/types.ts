@@ -197,26 +197,18 @@ export interface Source {
   metadata?: Record<string, unknown>
 }
 
-export type CustomerArea = 'RRHH' | 'Finanzas' | 'TI' | 'Educacion' | 'Salud' | 'General'
-export type GoogleWorkspaceUsage = 'yes' | 'no' | 'unknown'
+/** Área del cliente: texto libre (ADR-0024). La UI ofrece sugerencias, no un enum cerrado. */
+export type CustomerArea = string
 
 export interface CustomerContext {
-  url?: string
   industry?: string
   area?: CustomerArea
-  usesGoogleWorkspace?: GoogleWorkspaceUsage
   audienceLevel?: string
   baseMaterialFile?: {
     name: string
     type: string
     sizeKb: number
   }
-  companyProposalFile?: {
-    name: string
-    type: string
-    sizeKb: number
-  }
-  inferredFrom?: readonly ('url' | 'brief' | 'material')[]
   companyName?: string
 }
 

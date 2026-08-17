@@ -35,6 +35,22 @@ def rank_sources_prompt(context: str, catalog_json: str) -> str:
     )
 
 
+def detect_tools_prompt(context: str) -> str:
+    """Detección abierta de herramientas (ADR-0024): conjunto abierto, sin sugerir nada
+    que el usuario no haya nombrado. Lo consume ResearchService vía el rol 'researcher'."""
+    return (
+        "Extract the tools, products, platforms or software EXPLICITLY mentioned in the "
+        "following learning-route text. Rules: (1) only include something if it is actually "
+        "named in the text — never infer, suggest or add a tool the author did not write; "
+        "(2) do not treat generic words (prompt, image, data, design, video) as tools; "
+        "(3) any vendor is valid, there is no preferred one; (4) if no tool is named, "
+        "return an empty array.\n"
+        'Answer ONLY with a JSON array like [{"tool":"Figma","vendor":"Figma"}] '
+        "(use null for vendor when unknown).\n\n"
+        f"Text:\n{context}"
+    )
+
+
 def detect_technologies_prompt(context: str) -> str:
     return (
         "Identify every named technology, product, platform, API, framework, or software "

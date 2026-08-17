@@ -1,18 +1,20 @@
 import asyncio
+import json
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 
 import httpx
 
 from config.settings import settings
+from prompts.research import detect_tools_prompt
 
 
 TOOL_REGISTRY = [
     {
         "tool": "Veo",
         "vendor": "Google",
-        "aliases": ["veo", "veo 3", "teaser", "video generation", "multimedia"],
+        "aliases": ["veo", "veo 3", "veo 3.1"],
         "channels": ["Google AI Developers", "Google Cloud Tech", "Google for Developers"],
         "domains": ["ai.google.dev", "cloud.google.com", "developers.google.com"],
         "official_doc": "https://ai.google.dev/gemini-api/docs/video",
@@ -28,7 +30,7 @@ TOOL_REGISTRY = [
     {
         "tool": "Nano Banana",
         "vendor": "Google",
-        "aliases": ["nano banana", "identidad visual", "imagen", "foto", "image generation"],
+        "aliases": ["nano banana"],
         "channels": ["Google AI Developers", "Google Workspace", "Google for Developers"],
         "domains": ["ai.google.dev", "support.google.com", "workspace.google.com"],
         "official_doc": "https://ai.google.dev/gemini-api/docs/image-generation",
@@ -44,7 +46,7 @@ TOOL_REGISTRY = [
     {
         "tool": "Gemini",
         "vendor": "Google",
-        "aliases": ["gemini", "prompt", "razonamiento", "ai studio"],
+        "aliases": ["gemini", "ai studio"],
         "channels": ["Google AI Developers", "Google Workspace", "Google Cloud Tech"],
         "domains": ["ai.google.dev", "developers.google.com", "support.google.com"],
         "official_doc": "https://ai.google.dev/gemini-api/docs",
@@ -60,7 +62,7 @@ TOOL_REGISTRY = [
     {
         "tool": "BigQuery",
         "vendor": "Google Cloud",
-        "aliases": ["bigquery", "datos", "data", "analytics"],
+        "aliases": ["bigquery", "big query"],
         "channels": ["Google Cloud Tech", "Google Cloud"],
         "domains": ["cloud.google.com"],
         "official_doc": "https://cloud.google.com/bigquery/docs",
@@ -76,7 +78,7 @@ TOOL_REGISTRY = [
     {
         "tool": "Canva",
         "vendor": "Canva",
-        "aliases": ["canva", "diseño", "design"],
+        "aliases": ["canva"],
         "channels": ["Canva"],
         "domains": ["canva.com"],
         "official_doc": "https://www.canva.com/help/",
@@ -206,17 +208,98 @@ class YouTubeSearchClient:
 
 
 class ResearchService:
-    def __init__(self, youtube_client: Optional[YouTubeSearchClient] = None, documentation_client=None):
+    def __init__(
+        self,
+        youtube_client: Optional[YouTubeSearchClient] = None,
+        documentation_client=None,
+        llm=None,
+    ):
         self.youtube_client = youtube_client or YouTubeSearchClient(settings.youtube_api_key)
         self.documentation_client = documentation_client
+        self.llm = llm  # rol 'researcher' para la detección abierta (ADR-0024)
+
+    @staticmethod
+    def _detection_text(
+        route_name: str, brief: str, modules: list, customer_context: Dict[str, Any]
+    ) -> str:
+        """Texto sobre el que se detectan herramientas. Solo lo que el usuario redactó más
+        los campos de contexto textuales: meter todo el customerContext (incluida la URL)
+        producía falsos positivos."""
+        context_bits = [
+            str(customer_context.get(key) or "")
+            for key in ("industry", "area", "audienceLevel", "companyName")
+        ]
+        module_text = " ".join(str(module) for module in modules)
+        return " ".join(
+            part for part in [route_name, brief, module_text, *context_bits] if part
+        )
 
     def detect_tools(self, text: str) -> List[Dict[str, Any]]:
+        """Capa determinista: matchea nombres de producto del registro con límites de
+        palabra (evita que 'veo' matchee "veo el problema")."""
         haystack = text.lower()
         return [
             tool
             for tool in TOOL_REGISTRY
-            if any(alias in haystack for alias in tool["aliases"])
+            if any(
+                re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", haystack)
+                for alias in tool["aliases"]
+            )
         ]
+
+    async def detect_tools_async(self, text: str) -> List[Dict[str, Any]]:
+        """Detección en dos capas (ADR-0024): el LLM identifica las herramientas realmente
+        mencionadas (conjunto abierto) y TOOL_REGISTRY verifica las que conoce. Si no hay
+        LLM o falla, cae al matching determinista."""
+        detected = await self._detect_tools_with_llm(text)
+        if detected is None:
+            return self.detect_tools(text)
+        return [self._resolve_tool(item) for item in detected]
+
+    async def _detect_tools_with_llm(self, text: str) -> Optional[List[Dict[str, Any]]]:
+        """Devuelve la lista del LLM, o None si no hay LLM / falla / responde basura."""
+        if not self.llm:
+            return None
+        try:
+            raw = await self.llm.chat_completion(
+                role="researcher", prompt=detect_tools_prompt(text), timeout=30.0
+            )
+            match = re.search(r"\[.*\]", raw or "", re.DOTALL)
+            if not match:
+                return None
+            parsed = json.loads(match.group(0))
+            if not isinstance(parsed, list):
+                return None
+            return [
+                {"tool": str(item["tool"]).strip(), "vendor": item.get("vendor")}
+                for item in parsed
+                if isinstance(item, dict) and str(item.get("tool") or "").strip()
+            ]
+        except Exception as exc:
+            print(f"Open tool detection failed, falling back to registry: {exc}")
+            return None
+
+    @staticmethod
+    def _resolve_tool(detected: Dict[str, Any]) -> Dict[str, Any]:
+        """Cruza una herramienta detectada con el registro. Registrada → fuentes oficiales
+        verificadas; no registrada → sin canales/dominios, sus fuentes irán a
+        'requires-review' (ADR-0017)."""
+        name = detected["tool"]
+        for entry in TOOL_REGISTRY:
+            if entry["tool"].lower() == name.lower() or any(
+                alias == name.lower() for alias in entry["aliases"]
+            ):
+                return entry
+        return {
+            "tool": name,
+            "vendor": detected.get("vendor"),
+            "aliases": [name.lower()],
+            "channels": [],
+            "domains": [],
+            "official_doc": None,
+            "official_article": None,
+            "official_video": None,
+        }
 
     def detect_technologies(self, text: str, tools: List[Dict[str, Any]]) -> list[str]:
         haystack = text.lower()
@@ -357,10 +440,13 @@ class ResearchService:
         return " ".join(str(term) for term in terms if term)
 
     def _is_verified_youtube_channel(self, tool: Dict[str, Any], channel: str) -> bool:
+        if not tool["channels"]:
+            return False  # herramienta fuera del registro: nada que verificar
         normalized = channel.strip().lower()
+        official_video = tool.get("official_video") or {}
         allowed_channels = {
             *(value.lower() for value in tool["channels"]),
-            str(tool["official_video"].get("channel", "")).lower(),
+            str(official_video.get("channel", "")).lower(),
         }
         return normalized in allowed_channels
 
@@ -424,7 +510,7 @@ class ResearchService:
     ) -> Dict[str, Any]:
         tool_name = tool["tool"]
         vendor = tool["vendor"]
-        official_video = tool["official_video"]
+        official_video = tool.get("official_video") or self._search_placeholder_video(tool_name)
         youtube_id = official_video.get("youtube_id")
         has_specific_video = bool(youtube_id and youtube_id not in used_video_ids)
         if youtube_id:
@@ -459,6 +545,18 @@ class ResearchService:
                 "youtubeId": youtube_id,
                 "videoTitle": official_video["title"],
             },
+        }
+
+    def _search_placeholder_video(self, tool_name: str) -> Dict[str, Any]:
+        """Candidato de búsqueda para una herramienta sin canal oficial en el registro.
+        Nunca se auto-aprueba: sin `youtube_id` la fuente queda en 'requires-review'."""
+        query = quote_plus(f"{tool_name} tutorial oficial")
+        return {
+            "title": f"Buscar videos oficiales de {tool_name}",
+            "url": f"https://www.youtube.com/results?search_query={query}",
+            "youtube_id": None,
+            "channel": f"(sin canal verificado para {tool_name})",
+            "duration": "--:--",
         }
 
     async def _apply_reranking(self, sources: List[Dict[str, Any]], context: str) -> List[Dict[str, Any]]:
@@ -538,21 +636,15 @@ class ResearchService:
         modules = payload.get("modules", [])
         route_name = payload.get("route_name", "")
         customer_context = payload.get("customer_context", {}) or {}
-        context_text = " ".join(str(value) for value in customer_context.values())
-        text = " ".join([route_name, brief, context_text, " ".join(str(module) for module in modules)])
-        tools = self.detect_tools(text)
+        text = self._detection_text(route_name, brief, modules, customer_context)
+        tools = await self.detect_tools_async(text)
         technologies = await asyncio.to_thread(self.detect_technologies, text, tools)
-        if not technologies:
-            tools = [TOOL_REGISTRY[2]]
-            technologies = ["Gemini"]
+        # Sin herramientas detectadas se sigue con el tema del brief: no se fuerza
+        # ningún vendor por defecto (ADR-0024).
         industry = customer_context.get("industry") or "el contexto del cliente"
         area = customer_context.get("area") or "General"
         audience = customer_context.get("audienceLevel") or "la audiencia definida"
-        workspace_suffix = (
-            " y flujos de Google Workspace"
-            if customer_context.get("usesGoogleWorkspace") == "yes"
-            else ""
-        )
+        workspace_suffix = ""
 
         grounded_by_technology, videos_by_name = await self._fetch_research_inputs(
             technologies, tools, text, customer_context
@@ -561,8 +653,10 @@ class ResearchService:
         sources = []
         used_video_ids: set[str] = set()
         for index, tool in enumerate(tools):
-            primary_channel = tool["channels"][0]
-            primary_domain = tool["domains"][0]
+            # Una herramienta detectada fuera del registro (ADR-0024) no trae canal ni
+            # dominio oficial: sus fuentes van a revisión humana en vez de inventarlas.
+            primary_channel = (tool["channels"] or [None])[0]
+            primary_domain = (tool["domains"] or [None])[0]
             tool_name = tool["tool"]
             vendor = tool["vendor"]
             youtube_sources = self._youtube_sources_for_tool(
@@ -581,7 +675,7 @@ class ResearchService:
                     )
                 ]
 
-            legacy_documentation = [] if grounded_sources else [
+            legacy_documentation = [] if (grounded_sources or not primary_domain) else [
                 {
                     "title": f"Documentación oficial de {tool_name}",
                     "plat": primary_domain,

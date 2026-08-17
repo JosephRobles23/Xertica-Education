@@ -15,7 +15,6 @@ class MockRouteStructurer(RouteStructurerInterface):
         area = customer_context.get("area") or "General"
         industry = customer_context.get("industry") or "contexto del cliente"
         audience = customer_context.get("audienceLevel") or "la audiencia objetivo"
-        ws = " con Google Workspace" if customer_context.get("usesGoogleWorkspace") == "yes" else ""
         docs_note = f" · {len(parsed_docs)} doc(s) de referencia" if parsed_docs else ""
 
         modules = to_route_modules([
@@ -26,7 +25,7 @@ class MockRouteStructurer(RouteStructurerInterface):
                 "target_minutes": 12,
                 "components": [
                     {"kind": "lesson", "summary": f"Conceptos base adaptados a {industry} y {audience}{docs_note}."},
-                    {"kind": "video", "summary": f"Cápsula con ejemplos del área {area}{ws}."},
+                    {"kind": "video", "summary": f"Cápsula con ejemplos del área {area}."},
                     {"kind": "quiz", "summary": "Evaluación breve con situaciones del cliente."},
                 ],
             },
@@ -38,7 +37,7 @@ class MockRouteStructurer(RouteStructurerInterface):
                 "components": [
                     {"kind": "lesson", "summary": "Buenas prácticas y criterios de adopción."},
                     {"kind": "infografia", "summary": f"Mapa visual de casos de uso en {industry}."},
-                    {"kind": "lab", "summary": f"Actividad práctica basada en el material del cliente{ws}."},
+                    {"kind": "lab", "summary": "Actividad práctica basada en el material del cliente."},
                 ],
             },
         ])

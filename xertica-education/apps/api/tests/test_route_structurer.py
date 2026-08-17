@@ -98,3 +98,74 @@ def test_llm_structurer_falls_back_when_fields_missing():
 def test_llm_structurer_raises_on_garbage():
     with pytest.raises(Exception):
         asyncio.run(LLMRouteStructurer(_FakeLLM("no soy json")).generate("b", {}, []))
+
+
+# ── ADR-0024: brief unificado, contexto y fallo honesto ────────────────────
+class _SpyLLM(BaseLLMAdapter):
+    """Captura prompt y kwargs de la llamada para poder afirmar sobre ellos."""
+
+    def __init__(self, reply: str):
+        self._reply = reply
+        self.prompt = ""
+        self.kwargs: dict = {}
+
+    async def chat_completion(self, role: str, prompt: str, **kwargs) -> str:
+        self.prompt, self.kwargs = prompt, kwargs
+        return self._reply
+
+
+_MINIMAL_REPLY = json.dumps({"modules": [
+    {"name": "M1", "type": "intro", "components": [{"kind": "lesson", "summary": "s"}]},
+]})
+
+
+def test_structurer_requests_strict_mode_and_long_timeout():
+    """El fallo del LLM debe propagarse (ADR-0024), no degradarse a mock silencioso."""
+    llm = _SpyLLM(_MINIMAL_REPLY)
+    asyncio.run(LLMRouteStructurer(llm).generate("b", {}, []))
+    assert llm.kwargs.get("strict") is True
+    assert llm.kwargs.get("timeout") == 90.0
+
+
+def test_prompt_includes_company_name():
+    llm = _SpyLLM(_MINIMAL_REPLY)
+    asyncio.run(LLMRouteStructurer(llm).generate("b", {"companyName": "Acme Corp"}, []))
+    assert "Acme Corp" in llm.prompt
+
+
+def test_prompt_carries_brief_and_material_without_truncating_long_structures():
+    """40k por documento (ADR-0024): una estructura larga pegada llega entera."""
+    long_doc = "Módulo X. " * 3000  # ~30k caracteres
+    llm = _SpyLLM(_MINIMAL_REPLY)
+    asyncio.run(LLMRouteStructurer(llm).generate("mi brief", {}, [long_doc]))
+    assert "mi brief" in llm.prompt
+    assert llm.prompt.count("Módulo X.") == 3000
+
+
+def test_llm_error_propagates_instead_of_falling_back():
+    class _FailingLLM(BaseLLMAdapter):
+        async def chat_completion(self, role: str, prompt: str, **kwargs) -> str:
+            raise RuntimeError("OpenRouter 429: rate limit")
+
+    with pytest.raises(RuntimeError, match="rate limit"):
+        asyncio.run(LLMRouteStructurer(_FailingLLM()).generate("b", {}, []))
+
+
+def test_mock_is_vendor_neutral():
+    """El mock no debe inyectar herramientas que el usuario no pidió (ADR-0024)."""
+    result = asyncio.run(MockRouteStructurer().generate(
+        "Atención al cliente en una veterinaria",
+        {"area": "General", "usesGoogleWorkspace": "yes"},
+        [],
+    ))
+    blob = json.dumps(result, ensure_ascii=False).lower()
+    assert "google" not in blob and "workspace" not in blob
+
+
+def test_system_prompt_is_vendor_neutral_and_states_hierarchy():
+    from prompts.route_structurer import SYSTEM_PROMPT
+
+    lowered = SYSTEM_PROMPT.lower()
+    for vendor_term in ("nano banana", "gemini", "google", "canva", "bigquery"):
+        assert vendor_term not in lowered, f"el prompt no debe nombrar {vendor_term}"
+    assert "brief" in lowered and "material" in lowered

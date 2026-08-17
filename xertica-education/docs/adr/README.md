@@ -40,6 +40,12 @@ Usa la [plantilla](0000-template.md) para nuevos ADRs.
 | [0017](0017-concept-explanation-video-quality-strategy.md) · Video | Estrategia de calidad para Videos de Explicación Conceptual | Aceptado |
 | [0017](0017-deep-research-source-review-policy.md) · Research | Política de revisión de fuentes de Deep Research | Aceptado |
 | [0018](0018-infografia-quiz-generation-flows.md) · Assets | Flujos de generacion de Infografia y Quiz | Aceptado |
+| [0019](0019-laboratory-generation-classroom-export.md) · Assets | Generación de Laboratorio y export a Classroom | Aceptado |
+| [0020](0020-materializacion-perezosa-spine.md) · KB | Materialización perezosa del Spine | Aceptado |
 | [0020](0020-vendor-openmontage-source.md) · Video | OpenMontage como código vendorizado | Aceptado · supersede 0010 |
+| [0021](0021-aprobaciones-en-asset-estado.md) · Assets | Aprobaciones en el estado del Asset | Aceptado |
+| [0022](0022-storage-unificado-artefactos.md) · Storage | Storage unificado de artefactos | Aceptado |
+| [0023](0023-gate1-advertencia-grounding-visible.md) · KB | Advertencia de grounding visible en Gate 1 | Aceptado |
+| [0024](0024-brief-unificado-y-deteccion-abierta-de-herramientas.md) · KB/Research | Brief unificado, jerarquía de esqueleto y detección abierta de herramientas | Aceptado · enmienda 0014 |
 
 > ⚠️ **Colisión de numeración (deuda documental):** las ramas `main` (video) y `feature/KB-RAG` (KB) desarrollaron en paralelo y **reutilizaron 0006/0007/0008/0011/0012** para decisiones distintas. Ambos archivos coexisten con nombres distintos. Renumerar los duplicados es un cleanup pendiente.

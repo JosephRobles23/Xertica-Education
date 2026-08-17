@@ -12,7 +12,10 @@ from .interface import RouteStructurerInterface
 from .normalize import to_route_modules
 from prompts.route_structurer import SYSTEM_PROMPT as _SYSTEM
 
-_MAX_DOC_CHARS = 12000  # cota por documento para no reventar el contexto
+# Cota por documento. Holgada (ADR-0024) porque el modelo tiene 1M de contexto: truncar
+# a 12k cortaba estructuras largas justo por el final.
+_MAX_DOC_CHARS = 40000
+_TIMEOUT_SECONDS = 90.0  # un brief con estructura completa da que razonar
 
 
 class LLMRouteStructurer(RouteStructurerInterface):
@@ -23,7 +26,10 @@ class LLMRouteStructurer(RouteStructurerInterface):
         self, brief: str, customer_context: dict, parsed_docs: list[str]
     ) -> dict:
         prompt = self._build_prompt(brief, customer_context, parsed_docs)
-        raw = await self._llm.chat_completion(role="route_structurer", prompt=prompt)
+        raw = await self._llm.chat_completion(
+            role="route_structurer", prompt=prompt,
+            strict=True, timeout=_TIMEOUT_SECONDS,   # fallo honesto · ADR-0024
+        )
         data = _extract_json(raw)
         modules = data.get("modules") if isinstance(data, dict) else None
         if not isinstance(modules, list):
@@ -38,16 +44,17 @@ class LLMRouteStructurer(RouteStructurerInterface):
         area = ctx.get("area") or "General"
         industry = ctx.get("industry") or "no especificada"
         audience = ctx.get("audienceLevel") or "audiencia general"
+        company = ctx.get("companyName") or "no especificada"
         if parsed_docs:
             material = "\n\n---\n\n".join(d[:_MAX_DOC_CHARS] for d in parsed_docs)
-            material_block = f"MATERIAL DEL CLIENTE (fuente principal):\n{material}"
+            material_block = f"MATERIAL DE APOYO:\n{material}"
         else:
-            # sin material → brief-driven (ADR-0014 · decisión 4)
-            material_block = "MATERIAL DEL CLIENTE: (no se subió material; usa el brief como base)."
+            material_block = "MATERIAL DE APOYO: (no se subió material)."
         return (
             f"{_SYSTEM}\n\n"
-            f"CONTEXTO: área={area} · industria={industry} · audiencia={audience}.\n"
-            f"BRIEF/OBJETIVO: {brief or '(sin brief)'}\n\n"
+            f"CONTEXTO: empresa={company} · área={area} · industria={industry} · "
+            f"audiencia={audience}.\n\n"
+            f"BRIEF DEL USUARIO:\n{brief or '(sin brief)'}\n\n"
             f"{material_block}"
         )
 

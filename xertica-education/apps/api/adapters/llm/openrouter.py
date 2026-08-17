@@ -10,7 +10,17 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
         self.is_placeholder = not self.api_key or "placeholder" in self.api_key
 
     async def chat_completion(self, role: str, prompt: str, **kwargs) -> str:
+        # `strict` (ADR-0024): en vez de degradar a mock ante un fallo, propaga el motivo
+        # real para que el Job lo muestre. Los roles que no lo piden conservan la
+        # tolerancia histórica. `timeout` se extrae aquí porque no es campo del body.
+        strict = bool(kwargs.pop("strict", False))
+        timeout = float(kwargs.pop("timeout", 30.0))
+
         if self.is_placeholder:
+            if strict:
+                raise RuntimeError(
+                    f"OPENROUTER_KEY no configurada: el rol '{role}' requiere un LLM real."
+                )
             return self._get_mock_response(role, prompt)
 
         # Map role to commercial model name
@@ -31,8 +41,9 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
             **kwargs
         }
 
+        reason = "motivo desconocido"
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers=headers,
@@ -50,12 +61,17 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
                     # Never return None: callers do `.strip()` on this value.
                     if content:
                         return content
+                    reason = f"respuesta vacía de {openrouter_model}"
                     print(f"OpenRouter returned empty content: {data}")
                 else:
+                    reason = f"OpenRouter {response.status_code}: {response.text[:300]}"
                     print(f"OpenRouter API error (status {response.status_code}): {response.text}")
         except Exception as e:
+            reason = f"{type(e).__name__}: {e}"
             print(f"OpenRouter request failed: {e}")
 
+        if strict:
+            raise RuntimeError(f"Fallo del LLM en el rol '{role}' — {reason}")
         # Fallback to mock on failure
         return self._get_mock_response(role, prompt)
 
@@ -64,6 +80,7 @@ class OpenRouterLLMAdapter(BaseLLMAdapter):
             "gpt-5-nano": "openai/gpt-5-nano",
             "gemini-2.5-pro": "google/gemini-2.5-pro",
             "gemini-2.5-flash": "google/gemini-2.5-flash",
+            "gemini-3.6-flash": "google/gemini-3.6-flash",
             "claude-sonnet": "anthropic/claude-3.5-sonnet",
             "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
             "gpt-4o-mini": "openai/gpt-4o-mini",

@@ -1,16 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
-  Building2,
-  CheckCircle2,
+  FileText,
   FolderOpen,
-  Globe2,
+  ListTree,
   MonitorPlay,
   Sparkles,
-  Users,
+  Upload,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,29 +18,30 @@ import { Card } from '@/shared/ui/card'
 import { Input } from '@/shared/ui/input'
 import { Label } from '@/shared/ui/label'
 import { Switch } from '@/shared/ui/switch'
-import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs'
 import { Textarea } from '@/shared/ui/textarea'
 import { Eyebrow, PageDescription, PageTitle } from '@/shared/components/PageHeader'
-import { UploadStructureDialog } from '@/modules/new-route/components/UploadStructureDialog'
 import { useStore } from '@/shared/store'
 import { api } from '@/shared/lib/api'
 import { pickGoogleDriveFile } from '@/shared/lib/googleDrive'
 import type { GoogleDriveSelection } from '@/shared/lib/googleDrive'
-import type { CustomerArea, CustomerContext, GoogleWorkspaceUsage } from '@/shared/lib/types'
+import type { CustomerContext } from '@/shared/lib/types'
 
+/** Sugerencias de área. El campo es texto libre (ADR-0024): la ruta puede ser de cualquier ámbito. */
+const AREA_SUGGESTIONS = ['RRHH', 'Finanzas', 'TI', 'Educación', 'Salud', 'Ventas', 'Operaciones', 'Legal']
 
-const AREA_OPTIONS: readonly CustomerArea[] = ['RRHH', 'Finanzas', 'TI', 'Educacion', 'Salud', 'General']
-const WORKSPACE_OPTIONS: readonly { value: GoogleWorkspaceUsage; label: string }[] = [
-  { value: 'unknown', label: 'Inferir' },
-  { value: 'yes', label: 'Usa Workspace' },
-  { value: 'no', label: 'No confirmado' },
-]
+/** Líneas que delatan un temario ya redactado: headers, "Módulo 3", "Lección 2.1", "1. …". */
+const STRUCTURE_LINE = /^\s*(#{1,4}\s|m[óo]dulo\s+\d|lecci[óo]n\s+\d|unidad\s+\d|tema\s+\d|\d+[.)]\s)/i
+/** Solo lo que se lee como un módulo/unidad de primer nivel, para estimar el tamaño. */
+const MODULE_LINE = /^\s*(#{1,2}\s|m[óo]dulo\s+\d|unidad\s+\d)/i
 
-const CUSTOMER_STEPS = [
-  { icon: Globe2, label: 'Cliente' },
-  { icon: Building2, label: 'Contexto' },
-  { icon: Users, label: 'Audiencia' },
-] as const
+/** Heurística local (sin LLM): ¿el usuario pegó una estructura o solo un objetivo? */
+export const detectStructureHint = (text: string): { hasStructure: boolean; modules: number } => {
+  const lines = text.split('\n')
+  const structured = lines.filter((line) => STRUCTURE_LINE.test(line))
+  if (structured.length < 3) return { hasStructure: false, modules: 0 }
+  const modules = lines.filter((line) => MODULE_LINE.test(line)).length
+  return { hasStructure: true, modules: modules || structured.length }
+}
 
 const emptyToUndefined = (value: string) => {
   const trimmed = value.trim()
@@ -61,56 +61,12 @@ const fileMetaOf = (file: GoogleDriveSelection | File) =>
         sizeKb: Math.max(1, Math.round(file.size / 1024)),
       }
 
-const inferFromText = (text: string): Partial<CustomerContext> => {
-  const normalized = text.toLowerCase()
-
-  if (/(hospital|clinica|clinica|salud|paciente|medico|health)/.test(normalized)) {
-    return { industry: 'Salud', area: 'Salud' }
-  }
-  if (/(universidad|colegio|escuela|estudiante|docente|educacion|education)/.test(normalized)) {
-    return { industry: 'Educacion', area: 'Educacion' }
-  }
-  if (/(banco|finanza|financiero|contabilidad|riesgo|fintech)/.test(normalized)) {
-    return { industry: 'Servicios financieros', area: 'Finanzas' }
-  }
-  if (/(talento|rrhh|recursos humanos|people|onboarding)/.test(normalized)) {
-    return { industry: 'Servicios corporativos', area: 'RRHH' }
-  }
-  if (/(cloud|datos|seguridad|soporte|desarrollo|it|ti)/.test(normalized)) {
-    return { industry: 'Tecnologia', area: 'TI' }
-  }
-
-  return {}
-}
-
-const inferFromUrl = (url?: string): Partial<CustomerContext> => {
-  if (!url) return {}
-  const normalized = url.toLowerCase()
-  const inferred = inferFromText(normalized)
-
-  if (/(edu|school|university|colegio)/.test(normalized)) {
-    return { industry: 'Educacion', area: 'Educacion' }
-  }
-  if (/(health|salud|hospital|clinic)/.test(normalized)) {
-    return { industry: 'Salud', area: 'Salud' }
-  }
-  if (/(bank|fin|seguros|insurance)/.test(normalized)) {
-    return { industry: 'Servicios financieros', area: 'Finanzas' }
-  }
-
-  return inferred
-}
-
 const compactCustomerContext = (context: CustomerContext): CustomerContext => {
   const compacted: CustomerContext = {
-    url: emptyToUndefined(context.url ?? ''),
     industry: emptyToUndefined(context.industry ?? ''),
-    area: context.area,
-    usesGoogleWorkspace: context.usesGoogleWorkspace,
+    area: emptyToUndefined(context.area ?? ''),
     audienceLevel: emptyToUndefined(context.audienceLevel ?? ''),
     baseMaterialFile: context.baseMaterialFile,
-    companyProposalFile: context.companyProposalFile,
-    inferredFrom: context.inferredFrom?.length ? context.inferredFrom : undefined,
     companyName: emptyToUndefined(context.companyName ?? ''),
   }
 
@@ -125,7 +81,6 @@ export default function NuevaRuta() {
     briefText, setBriefText,
     deepResearch, setDeepResearch,
     customerContext, setCustomerContext,
-    uploadedStructure, setUploadedStructure,
     fetchRoutes, setActiveRouteId,
     setStructureJobId, setPendingDeepResearch,
     setProposalLoadedRouteId, setProposal,
@@ -139,66 +94,27 @@ export default function NuevaRuta() {
     setProposalLoadedRouteId(null)
     setProposal([])
   }, [setActiveRouteId, setStructureJobId, setPendingDeepResearch, setProposalLoadedRouteId, setProposal])
-  const [dialogOpen, setDialogOpen] = useState(false)
+
   // ADR-0013: múltiples documentos por ruta; todos se ingestan por default (sin checkbox).
+  // Una sola zona de material (ADR-0024): estructura, propuesta y referencias van al mismo sitio.
   const [driveFiles, setDriveFiles] = useState<GoogleDriveSelection[]>([])
   const [localFiles, setLocalFiles] = useState<File[]>([])
-  const [companyProposalDriveFiles, setCompanyProposalDriveFiles] = useState<GoogleDriveSelection[]>([])
-  const [companyProposalLocalFiles, setCompanyProposalLocalFiles] = useState<File[]>([])
   const [generating, setGenerating] = useState(false)
-  const [contextOpen, setContextOpen] = useState(true)
-  const [contextStep, setContextStep] = useState(0)
+  const [contextOpen, setContextOpen] = useState(false)
   const materialFileInputRef = useRef<HTMLInputElement | null>(null)
-  const companyProposalFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const structureHint = useMemo(() => detectStructureHint(briefText), [briefText])
+  const hasMaterial = driveFiles.length > 0 || localFiles.length > 0
 
   const updateCustomerContext = (patch: CustomerContext) => {
     setCustomerContext({ ...customerContext, ...patch })
   }
 
-  const inferCustomerContext = () => {
-    const fromUrl = inferFromUrl(customerContext.url)
-    const fromBrief = inferFromText(briefText)
-    const fromMaterial = inferFromText(customerContext.baseMaterialFile?.name ?? '')
-    const inferredFrom: ('url' | 'brief' | 'material')[] = []
-
-    if (Object.keys(fromUrl).length) inferredFrom.push('url')
-    if (Object.keys(fromBrief).length) inferredFrom.push('brief')
-    if (Object.keys(fromMaterial).length) inferredFrom.push('material')
-
-    const next = {
-      ...customerContext,
-      ...fromBrief,
-      ...fromMaterial,
-      ...fromUrl,
-      usesGoogleWorkspace: customerContext.usesGoogleWorkspace ?? 'unknown',
-      inferredFrom: inferredFrom.length ? inferredFrom : customerContext.inferredFrom,
-    }
-
-    setCustomerContext(next)
-    toast.success('Contexto inferido', {
-      description: next.industry
-        ? `Industria sugerida: ${next.industry}${next.area ? ` · Area: ${next.area}` : ''}`
-        : 'No hay suficientes pistas todavia; puedes dejarlo opcional.',
-    })
-  }
-
-  // Metadata del primer doc → customerContext.baseMaterialFile (compat: inferencia +
-  // "video propio" en RouteDetail). El resto vive en la lista `driveFiles` / `localFiles`.
+  // Metadata del primer doc → customerContext.baseMaterialFile (lo usa "video propio"
+  // en RouteDetail). El resto vive en las listas `driveFiles` / `localFiles`.
   const syncPrimaryMeta = (driveSelections: GoogleDriveSelection[], localSelections: File[]) => {
     const first = driveSelections[0] ?? localSelections[0]
-    updateCustomerContext({
-      baseMaterialFile: first ? fileMetaOf(first) : undefined,
-      inferredFrom: first
-        ? Array.from(new Set([...(customerContext.inferredFrom ?? []), 'material']))
-        : customerContext.inferredFrom,
-    })
-  }
-
-  const syncCompanyProposalMeta = (driveSelections: GoogleDriveSelection[], localSelections: File[]) => {
-    const first = driveSelections[0] ?? localSelections[0]
-    updateCustomerContext({
-      companyProposalFile: first ? fileMetaOf(first) : undefined,
-    })
+    updateCustomerContext({ baseMaterialFile: first ? fileMetaOf(first) : undefined })
   }
 
   const attachDriveMaterial = async () => {
@@ -210,9 +126,7 @@ export default function NuevaRuta() {
         : [...driveFiles, selected]
       setDriveFiles(next)
       syncPrimaryMeta(next, localFiles)
-      toast.success('Archivo de Drive seleccionado', {
-        description: selected.name,
-      })
+      toast.success('Archivo de Drive seleccionado', { description: selected.name })
     } catch (err) {
       toast.error('No se pudo abrir Google Drive', {
         description: err instanceof Error ? err.message : 'Error desconocido',
@@ -234,71 +148,20 @@ export default function NuevaRuta() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    const next = localFiles.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)
+    const next = localFiles.some(
+      (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
+    )
       ? localFiles
       : [...localFiles, file]
     setLocalFiles(next)
     syncPrimaryMeta(driveFiles, next)
-    toast.success('Archivo local seleccionado', {
-      description: file.name,
-    })
+    toast.success('Archivo local seleccionado', { description: file.name })
   }
 
   const removeLocalMaterial = (index: number) => {
     const next = localFiles.filter((_, i) => i !== index)
     setLocalFiles(next)
     syncPrimaryMeta(driveFiles, next)
-  }
-
-  const attachDriveCompanyProposal = async () => {
-    try {
-      const selected = await pickGoogleDriveFile()
-      if (!selected) return
-      const next = companyProposalDriveFiles.some((file) => file?.file_id === selected.file_id)
-        ? companyProposalDriveFiles
-        : [...companyProposalDriveFiles, selected]
-      setCompanyProposalDriveFiles(next)
-      syncCompanyProposalMeta(next, companyProposalLocalFiles)
-      toast.success('Propuesta de Drive seleccionada', {
-        description: selected.name,
-      })
-    } catch (err) {
-      toast.error('No se pudo abrir Google Drive', {
-        description: err instanceof Error ? err.message : 'Error desconocido',
-      })
-    }
-  }
-
-  const removeDriveCompanyProposal = (index: number) => {
-    const next = companyProposalDriveFiles.filter((_, i) => i !== index)
-    setCompanyProposalDriveFiles(next)
-    syncCompanyProposalMeta(next, companyProposalLocalFiles)
-  }
-
-  const attachLocalCompanyProposal = () => {
-    companyProposalFileInputRef.current?.click()
-  }
-
-  const onLocalCompanyProposalSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    const next = companyProposalLocalFiles.some(
-      (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
-    )
-      ? companyProposalLocalFiles
-      : [...companyProposalLocalFiles, file]
-    setCompanyProposalLocalFiles(next)
-    syncCompanyProposalMeta(companyProposalDriveFiles, next)
-    toast.success('Propuesta local seleccionada', {
-      description: file.name,
-    })
-  }
-
-  const removeLocalCompanyProposal = (index: number) => {
-    const next = companyProposalLocalFiles.filter((_, i) => i !== index)
-    setCompanyProposalLocalFiles(next)
-    syncCompanyProposalMeta(companyProposalDriveFiles, next)
   }
 
   const propose = async () => {
@@ -325,74 +188,8 @@ export default function NuevaRuta() {
 
       setActiveRouteId(newPath.id)
 
-      if (uploadedStructure?.kind === 'drive' && uploadedStructure.driveFile) {
-        try {
-          const uploaded = await api.uploadDriveDocument(newPath.id, uploadedStructure.driveFile)
-          toast.loading('Estructura de Drive importada · se añadirá a la base de conocimiento', {
-            id: toastId,
-            description: uploaded.filename,
-          })
-        } catch (uploadErr) {
-          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${uploadedStructure.name}`, {
-            id: toastId,
-            description: message,
-          })
-          throw new Error(`No se pudo importar ${uploadedStructure.name}: ${message}`)
-        }
-      } else if (uploadedStructure?.kind === 'local' && uploadedStructure.localFile) {
-        try {
-          const uploaded = await api.uploadDocument(newPath.id, uploadedStructure.localFile)
-          toast.loading('Archivo local importado · se añadirá a la base de conocimiento', {
-            id: toastId,
-            description: uploaded.filename,
-          })
-        } catch (uploadErr) {
-          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${uploadedStructure.name}`, {
-            id: toastId,
-            description: message,
-          })
-          throw new Error(`No se pudo importar ${uploadedStructure.name}: ${message}`)
-        }
-      }
-
-      // Vía 2 (ADR-0013): importa cada documento del cliente a la ruta recién creada.
+      // Vía 2 (ADR-0013): importa cada documento de apoyo a la ruta recién creada.
       // Todos se ingestan por default (contexto de estructura + fuente de la KB).
-      for (const file of companyProposalDriveFiles) {
-        try {
-          const uploaded = await api.uploadDriveDocument(newPath.id, file)
-          toast.loading('Propuesta de Drive importada · se añadirá a la base de conocimiento', {
-            id: toastId,
-            description: uploaded.filename,
-          })
-        } catch (uploadErr) {
-          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${file.name}`, {
-            id: toastId,
-            description: message,
-          })
-          throw new Error(`No se pudo importar ${file.name}: ${message}`)
-        }
-      }
-
-      for (const file of companyProposalLocalFiles) {
-        try {
-          const uploaded = await api.uploadDocument(newPath.id, file)
-          toast.loading('Propuesta local importada · se añadirá a la base de conocimiento', {
-            id: toastId,
-            description: uploaded.filename,
-          })
-        } catch (uploadErr) {
-          const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${file.name}`, {
-            id: toastId,
-            description: message,
-          })
-          throw new Error(`No se pudo importar ${file.name}: ${message}`)
-        }
-      }
-
       for (const file of driveFiles) {
         try {
           const uploaded = await api.uploadDriveDocument(newPath.id, file)
@@ -402,10 +199,7 @@ export default function NuevaRuta() {
           })
         } catch (uploadErr) {
           const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${file.name}`, {
-            id: toastId,
-            description: message,
-          })
+          toast.error(`No se pudo importar ${file.name}`, { id: toastId, description: message })
           throw new Error(`No se pudo importar ${file.name}: ${message}`)
         }
       }
@@ -419,10 +213,7 @@ export default function NuevaRuta() {
           })
         } catch (uploadErr) {
           const message = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido'
-          toast.error(`No se pudo importar ${file.name}`, {
-            id: toastId,
-            description: message,
-          })
+          toast.error(`No se pudo importar ${file.name}`, { id: toastId, description: message })
           throw new Error(`No se pudo importar ${file.name}: ${message}`)
         }
       }
@@ -431,13 +222,16 @@ export default function NuevaRuta() {
         id: toastId,
         description: 'Preparando Job en background...',
       })
-      
+
       const genResult = await api.request<{ job_id: string }>(
         `/learning-paths/${newPath.id}/generate-structure`,
         {
           method: 'POST',
-          body: JSON.stringify({ customerContext: routeCustomerContext }),
-        }
+          body: JSON.stringify({
+            brief: briefText,
+            customerContext: routeCustomerContext,
+          }),
+        },
       )
 
       setStructureJobId(genResult.job_id)
@@ -461,17 +255,139 @@ export default function NuevaRuta() {
     }
   }
 
+  const contextChips = [
+    customerContext.companyName,
+    customerContext.industry,
+    customerContext.area,
+    customerContext.audienceLevel,
+  ].filter(Boolean) as string[]
+
   return (
     <div className="mx-auto max-w-[760px]">
       <Eyebrow tone="primary">Gate 0 · Crear ruta · Aprobación humana</Eyebrow>
       <PageTitle>Nueva ruta de aprendizaje</PageTitle>
       <PageDescription className="mb-7">
-        Aporta una idea o sube tu material. La IA propone la estructura — módulos y componentes —
-        y tú la curas antes de crear la ruta.
+        Describe tu objetivo o pega la estructura que ya tengas. La IA propone los módulos y
+        componentes, y tú los curas antes de crear la ruta.
       </PageDescription>
 
-      <Card className="gap-5 p-6">
-        {/* Contexto de la compañía */}
+      <Card className="gap-6 p-6">
+        {/* Hero · brief unificado (objetivo y/o estructura · ADR-0024) */}
+        <div className="flex flex-col gap-2.5">
+          <Label htmlFor="brief" className="text-[14px]">
+            ¿Qué quieres enseñar?
+          </Label>
+          <Textarea
+            id="brief"
+            rows={10}
+            value={briefText}
+            className="resize-y text-[14px] leading-relaxed"
+            placeholder={
+              'Escribe el objetivo de aprendizaje, o pega directamente tu estructura de curso.\n\n' +
+              'Por ejemplo:\n' +
+              '· "Quiero enseñar atención al cliente con empatía a recepcionistas de veterinarias."\n' +
+              '· O tu temario completo: Módulo 1 · … / Lección 1.1 · …\n\n' +
+              'Si pegas una estructura, la respetamos tal cual; si no, te proponemos una.'
+            }
+            onChange={(e) => setBriefText(e.target.value)}
+          />
+          {structureHint.hasStructure && (
+            <div className="flex items-center gap-2 rounded-lg border-[1.5px] border-success/30 bg-success/8 px-3 py-2">
+              <ListTree className="size-4 shrink-0 text-success" />
+              <span className="text-[12.5px] text-ink">
+                Estructura detectada
+                {structureHint.modules > 0 && ` · ~${structureHint.modules} módulos`} — la
+                respetaremos como esqueleto de la ruta.
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Material de apoyo · una sola zona (ADR-0024) */}
+        <div className="flex flex-col gap-2">
+          <Label>Material de apoyo (opcional)</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={attachDriveMaterial}
+              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+              <div className="text-[13px]">Seleccionar desde Google Drive</div>
+              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                DOCX · PDF · PPTX · XLSX · TXT
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={attachLocalMaterial}
+              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              <Upload className="mx-auto mb-1.5 size-5 text-muted-foreground" />
+              <div className="text-[13px]">Subir desde tu computador</div>
+              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                DOCX · PDF · PPTX · XLSX · TXT
+              </div>
+            </button>
+          </div>
+          {hasMaterial ? (
+            <div className="flex flex-col gap-2">
+              {driveFiles.map((file, index) => (
+                <div
+                  key={file.file_id}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FileText className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      Google Drive · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => removeDriveMaterial(index)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {localFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.size}-${file.lastModified}`}
+                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
+                >
+                  <FileText className="size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{file.name}</div>
+                    <div className="font-mono text-[10.5px] text-muted-foreground">
+                      Computador · contexto + fuente de la KB
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => removeLocalMaterial(index)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              Temario, syllabus, presentaciones o cualquier documento base: informan la estructura
+              y alimentan la base de conocimiento.
+            </span>
+          )}
+        </div>
+
+        {/* Contexto de la compañía · 4 campos, colapsable (ADR-0024) */}
         <div className="rounded-xl border-[1.5px] border-input bg-background/70 p-4">
           <button
             type="button"
@@ -486,287 +402,73 @@ export default function NuevaRuta() {
                 Contexto de la compañía
               </span>
               <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-                Opcional. Personaliza ejemplos, labs y fuentes desde URL, brief o material base.
+                Opcional. Personaliza ejemplos, labs y el tono de la ruta.
               </span>
             </span>
+            {!contextOpen && contextChips.length > 0 && (
+              <span className="hidden max-w-[45%] truncate font-mono text-[10.5px] text-primary sm:block">
+                {contextChips.join(' · ')}
+              </span>
+            )}
             <span className="font-mono text-[10.5px] text-muted-foreground">
               {contextOpen ? 'ocultar' : 'abrir'}
             </span>
           </button>
 
           {contextOpen && (
-            <div className="mt-4 space-y-4">
-              <Tabs
-                value={`step-${contextStep}`}
-                onValueChange={(value) => setContextStep(Number(value.replace('step-', '')))}
-              >
-                <TabsList className="grid w-full grid-cols-3 rounded-lg border-b-0 bg-secondary/60 p-1">
-                  {CUSTOMER_STEPS.map((step, index) => {
-                    const Icon = step.icon
-                    return (
-                      <TabsTrigger
-                        key={step.label}
-                        value={`step-${index}`}
-                        className="h-8 rounded-md border-0 px-2 py-0 text-[12px] data-[state=active]:bg-card data-[state=active]:shadow-xs"
-                      >
-                        <Icon className="size-3.5" />
-                        <span className="truncate">{step.label}</span>
-                      </TabsTrigger>
-                    )
-                  })}
-                </TabsList>
-              </Tabs>
-
-              {contextStep === 0 && (
-                <div className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-[1.25fr_0.75fr]">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="customer-url">URL del cliente</Label>
-                      <Input
-                        id="customer-url"
-                        value={customerContext.url ?? ''}
-                        placeholder="https://cliente.com"
-                        onChange={(e) => updateCustomerContext({ url: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="customer-industry">Industria</Label>
-                      <Input
-                        id="customer-industry"
-                        value={customerContext.industry ?? ''}
-                        placeholder="Inferida o manual"
-                        onChange={(e) => updateCustomerContext({ industry: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="customer-company">Empresa / Compañía</Label>
-                    <Input
-                      id="customer-company"
-                      value={customerContext.companyName ?? ''}
-                      placeholder="Ej. Google, Meta, Certica (aplica branding personalizado)"
-                      onChange={(e) => updateCustomerContext({ companyName: e.target.value })}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {contextStep === 1 && (
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-2">
-                    <Label>Área</Label>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {AREA_OPTIONS.map((area) => (
-                        <button
-                          type="button"
-                          key={area}
-                          onClick={() => updateCustomerContext({ area })}
-                          className={`h-9 rounded-lg border-[1.5px] px-3 text-[12.5px] font-semibold transition-colors ${
-                            customerContext.area === area
-                              ? 'border-primary bg-primary/8 text-primary'
-                              : 'border-input bg-card text-foreground hover:border-ink'
-                          }`}
-                        >
-                          {area === 'Educacion' ? 'Educación' : area}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label>Google Workspace</Label>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      {WORKSPACE_OPTIONS.map((option) => (
-                        <button
-                          type="button"
-                          key={option.value}
-                          onClick={() => updateCustomerContext({ usesGoogleWorkspace: option.value })}
-                          className={`h-9 rounded-lg border-[1.5px] px-3 text-[12.5px] font-semibold transition-colors ${
-                            (customerContext.usesGoogleWorkspace ?? 'unknown') === option.value
-                              ? 'border-primary bg-primary/8 text-primary'
-                              : 'border-input bg-card text-foreground hover:border-ink'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {contextStep === 2 && (
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="audience-level">Audiencia / nivel</Label>
-                    <Input
-                      id="audience-level"
-                      value={customerContext.audienceLevel ?? ''}
-                      placeholder="Ej. líderes no técnicos, analistas, docentes"
-                      onChange={(e) => updateCustomerContext({ audienceLevel: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label>Propuesta de la compañía</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        onClick={attachDriveCompanyProposal}
-                        className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                      >
-                        <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-                        <div className="text-[13px]">Seleccionar desde Google Drive</div>
-                        <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                          DOCX · PDF · PPTX · XLSX · TXT
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={attachLocalCompanyProposal}
-                        className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-4 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                      >
-                        <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-                        <div className="text-[13px]">Subir desde tu computador</div>
-                        <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                          DOCX · PDF · PPTX · XLSX · TXT
-                        </div>
-                      </button>
-                    </div>
-                    {companyProposalDriveFiles.length > 0 || companyProposalLocalFiles.length > 0 ? (
-                      <div className="flex flex-col gap-2">
-                        {companyProposalDriveFiles.map((file, index) => (
-                          <div
-                            key={file.file_id}
-                            className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
-                          >
-                            <FolderOpen className="size-4 shrink-0 text-primary" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13px] text-ink">{file.name}</div>
-                              <div className="font-mono text-[10.5px] text-muted-foreground">
-                                Google Drive · propuesta de compañía
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-7"
-                              onClick={() => removeDriveCompanyProposal(index)}
-                            >
-                              <X className="size-3.5" />
-                            </Button>
-                          </div>
-                        ))}
-                        {companyProposalLocalFiles.map((file, index) => (
-                          <div
-                            key={`${file.name}-${file.size}-${file.lastModified}`}
-                            className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
-                          >
-                            <FolderOpen className="size-4 shrink-0 text-primary" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13px] text-ink">{file.name}</div>
-                              <div className="font-mono text-[10.5px] text-muted-foreground">
-                                Computador · propuesta de compañía
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-7"
-                              onClick={() => removeLocalCompanyProposal(index)}
-                            >
-                              <X className="size-3.5" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        Adjunta la propuesta comercial o briefing de la compañía para perfilar mejor la audiencia.
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2 border-t-[1.5px] border-border pt-3">
-                <Button type="button" variant="outline-primary" size="sm" onClick={inferCustomerContext}>
-                  <Sparkles /> Inferir contexto
-                </Button>
-                {([
-                  customerContext.companyName ? `Empresa: ${customerContext.companyName}` : undefined,
-                  customerContext.industry,
-                  customerContext.area === 'Educacion' ? 'Educación' : customerContext.area,
-                  customerContext.usesGoogleWorkspace === 'yes' ? 'Google Workspace' : undefined,
-                  customerContext.audienceLevel,
-                  customerContext.companyProposalFile ? `Propuesta: ${customerContext.companyProposalFile.name}` : undefined,
-                ].filter(Boolean) as string[]).map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-md border border-primary/25 bg-primary/6 px-2 py-1 font-mono text-[10.5px] text-primary"
-                  >
-                    {item}
-                  </span>
-                ))}
-                {!customerContext.industry && !customerContext.area && !customerContext.audienceLevel && (
-                  <span className="font-mono text-[10.5px] text-muted-foreground">
-                    La ruta puede generarse sin completar este bloque.
-                  </span>
-                )}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="customer-company">Empresa</Label>
+                <Input
+                  id="customer-company"
+                  value={customerContext.companyName ?? ''}
+                  placeholder="Nombre del cliente"
+                  onChange={(e) => updateCustomerContext({ companyName: e.target.value })}
+                />
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Brief */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="brief">Describe el objetivo de aprendizaje</Label>
-          <Textarea
-            id="brief"
-            rows={4}
-            value={briefText}
-            placeholder={'Objetivo de aprendizaje: ¿qué quieres enseñar y por qué?\n\nIncluye, si lo tienes: nombre de la ruta, herramientas o habilidades a enseñar, puntos importantes a tratar y casos de uso.'}
-            onChange={(e) => setBriefText(e.target.value)}
-          />
-        </div>
-
-        {/* Upload estructura */}
-        <div className="flex flex-col gap-2">
-          <Label>Estructura de la ruta de aprendizaje</Label>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline-primary" onClick={() => setDialogOpen(true)}>
-              <FolderOpen /> Seleccionar estructura
-            </Button>
-            {!uploadedStructure && (
-              <span className="font-mono text-[11px] text-muted-foreground">
-                Selecciona un archivo de Drive o pega el texto de tu estructura.
-              </span>
-            )}
-          </div>
-          {uploadedStructure && (
-            <div className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5">
-              {uploadedStructure.kind === 'drive' ? (
-                <FolderOpen className="size-4 shrink-0 text-primary" />
-              ) : (
-                <CheckCircle2 className="size-4 shrink-0 text-success" />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] text-ink">{uploadedStructure.name}</div>
-                <div className="font-mono text-[10.5px] text-muted-foreground">
-                  {uploadedStructure.kind === 'drive'
-                    ? 'Google Drive · estructura propuesta'
-                    : 'Texto pegado · estructura propuesta'}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="customer-industry">Industria</Label>
+                <Input
+                  id="customer-industry"
+                  value={customerContext.industry ?? ''}
+                  placeholder="Ej. retail, minería, salud"
+                  onChange={(e) => updateCustomerContext({ industry: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="audience-level">Audiencia / nivel</Label>
+                <Input
+                  id="audience-level"
+                  value={customerContext.audienceLevel ?? ''}
+                  placeholder="Ej. líderes no técnicos, analistas"
+                  onChange={(e) => updateCustomerContext({ audienceLevel: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="customer-area">Área</Label>
+                <Input
+                  id="customer-area"
+                  value={customerContext.area ?? ''}
+                  placeholder="Cualquier área"
+                  onChange={(e) => updateCustomerContext({ area: e.target.value })}
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {AREA_SUGGESTIONS.map((area) => (
+                    <button
+                      type="button"
+                      key={area}
+                      onClick={() => updateCustomerContext({ area })}
+                      className={`h-7 rounded-md border px-2 text-[11.5px] font-medium transition-colors ${
+                        customerContext.area === area
+                          ? 'border-primary bg-primary/8 text-primary'
+                          : 'border-input bg-card text-muted-foreground hover:border-ink hover:text-ink'
+                      }`}
+                    >
+                      {area}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => setUploadedStructure(null)}
-              >
-                <X className="size-3.5" />
-              </Button>
             </div>
           )}
         </div>
@@ -792,123 +494,27 @@ export default function NuevaRuta() {
           </span>
           <span className="flex-1">
             <span className="block text-[13.5px] font-semibold text-ink">
-              Agente de deep research · herramientas y fuentes verificadas
+              Agente de deep research · fuentes verificadas
             </span>
             <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-              Detecta herramientas como Nano Banana, Veo, Gemini o Canva y propone videos,
-              documentación y referencias desde fuentes permitidas por vendor.
+              Detecta las herramientas que menciones y propone videos, documentación y referencias
+              desde sus fuentes oficiales.
             </span>
           </span>
           <Switch checked={deepResearch} className="pointer-events-none" tabIndex={-1} />
         </div>
 
-        {/* Material de referencia (Vía 2 · ADR-0013) — múltiples docs; todos a la KB por default */}
-        <div className="flex flex-col gap-2">
-          <Label>O agrega material de referencia</Label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={attachDriveMaterial}
-              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-              <div className="text-[13px]">Seleccionar desde Google Drive</div>
-              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                DOCX · PDF · PPTX · XLSX · TXT
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={attachLocalMaterial}
-              className="w-full cursor-pointer rounded-xl border-[1.5px] border-dashed border-input bg-background/60 p-5 text-center transition-colors outline-none hover:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            >
-              <FolderOpen className="mx-auto mb-1.5 size-5 text-muted-foreground" />
-              <div className="text-[13px]">Subir desde tu computador</div>
-              <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                DOCX · PDF · PPTX · XLSX · TXT
-              </div>
-            </button>
-          </div>
-          {driveFiles.length > 0 || localFiles.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {driveFiles.map((file, index) => (
-                <div
-                  key={file.file_id}
-                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
-                >
-                  <FolderOpen className="size-4 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] text-ink">{file.name}</div>
-                    <div className="font-mono text-[10.5px] text-muted-foreground">
-                      Google Drive · contexto + fuente de la KB
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => removeDriveMaterial(index)}
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                </div>
-              ))}
-              {localFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className="flex items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5"
-                >
-                  <FolderOpen className="size-4 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] text-ink">{file.name}</div>
-                    <div className="font-mono text-[10.5px] text-muted-foreground">
-                      Computador · contexto + fuente de la KB
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => removeLocalMaterial(index)}
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {driveFiles.length === 0 && localFiles.length === 0 && (
-            <span className="font-mono text-[11px] text-muted-foreground">
-              Adjunta uno o varios archivos desde Drive o tu computador: informan la estructura y alimentan la base de conocimiento.
-            </span>
-          )}
-        </div>
-
-        <Button className="w-full" onClick={propose} disabled={generating}>
+        <Button className="w-full" onClick={propose} disabled={generating || !briefText.trim()}>
           {generating ? 'Generando estructura...' : 'Proponer estructura con IA'} <ArrowRight />
         </Button>
       </Card>
 
-      <UploadStructureDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSubmit={setUploadedStructure}
-      />
       <input
         ref={materialFileInputRef}
         type="file"
         accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt"
         className="hidden"
         onChange={onLocalMaterialSelected}
-      />
-      <input
-        ref={companyProposalFileInputRef}
-        type="file"
-        accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.txt"
-        className="hidden"
-        onChange={onLocalCompanyProposalSelected}
       />
     </div>
   )

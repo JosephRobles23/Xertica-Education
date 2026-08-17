@@ -29,8 +29,20 @@ _jobs_service = JobsService(_jobs_repository)
 
 _route_repository = SupabaseLearningPathRepository()
 _route_service = RouteService(_route_repository)
+def _build_research_llm():
+    """LLM del rol 'researcher' para la detección abierta de herramientas (ADR-0024).
+    Sin key real se deja en None y el service cae al matching determinista."""
+    key = settings.openrouter_key
+    if not key or "placeholder" in key:
+        return None
+    from adapters.llm.openrouter import OpenRouterLLMAdapter  # lazy
+
+    return OpenRouterLLMAdapter(api_key=key)
+
+
 _research_service = ResearchService(
-    documentation_client=get_documentation_client()
+    documentation_client=get_documentation_client(),
+    llm=_build_research_llm(),
 )
 _video_service = VideoService()
 

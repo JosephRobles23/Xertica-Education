@@ -72,10 +72,13 @@ class Settings(BaseSettings):
     # Roles funcionales → modelo comercial (ver doc de arquitectura §7).
     # Se puede sobreescribir con la env var MODEL_NAMES como JSON.
     model_names: Dict[str, str] = {
-        "route_structurer": "gpt-4o-mini",  # Estructura Propuesta (ADR-0014)
+        # Estructura Propuesta (ADR-0014, modelo revisado por ADR-0024): 1M de contexto
+        # para que una estructura larga pegada en el brief entre sin truncarse.
+        "route_structurer": "gemini-3.6-flash",
         "scriptwriter": "gpt-5-nano",
         "infographic_design": "claude-sonnet",
-        "researcher": "gpt-5-nano",
+        # Detección abierta de herramientas del deep research (ADR-0024).
+        "researcher": "gemini-3.6-flash",
     }
 
 
