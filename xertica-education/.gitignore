@@ -42,7 +42,7 @@ package-lock.json
 apps/api/public/
 apps/api/static/videos/*.mp4
 apps/api/scratch_test_image.png
-apps/api/static/bg_music.mp3
+# apps/api/static/bg_music.mp3 is now a committed, valid static fallback (see pixabay_music.py)
 
 # Artefactos generados en runtime (ADR-0022): viven en el bucket, no en el repo
 apps/api/static/infographics/

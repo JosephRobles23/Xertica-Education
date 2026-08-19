@@ -152,10 +152,44 @@ class RenderExecutor:
                 query="corporate educational ambient",
                 output_path=f"{temp_dir}/bg_music.mp3"
             )
-            if music_path:
+            if not music_path:
+                return
+            # Background music is decorative: an invalid asset must never abort the
+            # render (Remotion runs ffprobe on every audio track and fails hard on
+            # non-audio bytes). Validate here and drop the track if it is not audio.
+            if await asyncio.to_thread(self._is_valid_audio, music_path):
                 self.music_path = music_path
+            else:
+                print(f"Background music discarded (not valid audio): {music_path}")
         except Exception as e:
             print(f"Music stage failed: {e}")
+
+    @staticmethod
+    def _is_valid_audio(path: str) -> bool:
+        """Return True only if `path` is a file ffprobe can read as an audio stream.
+
+        Mirrors the check Remotion performs before rendering, so we fail soft here
+        instead of aborting the whole render job.
+        """
+        if not path or not os.path.exists(path):
+            return False
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "a:0",
+                    "-show_entries", "stream=codec_type",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode == 0 and "audio" in result.stdout
+        except Exception as e:
+            print(f"Audio validation failed for {path}: {e}")
+            return False
 
     async def _stage_transform(self, job_id: UUID, storyboard: dict):
         self.edit_decisions = await transform_storyboard_to_edit_decisions(

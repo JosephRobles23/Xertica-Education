@@ -54,6 +54,16 @@ class PixabayMusicAdapter:
                     dl_resp = await dl_client.get(audio_url)
                     dl_resp.raise_for_status()
 
+                # Guard against non-audio payloads (Pixabay's public API serves
+                # images/HTML, not music): saving those as .mp3 corrupts the render.
+                content_type = dl_resp.headers.get("content-type", "")
+                if not content_type.lower().startswith("audio/"):
+                    print(
+                        f"Pixabay returned non-audio content ({content_type or 'unknown'}); "
+                        "using static fallback"
+                    )
+                    return self._static_fallback()
+
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 if AIOFILES_AVAILABLE:
                     async with aiofiles.open(output_path, "wb") as f:

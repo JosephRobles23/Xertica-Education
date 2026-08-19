@@ -19,6 +19,18 @@ from services.video.transformer import transform_storyboard_to_edit_decisions
 from repositories.spine.materializer import SpineMaterializer
 
 
+class _StubTask:
+    """Hashable stand-in for asyncio.Task when create_task is patched in tests.
+
+    The render dispatch does ``self._render_tasks.add(task)`` and
+    ``task.add_done_callback(...)`` (service.py), so the mock's return value must
+    be a set-addable object exposing ``add_done_callback``.
+    """
+
+    def add_done_callback(self, _callback):
+        return None
+
+
 class _FakeTableQuery:
     def __init__(self, rows):
         self._rows = rows
@@ -374,6 +386,54 @@ class TestVideoAPI(unittest.TestCase):
 
         self.assertLess(tick_delay, 0.15)
 
+    def test_music_stage_discards_invalid_audio_asset(self):
+        """A corrupt/non-audio bg_music must not reach Remotion — render continues muted."""
+        class FakeVideoService:
+            async def _update_job(self, *_args, **_kwargs):
+                return None
+
+        executor = RenderExecutor(FakeVideoService())
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bad_music = os.path.join(temp_dir, "bg_music.mp3")
+            # Simulate what the Pixabay image API returns today: non-audio bytes saved as .mp3
+            with open(bad_music, "wb") as handle:
+                handle.write(b"\xff\xd8\xff\xe0JFIF not audio")
+
+            async def fake_download(*_args, **_kwargs):
+                return bad_music
+
+            with patch(
+                "services.video.executor.PixabayMusicAdapter.search_and_download",
+                side_effect=fake_download,
+            ), patch.object(RenderExecutor, "_is_valid_audio", return_value=False):
+                asyncio.run(executor._stage_music(uuid4(), temp_dir))
+
+        self.assertIsNone(executor.music_path)
+
+    def test_music_stage_keeps_valid_audio_asset(self):
+        """A valid audio asset is kept as the background music track."""
+        class FakeVideoService:
+            async def _update_job(self, *_args, **_kwargs):
+                return None
+
+        executor = RenderExecutor(FakeVideoService())
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            good_music = os.path.join(temp_dir, "bg_music.mp3")
+            open(good_music, "wb").close()
+
+            async def fake_download(*_args, **_kwargs):
+                return good_music
+
+            with patch(
+                "services.video.executor.PixabayMusicAdapter.search_and_download",
+                side_effect=fake_download,
+            ), patch.object(RenderExecutor, "_is_valid_audio", return_value=True):
+                asyncio.run(executor._stage_music(uuid4(), temp_dir))
+
+        self.assertEqual(executor.music_path, good_music)
+
     def test_generated_media_failures_fall_back_to_native_teaching_scenes(self):
         """Transient Veo/Imagen failures should not discard an otherwise valid video."""
         class FailingVeo:
@@ -514,7 +574,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         def close_captured_tasks():
             for coro in captured_tasks:
@@ -548,7 +608,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         async def fake_execute(executor, plan):
             storyboard = plan.storyboard.model_dump()
@@ -697,7 +757,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         async def fake_execute(self, plan):
             self.total_duration = 8.0
@@ -1062,7 +1122,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         async def fake_execute(self, plan):
             render_capture["storyboard"] = plan.storyboard.model_dump()
@@ -1123,7 +1183,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         async def fake_execute(self, plan):
             temp_dir = f"/tmp/render_{plan.job_id}"
@@ -1275,7 +1335,7 @@ class TestVideoAPI(unittest.TestCase):
 
         def capture_task(coro):
             captured_tasks.append(coro)
-            return None
+            return _StubTask()
 
         async def fake_execute(self, plan):
             render_capture["storyboard"] = plan.storyboard.model_dump()
@@ -1634,6 +1694,67 @@ class TestVideoAPI(unittest.TestCase):
 
         render_input = StoryboardRequest.model_validate(storyboard)
         self.assertEqual(len(render_input.scenes), 6)
+
+class PixabayMusicAdapterTest(unittest.TestCase):
+    def test_static_fallback_is_shipped_and_valid_mp3(self):
+        """A committed static bg_music.mp3 must exist so renders always have a music bed."""
+        from adapters.audio.pixabay_music import PixabayMusicAdapter
+
+        fallback = PixabayMusicAdapter()._static_fallback()
+        self.assertIsNotNone(fallback, "static bg_music.mp3 fallback must be shipped in the repo")
+        with open(fallback, "rb") as handle:
+            header = handle.read(2)
+        # MPEG audio frame sync (0xFFEx/0xFFFx) — not JPEG/HTML/JSON bytes.
+        self.assertEqual(header[0], 0xFF)
+        self.assertEqual(header[1] & 0xE0, 0xE0)
+
+    def test_non_audio_download_falls_back_to_static(self):
+        """If the remote returns an image/HTML (Pixabay image API), never save it as .mp3."""
+        import asyncio as _asyncio
+        from adapters.audio import pixabay_music
+        from adapters.audio.pixabay_music import PixabayMusicAdapter
+
+        class _Resp:
+            def __init__(self, *, json_data=None, content=b"", headers=None):
+                self._json = json_data
+                self.content = content
+                self.headers = headers or {}
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._json
+
+        class _FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            async def get(self, url, params=None):
+                if params is not None:
+                    return _Resp(json_data={"hits": [{"previewURL": "https://x/thumb_150.jpg"}]})
+                # download call: server returns a JPEG, not audio
+                return _Resp(content=b"\xff\xd8\xff\xe0JFIF", headers={"content-type": "image/jpeg"})
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out = os.path.join(temp_dir, "bg_music.mp3")
+            with patch.object(pixabay_music.settings, "pixabay_api_key", "real-key"), patch.object(
+                pixabay_music.httpx, "AsyncClient", _FakeClient
+            ):
+                result = _asyncio.run(
+                    PixabayMusicAdapter().search_and_download(output_path=out)
+                )
+
+            # Must NOT have written the JPEG as bg_music.mp3; must return the static fallback.
+            self.assertFalse(os.path.exists(out))
+            self.assertEqual(result, PixabayMusicAdapter()._static_fallback())
+
 
 if __name__ == "__main__":
     unittest.main()
