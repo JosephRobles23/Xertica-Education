@@ -5,6 +5,10 @@ from .memory import InMemoryStorageAdapter
 
 
 def get_storage_adapter() -> BaseStorageAdapter:
+    if settings.storage_backend == "gcs":
+        from .gcs import GCSStorageAdapter  # lazy
+
+        return GCSStorageAdapter()
     if "placeholder" in settings.supabase_key or "placeholder" in settings.supabase_url:
         return InMemoryStorageAdapter()
     from .supabase_storage import SupabaseStorageAdapter  # lazy

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     openai_api_key: str = "placeholder-key"
     veo_key: str = "placeholder-key"
     storage_bucket: str = "xertica-education-assets"
+    # Backend de storage: "supabase" (default) o "gcs". Supabase Free limita los
+    # objetos a 50 MiB → los videos de ~50 MB fallan con 413; GCS no tiene ese tope
+    # pequeño. En modo "gcs", storage_bucket es el nombre del bucket de GCS y se usa
+    # la misma service account que Veo/Imagen (GOOGLE_APPLICATION_CREDENTIALS).
+    storage_backend: str = "supabase"
     youtube_api_key: str = "placeholder-key"
 
     # Embeddings de la KB (ADR-0006). Se sirven vía OpenRouter (OpenAI-compatible)

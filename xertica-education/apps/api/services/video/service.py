@@ -39,7 +39,8 @@ from adapters.audio.google_tts import GoogleCloudTTSAdapter
 from adapters.renderer.playwright_capture import PlaywrightCaptureAdapter
 from adapters.renderer.google_veo import GoogleVeoAdapter
 from adapters.renderer.google_imagen import GoogleImagenAdapter
-from adapters.storage.supabase import SupabaseStorageAdapter
+from adapters.storage import get_storage_adapter
+from adapters.storage.base import BaseStorageAdapter
 from models.dto.requests import StoryboardRequest, VideoScene
 from models.dto.responses import VideoJobResponse, VideoJobResult
 from models.common import JobStatus
@@ -62,7 +63,7 @@ class VideoService(VideoServiceInterface):
         playwright_adapter: Optional[PlaywrightCaptureAdapter] = None,
         veo_adapter: Optional[GoogleVeoAdapter] = None,
         imagen_adapter: Optional[GoogleImagenAdapter] = None,
-        storage_adapter: Optional[SupabaseStorageAdapter] = None
+        storage_adapter: Optional[BaseStorageAdapter] = None
     ):
         self.mock_service = mock_service or MockVideoService()
         self.llm_adapter = llm_adapter or OpenRouterLLMAdapter()
@@ -70,7 +71,11 @@ class VideoService(VideoServiceInterface):
         self.playwright_adapter = playwright_adapter or PlaywrightCaptureAdapter()
         self.veo_adapter = veo_adapter or GoogleVeoAdapter()
         self.imagen_adapter = imagen_adapter or GoogleImagenAdapter()
-        self.storage_adapter = storage_adapter or SupabaseStorageAdapter()
+        # Usa el factory (ADR-0008) en vez del adapter concreto: unifica el storage
+        # con el resto de servicios y respeta storage_backend (gcs/supabase). El
+        # factory falla de forma explícita si la subida falla —ya no cae a un disco
+        # local efímero que devolvía URLs http://localhost inalcanzables.
+        self.storage_adapter = storage_adapter or get_storage_adapter()
 
         self._supabase = None
         self._fallback_assets: Dict[UUID, dict] = {}
