@@ -226,44 +226,79 @@ class RenderExecutor:
             json.dump(self.edit_decisions, f)
 
         output_path = public_dir / "output.mp4"
-        is_windows = sys.platform == "win32"
-        local_bin = composer_dir / "node_modules" / ".bin" / (
-            "remotion.cmd" if is_windows else "remotion"
-        )
-        if local_bin.exists():
-            cmd = [
-                str(local_bin), "render", "src/index.tsx", "Explainer",
-                str(output_path),
-                "--props", str(props_path),
-                "--codec", "h264",
-            ]
-        else:
-            npx = "npx.cmd" if is_windows else "npx"
-            cmd = [
-                npx, "--package=@remotion/cli", "remotion", "render", "src/index.tsx", "Explainer",
-                str(output_path),
-                "--props", str(props_path),
-                "--codec", "h264",
-            ]
+        cmd = self._build_remotion_cmd(composer_dir, output_path, props_path)
+        timeout_s = self._render_timeout_seconds()
+        # No capturamos stdout/stderr: así el progreso de Remotion se transmite EN VIVO
+        # a los logs (antes eran ~20 min en silencio) y podemos distinguir "lento" de
+        # "colgado". El timeout queda por debajo del de la función Modal (1800s) para
+        # registrar el fallo antes de que Modal mate el contenedor.
         try:
             await asyncio.to_thread(
                 subprocess.run,
                 cmd,
                 check=True,
                 cwd=composer_dir,
-                capture_output=True,
-                text=True,
-                timeout=1200,
+                timeout=timeout_s,
             )
+        except subprocess.TimeoutExpired:
+            print(f"Remotion render timed out after {timeout_s}s (job {job_id})")
+            raise
         except subprocess.CalledProcessError as e:
-            print(f"Remotion render failed with code {e.returncode}")
-            print(f"Remotion render stderr: {e.stderr}")
-            print(f"Remotion render stdout: {e.stdout}")
+            print(f"Remotion render failed with code {e.returncode} (job {job_id}); revisa el log de Remotion arriba")
             raise
 
         final_output = f"{temp_dir}/final_{job_id}.mp4"
         shutil.copy(str(output_path), final_output)
         self.stage_outputs["remotion_render"] = {"output_path": final_output}
+
+    def _remotion_concurrency(self) -> str:
+        """Workers de Remotion. En Modal lo fija REMOTION_CONCURRENCY (= nº de vCPUs);
+        en local cae al nº de cores detectado, acotado para no saturar la RAM.
+
+        Sin este flag, Remotion usaba ~1 worker por core sobre solo 4 vCPUs, que era
+        el cuello de botella principal del render 1080p con video embebido."""
+        raw = os.environ.get("REMOTION_CONCURRENCY", "").strip()
+        if raw:
+            return raw
+        return str(max(1, min(os.cpu_count() or 2, 8)))
+
+    def _render_timeout_seconds(self) -> int:
+        """Timeout del subprocess de render, configurable por REMOTION_RENDER_TIMEOUT_S.
+
+        Debe quedar por DEBAJO del timeout de la función Modal (1800s) para poder
+        registrar el fallo antes de que Modal mate el contenedor. Antes eran 1200s
+        (20 min), un tope más estricto que el margen de 30 min que asumía Modal."""
+        raw = os.environ.get("REMOTION_RENDER_TIMEOUT_S", "").strip()
+        try:
+            return int(raw) if raw else 1680
+        except ValueError:
+            return 1680
+
+    def _build_remotion_cmd(self, composer_dir: Path, output_path: Path, props_path: Path) -> List[str]:
+        """Comando de render de Remotion con flags de rendimiento.
+
+        - ``--concurrency``: usa todos los vCPUs disponibles.
+        - ``--image-format=jpeg``: capturas de frame más rápidas que PNG (default).
+        - ``--timeout``: acota ``delayRender`` para que un asset colgado falle rápido en
+          vez de estirar el render indefinidamente.
+        El output se mantiene en la posición 4 (contrato con los tests de render)."""
+        is_windows = sys.platform == "win32"
+        local_bin = composer_dir / "node_modules" / ".bin" / (
+            "remotion.cmd" if is_windows else "remotion"
+        )
+        flags = [
+            "--props", str(props_path),
+            "--codec", "h264",
+            "--concurrency", self._remotion_concurrency(),
+            "--image-format", "jpeg",
+            "--timeout", "60000",
+        ]
+        if local_bin.exists():
+            base = [str(local_bin), "render", "src/index.tsx", "Explainer", str(output_path)]
+        else:
+            npx = "npx.cmd" if is_windows else "npx"
+            base = [npx, "--package=@remotion/cli", "remotion", "render", "src/index.tsx", "Explainer", str(output_path)]
+        return base + flags
 
     async def _stage_validate(self, job_id: UUID, temp_dir: str):
         output_path = self.stage_outputs.get("remotion_render", {}).get("output_path", "")

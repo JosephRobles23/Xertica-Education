@@ -22,8 +22,11 @@ import modal
 # archivo sirva en staging y (más adelante) en prod, y para subir a cpu=8 sin
 # tocar código. El workflow los inyecta.
 RENDER_APP = os.environ.get("MODAL_RENDER_APP", "xertica-render-staging")
-RENDER_CPU = float(os.environ.get("MODAL_RENDER_CPU", "4"))
-RENDER_MEMORY = int(os.environ.get("MODAL_RENDER_MEMORY", "8192"))
+# El render 1080p con video embebido (Veo) escala casi lineal con los cores; con 4
+# vCPUs el render se pasaba de los 20 min. Subimos a 8 vCPUs / 16 GB por defecto
+# (memoria ~2 GB por core para el compositing en Chrome headless).
+RENDER_CPU = float(os.environ.get("MODAL_RENDER_CPU", "8"))
+RENDER_MEMORY = int(os.environ.get("MODAL_RENDER_MEMORY", "16384"))
 
 app = modal.App(RENDER_APP)
 
@@ -65,6 +68,10 @@ image = (
         {
             "PYTHONPATH": "/app/apps/api",
             "REMOTION_COMPOSER_PATH": "/app/openmontage/remotion-composer",
+            # Remotion usa tantos workers como vCPUs asignados al contenedor. Sin esto,
+            # os.cpu_count() en Modal puede reportar los cores del nodo (no el límite)
+            # y sobre-suscribir la CPU/RAM. Lo fijamos al nº de vCPUs de la función.
+            "REMOTION_CONCURRENCY": str(int(RENDER_CPU)),
         }
     )
 )
@@ -78,7 +85,7 @@ secrets = [modal.Secret.from_name("xertica-secrets-staging")]
     image=image,
     cpu=RENDER_CPU,
     memory=RENDER_MEMORY,
-    timeout=1800,  # 30 min de margen para un render de ~10 min
+    timeout=1800,  # 30 min; el subprocess de Remotion corta antes (1680s) para loguear el fallo
     secrets=secrets,
 )
 def render_video(

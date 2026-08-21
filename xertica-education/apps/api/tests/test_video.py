@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from unittest.mock import patch
@@ -385,6 +386,39 @@ class TestVideoAPI(unittest.TestCase):
                 tick_delay = asyncio.run(render_and_measure_tick())
 
         self.assertLess(tick_delay, 0.15)
+
+    def test_remotion_cmd_includes_performance_flags(self):
+        """El comando de render debe llevar concurrency, jpeg y timeout, y mantener
+        el output en la posición 4 (contrato con el resto de tests de render)."""
+        executor = RenderExecutor(object())
+        with tempfile.TemporaryDirectory() as composer_dir:
+            local_bin = os.path.join(composer_dir, "node_modules", ".bin", "remotion")
+            os.makedirs(os.path.dirname(local_bin), exist_ok=True)
+            open(local_bin, "wb").close()
+
+            with patch.dict(os.environ, {"REMOTION_CONCURRENCY": "8"}):
+                cmd = executor._build_remotion_cmd(
+                    Path(composer_dir),
+                    Path(composer_dir) / "public" / "out.mp4",
+                    Path(composer_dir) / "props.json",
+                )
+
+        self.assertTrue(cmd[4].endswith("out.mp4"))  # output posicional en índice 4
+        self.assertIn("--concurrency", cmd)
+        self.assertEqual(cmd[cmd.index("--concurrency") + 1], "8")
+        self.assertIn("--image-format", cmd)
+        self.assertEqual(cmd[cmd.index("--image-format") + 1], "jpeg")
+        self.assertIn("--timeout", cmd)
+        self.assertIn("--codec", cmd)
+
+    def test_render_timeout_stays_below_modal_function_timeout(self):
+        """El timeout del subprocess debe quedar por debajo del de la función Modal (1800s)."""
+        executor = RenderExecutor(object())
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("REMOTION_RENDER_TIMEOUT_S", None)
+            self.assertLess(executor._render_timeout_seconds(), 1800)
+        with patch.dict(os.environ, {"REMOTION_RENDER_TIMEOUT_S": "900"}):
+            self.assertEqual(executor._render_timeout_seconds(), 900)
 
     def test_music_stage_discards_invalid_audio_asset(self):
         """A corrupt/non-audio bg_music must not reach Remotion — render continues muted."""
