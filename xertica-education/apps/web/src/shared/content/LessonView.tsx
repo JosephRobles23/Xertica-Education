@@ -30,12 +30,25 @@ const markdownComponents: Components = {
 
     if (language === 'mermaid') return <MermaidDiagram source={source} />
 
-    if (language) {
-      return <pre className="lesson-code"><code className={className} {...props}>{children}</code></pre>
-    }
+    // Las lecciones son para personas no técnicas: nunca mostramos código.
+    // Los bloques de código se ocultan por completo y el código en línea se
+    // degrada a texto plano (sin estilo monoespaciado) para no romper la frase.
+    if (language) return null
 
-    return <code className={cn('lesson-inline-code', className)} {...props}>{children}</code>
+    return <span {...props}>{children}</span>
   },
+}
+
+/** Entrecomilla las etiquetas de nodos Mermaid ([] y {}) para que rendericen
+ *  aunque contengan paréntesis, comas o acentos (causa común de parse errors). */
+function sanitizeMermaid(source: string): string {
+  const wrap = (open: string, close: string, text: string) =>
+    text.replace(new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g'), (match, inner: string) => {
+      const trimmed = inner.trim()
+      if (!trimmed || (trimmed.startsWith('"') && trimmed.endsWith('"'))) return match
+      return `${open}"${trimmed.replace(/"/g, "'")}"${close}`
+    })
+  return wrap('{', '}', wrap('[', ']', source))
 }
 
 /** Lesson: documento editorial Markdown con visuales didácticos y acciones discretas. */
@@ -188,7 +201,7 @@ function MermaidDiagram({ source }: { source: string }) {
           },
         })
         try {
-          const result = await mermaid.render(renderId, source)
+          const result = await mermaid.render(renderId, sanitizeMermaid(source))
           if (cancelled) return
           setSvg(result.svg)
           requestAnimationFrame(() => result.bindFunctions?.(diagramRef.current!))
@@ -205,9 +218,9 @@ function MermaidDiagram({ source }: { source: string }) {
     }
   }, [renderId, source])
 
-  if (error) {
-    return <details className="lesson-diagram lesson-mermaid-error"><summary>No se pudo renderizar el diagrama</summary><pre className="lesson-code"><code>{source}</code></pre></details>
-  }
+  // Nunca exponemos el código del diagrama a una audiencia no técnica: si falla,
+  // el diagrama es opcional, así que lo omitimos por completo.
+  if (error) return null
 
   return <figure className="lesson-diagram lesson-mermaid" ref={diagramRef} aria-label="Diagrama de la lección">{svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : <figcaption>Preparando diagrama…</figcaption>}</figure>
 }

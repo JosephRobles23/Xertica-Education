@@ -82,12 +82,19 @@ class LessonService(LessonServiceInterface):
             fallback = self._get_fallback_lesson(module_name, module_description)
             sections = fallback["sections"]
             terms = fallback["terms"]
-            
+
+        # 5.1) Blinda el diagrama: entrecomilla las etiquetas de los nodos para
+        # que Mermaid renderice siempre (paréntesis/comas/acentos rompen el parser).
+        markdown = self._sanitize_mermaid_in_markdown(markdown)
+        mermaid_source = self._extract_mermaid(markdown)
+
         # 6) Generate TXT file
         txt_content = self._generate_txt_content(module_name, company_name, sections, terms)
-        
-        # 7) Generate PDF file using Pillow
-        pdf_bytes = self._generate_pdf_bytes(module_name, company_name, sections, terms)
+
+        # 7) Generate PDF: si hay diagrama, se renderiza con Playwright (Mermaid vía
+        # navegador) para que el PDF muestre el mismo diagrama que la web; si no,
+        # se usa el render HTML→PDF branded (WeasyPrint). Ambos sin código.
+        pdf_bytes = await self._generate_pdf(module_name, company_name, sections, terms, mermaid_source)
 
         # 8) Persist artifacts via storage adapter (ADR-0022): bucket con
         # fallback local en dev; el path sigue la convención del Spine.
@@ -127,16 +134,61 @@ class LessonService(LessonServiceInterface):
             print(f"Error parsing JSON from lesson generator: {e}")
         return {}
 
+    # ──────────────────────────────────────────────────────────────────
+    # Mermaid: saneamiento y extracción
+    # ──────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _quote_mermaid_labels(source: str) -> str:
+        """Entrecomilla el texto de los nodos con [] y {} cuando no lo está.
+
+        Mermaid falla al parsear etiquetas con paréntesis, comas o acentos si no
+        van entre comillas dobles. Envuelve `A[Texto (a, b)]` -> `A["Texto (a, b)"]`
+        dejando intactas las que ya tienen comillas.
+        """
+        def wrap(open_ch: str, close_ch: str, text: str) -> str:
+            pattern = re.compile(re.escape(open_ch) + r"([^" + re.escape(open_ch + close_ch) + r"]*)" + re.escape(close_ch))
+
+            def repl(match: "re.Match[str]") -> str:
+                inner = match.group(1).strip()
+                if not inner or (inner.startswith('"') and inner.endswith('"')):
+                    return match.group(0)
+                safe = inner.replace('"', "'")
+                return f'{open_ch}"{safe}"{close_ch}'
+
+            return pattern.sub(repl, text)
+
+        source = wrap("[", "]", source)
+        source = wrap("{", "}", source)
+        return source
+
+    def _sanitize_mermaid_in_markdown(self, markdown: str) -> str:
+        """Aplica el saneamiento de etiquetas dentro del bloque ```mermaid del Markdown."""
+        if not markdown or "```mermaid" not in markdown:
+            return markdown
+
+        def repl(match: "re.Match[str]") -> str:
+            return f"```mermaid\n{self._quote_mermaid_labels(match.group(1))}```"
+
+        return re.sub(r"```mermaid\s*\n(.*?)```", repl, markdown, flags=re.DOTALL)
+
+    def _extract_mermaid(self, markdown: str) -> str | None:
+        """Devuelve el primer bloque Mermaid del Markdown, o None si no hay."""
+        if not markdown:
+            return None
+        match = re.search(r"```mermaid\s*\n(.*?)```", markdown, flags=re.DOTALL)
+        return match.group(1).strip() if match else None
+
     def _get_fallback_lesson(self, module_name: str, module_description: str) -> Dict[str, Any]:
         return {
             "sections": [
                 {
                     "heading": f"Introducción a {module_name}",
-                    "body": f"En esta sección abordamos los fundamentos de {module_name}. {module_description}. Ejemplo Práctico: Configura y corre un hola mundo de {module_name} en tu máquina."
+                    "body": f"En esta sección abordamos los fundamentos de {module_name}. {module_description}. Ejemplo práctico: piensa en una situación cotidiana de tu trabajo donde {module_name} podría ayudarte y descríbela en tus propias palabras."
                 },
                 {
                     "heading": "Conceptos Clave y Contexto",
-                    "body": "Es de vital importancia entender cómo se aplican estos conceptos dentro de la arquitectura técnica. Ejemplo de Código: print('Fundamentos de ' + name)"
+                    "body": f"Es importante entender cómo se aplican estos conceptos en el día a día del negocio. Ejemplo práctico: identifica una tarea real de tu equipo relacionada con {module_name} y describe, paso a paso, cómo la resolverías con lo aprendido."
                 }
             ],
             "terms": [
@@ -172,91 +224,17 @@ class LessonService(LessonServiceInterface):
 
         return "\n".join(lines)
 
-    def _generate_pdf_bytes(self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]) -> bytes:
-        from PIL import Image, ImageDraw, ImageFont
-        width = 800
-        image = Image.new("RGB", (width, 4000), color="#FFFFFF")
-        draw = ImageDraw.Draw(image)
-
-        # Fonts configuration
-        try:
-            font_title = ImageFont.truetype("arial.ttf", 20)
-            font_header = ImageFont.truetype("arial.ttf", 14)
-            font_body = ImageFont.truetype("arial.ttf", 12)
-            font_glossary = ImageFont.truetype("arial.ttf", 11)
-        except IOError:
-            font_title = ImageFont.load_default()
-            font_header = ImageFont.load_default()
-            font_body = ImageFont.load_default()
-            font_glossary = ImageFont.load_default()
-
-        margin = 50
-        y = 50
-        line_height = 20
-        dark_slate = "#0F172A"
-        gray_body = "#334155"
-        accent_color = "#3B82F6"
-
-        # Draw Title
-        draw.text((margin, y), "LECCIÓN DE ESTUDIO", fill=accent_color, font=font_title)
-        y += 35
-        draw.text((margin, y), f"Módulo: {module_name}  |  Cliente: {company_name}", fill=dark_slate, font=font_header)
-        y += 25
-        draw.line([(margin, y), (width - margin, y)], fill="#E2E8F0", width=2)
-        y += 30
-
-        def draw_wrapped_text(text: str, start_x: int, start_y: int, max_w: int, fill: str, font) -> int:
-            lines = text.split("\n")
-            curr_y = start_y
-            for line in lines:
-                words = line.split(" ")
-                curr_line = ""
-                for word in words:
-                    test_line = curr_line + (" " if curr_line else "") + word
-                    bbox = draw.textbbox((0, 0), test_line, font=font)
-                    w = bbox[2] - bbox[0]
-                    if w < max_w:
-                        curr_line = test_line
-                    else:
-                        draw.text((start_x, curr_y), curr_line, fill=fill, font=font)
-                        curr_y += line_height
-                        curr_line = word
-                if curr_line:
-                    draw.text((start_x, curr_y), curr_line, fill=fill, font=font)
-                    curr_y += line_height
-            return curr_y
-
-        # Draw Sections
-        for i, sec in enumerate(sections, start=1):
-            draw.text((margin, y), f"{i}. {sec['heading']}", fill=accent_color, font=font_header)
-            y += 22
-            y = draw_wrapped_text(sec["body"], margin + 15, y, width - 2 * margin - 15, dark_slate, font_body)
-            y += 25
-
-        # Draw Glossary/Terms
-        if terms:
-            draw.line([(margin, y), (width - margin, y)], fill="#E2E8F0", width=1)
-            y += 25
-            draw.text((margin, y), "GLOSARIO DE TÉRMINOS CLAVE", fill=dark_slate, font=font_header)
-            y += 25
-            for t in terms:
-                draw.text((margin + 10, y), f"• {t['term']}:", fill=accent_color, font=font_body)
-                y += 18
-                y = draw_wrapped_text(t["def"], margin + 25, y, width - 2 * margin - 25, gray_body, font_glossary)
-                y += 12
-
-        # Crop to actual height
-        y += 20
-        final_image = image.crop((0, 0, width, y))
-        
-        pdf_io = io.BytesIO()
-        final_image.save(pdf_io, "PDF", resolution=100.0)
-        return pdf_io.getvalue()
-
     def _build_lesson_pdf_html(
-        self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]
+        self, module_name: str, company_name: str, sections: List[dict], terms: List[dict],
+        mermaid_source: str | None = None,
     ) -> str:
-        """Build the branded, printable HTML document used by the PDF renderer."""
+        """Build the branded, printable HTML document used by the PDF renderer.
+
+        Si se pasa ``mermaid_source``, se incrusta un bloque Mermaid y su script
+        para que el renderer con navegador (Playwright) dibuje el mismo diagrama
+        que ve el usuario en la web. WeasyPrint no ejecuta JS, así que ese motor
+        debe invocarse sin ``mermaid_source`` (nunca mostramos el código crudo).
+        """
         asset_path = Path(__file__).resolve().parents[2] / "assets" / "xertica-favicon.png"
         logo_uri = ""
         if asset_path.exists():
@@ -283,6 +261,22 @@ class LessonService(LessonServiceInterface):
             )
             glossary = f'<section class="glossary"><p class="eyebrow">VOCABULARIO</p><h2>Glosario esencial</h2><dl>{glossary_items}</dl></section>'
 
+        # Diagrama opcional: bloque Mermaid + script para el render con navegador.
+        diagram_section = ""
+        mermaid_script = ""
+        if mermaid_source:
+            diagram_section = (
+                '<section class="diagram"><p class="eyebrow">DIAGRAMA</p>'
+                f'<pre class="mermaid">{escape(mermaid_source)}</pre></section>'
+            )
+            mermaid_script = (
+                '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>'
+                '<script>mermaid.initialize({startOnLoad:true,securityLevel:"loose",theme:"base",'
+                'themeVariables:{primaryColor:"#eeeafd",primaryTextColor:"#1a1814",'
+                'primaryBorderColor:"#5c3a8a",lineColor:"#5c574f",secondaryColor:"#eaf5c8",'
+                'tertiaryColor:"#fbe8db",fontFamily:"Helvetica Neue,Helvetica,Arial,sans-serif"}});</script>'
+            )
+
         logo = f'<img src="{logo_uri}" alt="Xertica.ai" class="logo-mark">' if logo_uri else ""
         return f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><style>
@@ -300,11 +294,50 @@ h1 {{ max-width:610px; margin:0; font-size:32pt; line-height:1.02; letter-spacin
 .card-index {{ color:var(--accent); font-size:13pt; font-weight:800; letter-spacing:-.04em; }} .lesson-card h2 {{ margin:0 0 6px; font-size:14pt; letter-spacing:-.035em; }} .lesson-card p {{ margin:0; color:#3d3933; }}
 .glossary {{ break-inside:avoid; margin-top:29px; padding:21px; background:var(--cream); border-top:5px solid var(--yellow); }} .glossary h2 {{ margin:0 0 15px; font-size:20pt; letter-spacing:-.05em; }} .glossary dl {{ display:grid; grid-template-columns:1fr 1fr; gap:13px 22px; margin:0; }} .term {{ break-inside:avoid; }} .term dt {{ color:var(--purple); font-weight:800; }} .term dd {{ margin:2px 0 0; color:#4b463e; font-size:9pt; }}
 .closing {{ margin-top:30px; padding-top:12px; border-top:1px solid #d7d0bd; color:var(--muted); font-size:8.5pt; }}
+.diagram {{ break-inside:avoid; margin-top:29px; padding:21px; border:1px solid #ded8c8; background:#fff; }} .diagram pre.mermaid {{ margin:0; text-align:center; font-family:inherit; background:none; }} .diagram svg {{ max-width:100%; height:auto; }}
 </style></head><body>
 <header class="masthead"><div class="brand">{logo}<span>Xertica<span class="brand-dot">.</span>ai</span></div><div class="edition">Lesson · {escape(company_name)}</div></header>
 <div class="geometry"><i></i><i></i><i></i><i></i></div>
 <main><p class="eyebrow">LECCIÓN DE ESTUDIO</p><h1>{escape(module_name)}</h1><p class="subtitle">Una lectura visual para comprender los conceptos clave, conectarlos y llevarlos a la práctica.</p><div class="meta"><span class="pill">Xertica Education</span><span class="pill">Contenido guiado</span><span class="pill">{len(sections)} secciones</span></div>
-{''.join(section_cards)}{glossary}<p class="closing">Aprende con contexto, claridad y trazabilidad. Este material fue generado para acompañar tu ruta de aprendizaje.</p></main></body></html>"""
+{''.join(section_cards)}{diagram_section}{glossary}<p class="closing">Aprende con contexto, claridad y trazabilidad. Este material fue generado para acompañar tu ruta de aprendizaje.</p></main>{mermaid_script}</body></html>"""
+
+    async def _generate_pdf(
+        self, module_name: str, company_name: str, sections: List[dict], terms: List[dict],
+        mermaid_source: str | None,
+    ) -> bytes:
+        """Genera el PDF branded. Con diagrama, usa Playwright (Mermaid vía navegador);
+        sin diagrama, usa el render HTML→PDF con WeasyPrint. Ningún camino muestra código."""
+        if mermaid_source:
+            try:
+                html = self._build_lesson_pdf_html(
+                    module_name, company_name, sections, terms, mermaid_source=mermaid_source
+                )
+                return await self._render_pdf_with_browser(html)
+            except Exception as error:
+                print(f"Warning: Playwright PDF render failed; falling back sin diagrama: {error}")
+        return self._generate_pdf_bytes(module_name, company_name, sections, terms)
+
+    async def _render_pdf_with_browser(self, html: str) -> bytes:
+        """Renderiza el HTML (con Mermaid) en Chromium headless y exporta el PDF."""
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.set_content(html, wait_until="networkidle")
+                # Espera a que Mermaid haya dibujado el SVG antes de imprimir.
+                try:
+                    await page.wait_for_selector("pre.mermaid svg", timeout=8000)
+                except Exception:
+                    pass
+                return await page.pdf(
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "18mm", "bottom": "17mm", "left": "16mm", "right": "16mm"},
+                )
+            finally:
+                await browser.close()
 
     def _generate_pdf_bytes(self, module_name: str, company_name: str, sections: List[dict], terms: List[dict]) -> bytes:
         """Render the branded HTML template to PDF, with a Pillow safety fallback."""

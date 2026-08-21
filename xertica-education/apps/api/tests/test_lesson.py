@@ -105,5 +105,28 @@ class TestLessonGeneration(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(pdf.startswith(b"%PDF"))
 
+    def test_mermaid_labels_are_quoted(self):
+        # Paréntesis y comas sin comillas rompen el parser de Mermaid: deben quedar entrecomillados.
+        src = "flowchart LR\n  A[Datos (Ventas, Gastos)] --> B[Análisis]"
+        safe = self.service._quote_mermaid_labels(src)
+        self.assertIn('A["Datos (Ventas, Gastos)"]', safe)
+        self.assertIn('B["Análisis"]', safe)
+
+    def test_mermaid_already_quoted_is_untouched(self):
+        src = 'flowchart LR\n  A["Ya seguro"] --> B["Fin"]'
+        self.assertEqual(self.service._quote_mermaid_labels(src), src)
+
+    def test_extract_mermaid_from_markdown(self):
+        md = "## Mapa\n\n```mermaid\nflowchart LR\n  A[Inicio] --> B[Fin]\n```\n\nTexto"
+        block = self.service._extract_mermaid(md)
+        self.assertIsNotNone(block)
+        self.assertIn("flowchart LR", block)
+        self.assertIsNone(self.service._extract_mermaid("## Sin diagrama"))
+
+    def test_sanitize_mermaid_in_markdown_quotes_labels(self):
+        md = "```mermaid\nflowchart LR\n  A[Datos (a, b)] --> B[Fin]\n```"
+        out = self.service._sanitize_mermaid_in_markdown(md)
+        self.assertIn('A["Datos (a, b)"]', out)
+
 if __name__ == "__main__":
     unittest.main()
